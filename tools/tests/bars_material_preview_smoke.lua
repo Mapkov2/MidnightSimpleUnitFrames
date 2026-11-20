@@ -120,4 +120,22 @@ popup.slider:SetValue(width)
 MW.FireScript(popup.slider, "OnValueChanged", width)
 popup.apply:Click()
 assert(db.bars.barOutlineThickness == width, "outline editor did not save the shared border thickness")
+assert(not popup.apply:IsEnabled(), "outline editor left Apply enabled after saving")
+
+popup.select._msuf2OnValueChanged("@all")
+assert(not popup.apply:IsEnabled(), "selecting all outlines should not arm a pending write")
+local batchWidth = width == 3 and 2 or 3
+popup.slider:SetValue(batchWidth)
+MW.FireScript(popup.slider, "OnValueChanged", batchWidth)
+local requestGeneralDomains, castbarRepaint = M.RequestGeneralDomains, false
+M.RequestGeneralDomains = function(reason, domains)
+    if reason == "MSUF2_CASTBAR_OUTLINE" then castbarRepaint = domains.castbar == true end
+    return requestGeneralDomains(reason, domains)
+end
+popup.apply:Click()
+M.RequestGeneralDomains = requestGeneralDomains
+assert(db.bars.barOutlineThickness == batchWidth and db.general.castbarOutlineThickness == batchWidth,
+    "outline editor did not update frame and castbar thickness together")
+assert(castbarRepaint, "outline editor saved the castbar thickness without requesting its repaint")
+assert(not popup.apply:IsEnabled() and popup.slider:GetValue() == batchWidth, "batch edit did not settle after saving")
 print("bars_material_preview_smoke: ok " .. flavor)

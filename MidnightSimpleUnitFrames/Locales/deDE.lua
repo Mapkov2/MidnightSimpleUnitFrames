@@ -4,6 +4,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
+L["%s / %s"] = "%s / %s"
+L["Outline settings"] = "Rahmeneinstellungen"
+L["Match tooltip border"] = "Tooltip-Rahmen übernehmen"
+L["All outlines"] = "Alle Rahmen"
+L["All pixel borders"] = "Alle Pixelrahmen"
+L["Screen pixels"] = "Bildschirmpixel"
+L["Scaled UI units"] = "Skalierte UI-Einheiten"
+L["The same value may render at different widths."] = "Derselbe Wert kann unterschiedlich dick aussehen."
+L["Unavailable with the current settings."] = "Mit den aktuellen Einstellungen nicht verfügbar."
 L["Choose a unitframe preset or import a community profile from Wago."] = "Wähle ein Preset für deine Unitframes oder importiere ein Community-Profil von Wago."
 L["Presets are saved as new profiles."] = "Presets werden als neue Profile gespeichert."
 L["Continue to Suite"] = "Weiter zur Suite"
@@ -7872,14 +7881,6 @@ L["Fade in when shown"] = "Beim Anzeigen sanft einblenden"
 L["Edit positions"] = "Positionen bearbeiten"
 L["Continue to keep your current positions."] = "Mit „Weiter“ behältst du deine aktuellen Positionen."
 L["Back to %d%%"] = "Zurück auf %d%%"
-L["Outline settings"] = "Kontureinstellungen"
-L["All pixel borders"] = "Alle Pixelrahmen"
-L["All outlines"] = "Alle Konturen"
-L["The same value may render at different widths."] = "Derselbe Wert kann unterschiedlich breite Konturen ergeben."
-L["Screen pixels"] = "Bildschirmpixel"
-L["Scaled UI units"] = "Skalierte UI-Einheiten"
-L["Unavailable with the current settings."] = "Mit den aktuellen Einstellungen nicht verfügbar."
-L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

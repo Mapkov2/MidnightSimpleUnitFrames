@@ -1708,6 +1708,7 @@ function Rezz.ResumeFrame(frame, unit)
   if not state.rezzClassRosterRevision then
     -- The existing death observation identified a player during combat. Read
     -- the occupant only now; a former player's class is never copied.
+    state.rezzClassUntil = false
     state.rezzClassRosterRevision = MSUF.GF.healthClassRosterRevision or 0
     state.rezzMemberGUID, state.rezzMemberName, state.rezzMemberRealm = Rezz.ReadMemberIdentity(unit)
     state.rezzBindingChanged = nil
@@ -1803,9 +1804,11 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
   end
   if state and state.deadKnown and state.dead == true then
     if not Common.groupRezzOutOfCombat then
-      if (state.rezzClassUnit ~= unit or state.rezzClassRosterRevision ~= nil)
-        and state.isPlayer and spec and spec.scope == "group" and health.mode == "class" and not frame._msufGFIsPreviewFrame then
-        state.rezzClassUnit, state.rezzClassUntil, state.rezzClassRosterRevision = unit, false, nil
+      if state.rezzClassUnit == unit then
+        -- Validate the current occupant on regen, even if this token was already marked.
+        state.rezzClassRosterRevision = nil
+      elseif state.isPlayer and spec and spec.scope == "group" and health.mode == "class" and not frame._msufGFIsPreviewFrame then
+        state.rezzClassUnit, state.rezzClassRosterRevision = unit, nil
       end
     else
       local revision = MSUF.GF and MSUF.GF.healthClassRosterRevision or 0

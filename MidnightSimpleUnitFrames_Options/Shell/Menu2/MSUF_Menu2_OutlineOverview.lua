@@ -10,6 +10,28 @@ function M.RegisterOutlineOverviewProvider(id, collect)
     providers[id] = collect
 end
 
+local function CollectCastbarOutline(rows)
+    local GP = M.GlobalPage
+    local colors = MSUF._colorsAPI
+    rows[#rows + 1] = {
+        id = "core.castbar.outline", group = "Castbars", label = "Border", min = 0, max = 6,
+        batch = function() return true end,
+        getWidth = function() return GP.ReadG("castbarOutlineThickness", 1) end,
+        setWidth = function(value)
+            if GP.ReadG("castbarOutlineThickness", 1) == value then return true end
+            GP.SetG("castbarOutlineThickness", value, "MSUF2_CASTBAR_OUTLINE", { preview = true, castbar = true })
+            return true
+        end,
+        getColor = colors.GetCastbarBorderColor,
+        setColor = function(r, g, b)
+            local _, _, _, a = colors.GetCastbarBorderColor()
+            colors.SetCastbarBorderColor(r, g, b, a)
+            return true
+        end,
+    }
+end
+M.RegisterOutlineOverviewProvider("core.castbars", CollectCastbarOutline)
+
 local function Collect()
     local rows = {}
     for _, collect in pairs(providers) do collect(rows) end
@@ -38,57 +60,110 @@ local function Batch(rows, pixelsOnly)
 end
 
 local function RefreshApply(panel)
-    W.SetControlEnabled(panel.apply, panel.current.targets ~= nil or panel.widthChanged or panel.colorChanged or false)
+    local match = panel.current.getMatchTooltip and panel.match:GetChecked()
+    local changed = panel.matchChanged or not match and (panel.widthChanged or panel.colorChanged)
+    W.SetControlEnabled(panel.apply, changed == true)
 end
 
-local function SelectRow(panel, id)
-    local row = panel.rows[id]
-    panel.current = row
-    panel.widthChanged, panel.colorChanged = false, false
-    panel.refreshing = true
-    panel.select:SetValue(id)
-    panel.slider:SetMinMaxValues(row.min, row.max)
-    panel.slider:SetValue(row.getWidth and row.getWidth() or math.max(row.min, 1))
-    panel.initialWidth = panel.slider:GetValue()
-    W.SetControlEnabled(panel.slider, not row.widthEnabled or row.widthEnabled())
-    W.SetControlEnabled(panel.color, not row.colorEnabled or row.colorEnabled())
-    panel.refreshing = false
-    panel.color:SetShown(row.getColor ~= nil)
-    panel.color._msuf2Title:SetShown(row.getColor ~= nil)
-    if row.getColor then panel.color:SetRGB(row.getColor()) end
+local function RefreshMode(panel)
+    local row = panel.current
+    local match = row.getMatchTooltip and panel.match:GetChecked()
+    W.SetControlEnabled(panel.slider, not match and (not row.widthEnabled or row.widthEnabled()))
+    W.SetControlEnabled(panel.color, not match and (not row.colorEnabled or row.colorEnabled()))
     local hint = row.targets and not row.pixels and "The same value may render at different widths."
-        or row.pixels and "Screen pixels" or "Scaled UI units"
+        or match and "Tooltip" or row.pixels and "Screen pixels" or "Scaled UI units"
     T.SetTranslatedText(panel.units, M.Tr(hint))
     RefreshApply(panel)
 end
 
-local function Apply(panel)
-    if M.BlockCombatAction() then return end
-    local row, width = panel.current, panel.slider:GetValue()
-    local ok = M.RunWithHistory(M.Tr("Outline settings"), "menu:outline:" .. panel.select:GetValue(), function()
-        if row.targets then
-            local applied = true
-            for _, target in ipairs(row.targets) do
-                if target.batch() and target.setWidth(width) == false then applied = false end
+local function SelectRow(panel, id, retainedWidth)
+    local row = panel.rows[id]
+    panel.current = row
+    panel.widthChanged, panel.colorChanged, panel.matchChanged = false, false, false
+    panel.refreshing = true
+    panel.select:SetValue(id)
+    panel.slider:SetMinMaxValues(row.min, row.max)
+    panel.slider:SetValue(retainedWidth or (row.getWidth and row.getWidth()) or math.max(row.min, 1))
+    panel.initialWidth = panel.slider:GetValue()
+    panel.refreshing = false
+    panel.color:SetShown(row.getColor ~= nil)
+    panel.color._msuf2Title:SetShown(row.getColor ~= nil)
+    if row.getColor then panel.color:SetRGB(row.getColor()) end
+    panel.initialMatch = row.getMatchTooltip and row.getMatchTooltip() or false
+    panel.match:SetChecked(panel.initialMatch)
+    panel.matchHost:SetShown(row.getMatchTooltip ~= nil)
+    RefreshMode(panel)
+end
+
+-- One validated update per Suite module, even when it owns hundreds of elements.
+local function ApplyBatch(targets, width)
+    local groups, ordered, direct = {}, {}, {}
+    for _, target in ipairs(targets) do
+        if target.batch() and target.getWidth() ~= width then
+            if target.batchGroup then
+                local group = groups[target.batchGroup]
+                if not group then
+                    group = { values = {}, commit = target.setWidths }
+                    groups[target.batchGroup] = group
+                    ordered[#ordered + 1] = group
+                end
+                group.values[target.widthKey] = width + target.widthOffset
+            else
+                direct[#direct + 1] = target
             end
-            return applied
         end
-        if panel.widthChanged and ((row.widthEnabled and not row.widthEnabled()) or row.setWidth(width) == false) then
-            return false
-        end
-        if panel.colorChanged and ((row.colorEnabled and not row.colorEnabled()) or row.setColor(panel.color:GetRGB()) == false) then
-            return false
-        end
-        return true
+    end
+    local changed, failed = false, false
+    for _, row in ipairs(direct) do
+        if row.setWidth(width) == false then failed = true else changed = true end
+    end
+    for _, group in ipairs(ordered) do
+        if group.commit(group.values) == false then failed = true else changed = true end
+    end
+    return changed, failed
+end
+
+local function ApplySingle(panel, row, width)
+    local match = row.getMatchTooltip and panel.match:GetChecked()
+    if not match and ((panel.widthChanged and row.widthEnabled and not row.widthEnabled())
+        or (panel.colorChanged and row.colorEnabled and not row.colorEnabled())) then
+        return false, true
+    end
+    local changed = false
+    if panel.matchChanged then
+        if row.setMatchTooltip(match and true or false) == false then return false, true end
+        changed = true
+    end
+    if match then return changed, false end
+    if panel.widthChanged then
+        if row.setWidth(width) == false then return changed, true end
+        changed = true
+    end
+    if panel.colorChanged then
+        if row.setColor(panel.color:GetRGB()) == false then return changed, true end
+        changed = true
+    end
+    return changed, false
+end
+
+local function Apply(panel)
+    if M.BlockCombatAction() or not panel.apply:IsEnabled() then return end
+    local row, width = panel.current, panel.slider:GetValue()
+    local id, failed = panel.select:GetValue(), false
+    M.RunWithHistory(M.Tr("Outline settings"), "menu:outline:" .. id, function()
+        local changed
+        if row.targets then changed, failed = ApplyBatch(row.targets, width)
+        else changed, failed = ApplySingle(panel, row, width) end
+        return changed
     end)
-    SelectRow(panel, panel.select:GetValue())
-    if ok == false and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Action failed"), "danger", 1.5) end
+    SelectRow(panel, id, row.targets and width)
+    if failed and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Action failed"), "danger", 1.5) end
     if M.RefreshVisibleSliders then M.RefreshVisibleSliders("outline") end
 end
 
 local function BuildPopup()
     local panel = M.CreateMenuPopupPanel(UIParent)
-    panel:SetSize(392, 226)
+    panel:SetSize(392, 235)
     panel:SetClampedToScreen(true)
     panel.SmartNavigationCloseHandler = function()
         panel:Hide()
@@ -109,8 +184,14 @@ local function BuildPopup()
     W.MoveWidget(panel.slider, panel, 16, -101, 360, "LEFT")
     panel.slider:HookScript("OnValueChanged", function()
         if panel.refreshing or not panel.current then return end
-        panel.widthChanged = panel.slider:GetValue() ~= panel.initialWidth
+        panel.widthChanged = panel.current.targets ~= nil or panel.slider:GetValue() ~= panel.initialWidth
         RefreshApply(panel)
+    end)
+    panel.slider:HookScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" and panel.current and panel.current.targets then
+            panel.widthChanged = true
+            RefreshApply(panel)
+        end
     end)
     panel.units = W.Text(panel, "", 16, -149, 360, T.colors.muted)
     panel.color = W.Color(panel, "Outline color")
@@ -127,6 +208,15 @@ local function BuildPopup()
             panel.colorChanged = r ~= chosenR or g ~= chosenG or b ~= chosenB
             RefreshApply(panel)
         end)
+    end)
+    panel.matchHost = CreateFrame("Frame", nil, panel)
+    panel.matchHost:SetPoint("BOTTOMLEFT", 16, 12)
+    panel.matchHost:SetSize(260, 24)
+    panel.match = W.SwitchAt(panel.matchHost, "Match tooltip border", 0, -2, 230)
+    panel.match._msuf2SkipHistoryCheckpoint = true
+    panel.match:SetScript("OnClick", function(self)
+        panel.matchChanged = (self:GetChecked() and true or false) ~= panel.initialMatch
+        RefreshMode(panel)
     end)
     panel.apply = T.Button(panel, "Apply", 88, 24, { noSearch = true })
     panel.apply:SetPoint("BOTTOMRIGHT", -16, 12)
@@ -149,12 +239,12 @@ local function Show(anchor, focus)
     for _, row in ipairs(rows) do
         Add(row.id, row, M.Format("%s / %s", M.Tr(row.group), row.localizedLabel and row.label or M.Tr(row.label)))
     end
-    if #choices == 0 then return end
+    if #rows == 0 then return end
     popup = popup or BuildPopup()
     popup.anchor, popup.rows = anchor, byID
     popup.select:SetValues(choices)
     local id = focus and focus()
-    SelectRow(popup, byID[id] and id or choices[1].value)
+    SelectRow(popup, byID[id] and id or rows[1].id)
     popup:ClearAllPoints()
     popup:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -5)
     M.ApplyPopupFramePriority(popup)

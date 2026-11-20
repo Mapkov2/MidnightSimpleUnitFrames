@@ -73,6 +73,7 @@ end
 local grey = {r=.35,g=.35,b=.35}
 local green = {r=0,g=1,b=0}
 local deadBlack = {r=.28,g=.28,b=.28}
+local fallback = {r=.12,g=.62,b=.95}
 for _, scope in ipairs({ "party", "raid" }) do
   member = scope .. "1"
   dead, misread, class, replacementName = false, false, "SHAMAN", nil
@@ -119,6 +120,31 @@ for _, scope in ipairs({ "party", "raid" }) do
     CheckSteadyHealth(label)
   end
   CheckSteadyHealth("normal")
+
+  inInstance, instanceType = true, scope
+  h:Event("PLAYER_ENTERING_WORLD")
+  Kill()
+  Revive()
+  misread = true
+  Fire("UNIT_NAME_UPDATE")
+  CheckColor(frame, colors.SHAMAN, member .. " post-rez false on name update in an instance")
+  clock = clock + 2
+  Fire("UNIT_NAME_UPDATE")
+  CheckColor(frame, green, member .. " late unresolved identity in an instance")
+  CheckRecovery(80, "first valid HP after an instance rez")
+  h:EnterCombat()
+  local guids = guidReads
+  Kill()
+  assert(guidReads == guids, member .. " re-read a marked member's identity in combat")
+  class, healthPercent = nil, 100
+  Revive("UNIT_FLAGS")
+  CheckColor(frame, fallback, member .. " known player with unavailable class during combat")
+  class = "SHAMAN"
+  h:LeaveCombat()
+  h:RunDeferred()
+  CheckColor(frame, colors.SHAMAN, member .. " full health with recovered class at instance combat exit")
+  inInstance, instanceType = false, "none"
+  h:Event("PLAYER_ENTERING_WORLD")
 
   Kill()
   Revive()
@@ -236,17 +262,23 @@ for _, scope in ipairs({ "party", "raid" }) do
   CheckRecovery(82, "first out-of-combat HP after combat-only rez")
 
   -- A full-health member may never generate another HP event after combat.
-  h:EnterCombat()
-  Kill()
-  misread, healthPercent = true, 100
-  Revive("UNIT_FLAGS")
-  Fire("UNIT_NAME_UPDATE")
-  misread = false
-  Fire("UNIT_HEALTH")
-  CheckColor(frame, green, member .. " full health before combat ends")
-  h:LeaveCombat()
-  h:RunDeferred()
-  CheckColor(frame, colors[class], member .. " full health on regen without another HP event")
+  for _, inside in ipairs({ false, true }) do
+    inInstance, instanceType = inside, inside and scope or "none"
+    h:Event("ZONE_CHANGED_NEW_AREA")
+    h:EnterCombat()
+    Kill()
+    misread, healthPercent = true, 100
+    Revive("UNIT_FLAGS")
+    Fire("UNIT_NAME_UPDATE")
+    misread = false
+    Fire("UNIT_HEALTH")
+    CheckColor(frame, green, member .. " full health before combat ends")
+    h:LeaveCombat()
+    h:RunDeferred()
+    CheckColor(frame, colors[class], "full health on regen without another HP event: " .. instanceType)
+  end
+  inInstance, instanceType = false, "none"
+  h:Event("ZONE_CHANGED_NEW_AREA")
 
   -- An unconfirmed OOC read is already pending before the pull. The combat
   -- event handler must go dormant, then resume on the first valid OOC HP tick.
@@ -341,28 +373,33 @@ FireWatched("UNIT_NAME_UPDATE")
 CheckColor(watched, green, "outdoor pending resurrection")
 pending = true
 CheckLocation(true, "outdoor group with pending resurrection")
+EnterLocation(true, "party", "ZONE_CHANGED_NEW_AREA", true)
+local resumesBeforePull = resumes
+h:EnterCombat(function() CheckLocation(false, "instance pull before lockdown with pending resurrection") end)
+CheckLocation(false, "instance combat with pending resurrection")
+assert(resumes == resumesBeforePull, "instance combat ran the pending rez-color scan")
+h:LeaveCombat()
+misread = false
+CheckLocation(true, "first valid instance health event after zoning")
+CheckColor(watched, colors[class], "restored class after zone change")
+pending = false
+CheckLocation(true, "instance group after recovery")
+
 for _, kind in ipairs({ "party", "raid", "pvp", "arena", "scenario" }) do
-  EnterLocation(true, kind, "ZONE_CHANGED_NEW_AREA", false)
+  EnterLocation(true, kind, "ZONE_CHANGED_NEW_AREA", true)
+  local before = resumes
   h:EnterCombat()
   CheckLocation(false, kind .. " pull")
-  local before = resumes
+  assert(resumes == before, kind .. " ran the rez-color scan on combat entry")
   h:LeaveCombat()
-  CheckLocation(false, kind .. " combat exit")
-  assert(resumes == before, kind .. " ran the rez-color scan on combat exit")
+  CheckLocation(true, kind .. " combat exit")
+  assert(resumes == before + 1, kind .. " skipped the rez-color scan on combat exit")
   EnterLocation(false, "none", "PLAYER_ENTERING_WORLD", true)
 end
-EnterLocation(true, "none", "ZONE_CHANGED_NEW_AREA", false)
-EnterLocation(false, "party", "ZONE_CHANGED_NEW_AREA", false)
-EnterLocation(false, "none", "ZONE_CHANGED_NEW_AREA", true)
 h:EnterCombat()
 EnterLocation(true, "raid", "ZONE_CHANGED_NEW_AREA", false)
 EnterLocation(false, "none", "ZONE_CHANGED_NEW_AREA", false)
 h:LeaveCombat()
 CheckLocation(true, "outdoor combat exit")
-misread = false
-CheckLocation(true, "outdoor first valid health event")
-CheckColor(watched, colors[class], "restored class after zone changes")
-pending = false
-CheckLocation(true, "outdoor group after recovery")
 bars.RetryGroupRezzUnit, bars.ResumeGroupRezzColors = retry, resume
 print("group rez class color " .. flavor .. ": ok")

@@ -11,6 +11,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ruRU")) or (MSUF.L or {})
+L["%s / %s"] = "%s / %s"
+L["Outline settings"] = "Настройки контуров"
+L["Match tooltip border"] = "Использовать рамку подсказки"
+L["All outlines"] = "Все контуры"
+L["All pixel borders"] = "Все рамки в пикселях"
+L["Screen pixels"] = "Пиксели экрана"
+L["Scaled UI units"] = "Масштабированные единицы интерфейса"
+L["The same value may render at different widths."] = "Одинаковое значение может давать разную толщину."
+L["Unavailable with the current settings."] = "Недоступно при текущих настройках."
 L["Choose a unitframe preset or import a community profile from Wago."] = "Выберите пресет рамок юнитов или импортируйте профиль сообщества с Wago."
 L["Presets are saved as new profiles."] = "Пресеты сохраняются как новые профили."
 L["Continue to Suite"] = "Перейти к Suite"
@@ -7690,14 +7699,6 @@ L["Fade in when shown"] = "Плавное появление при отобра
 L["Edit positions"] = "Изменить позиции"
 L["Continue to keep your current positions."] = "Нажмите «Далее», чтобы сохранить текущие позиции."
 L["Back to %d%%"] = "Вернуть %d%%"
-L["Outline settings"] = "Настройки контуров"
-L["All pixel borders"] = "Все границы в пикселях"
-L["All outlines"] = "Все контуры"
-L["The same value may render at different widths."] = "При одном и том же значении толщина может различаться."
-L["Screen pixels"] = "Пиксели экрана"
-L["Scaled UI units"] = "Масштабируемые единицы интерфейса"
-L["Unavailable with the current settings."] = "Недоступно при текущих настройках."
-L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

@@ -10,7 +10,7 @@
 <!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"layout_advanced","controlId":"menu2.gf_layout.group.field.showpartyinraid","settingKey":"gf_party.showPartyInRaid","prepareKind":"groupScope","prepareValue":"party","query":"Show Party Frames in Raid","label":"Show Party Frames in Raid"} -->
 - **Aura bar layouts on Retail and WoW Forever.** Choose the direction new bars grow, combine buff and debuff bars, and customize fill colors and outlines. Find these controls in the Buffs or Debuffs workspace under Bars.
 <!-- msuf-menu-link: none -->
-- **Unit frame outlines.** Use the gear next to Border thickness to adjust frame outline thickness and colors from one panel.
+- **Frame and castbar outlines.** Use the gear next to Bar outline thickness under Appearance > Bars > Frame Outline. Edit thickness and colors for individual frames or castbars, or apply a common thickness to all outlines.
 <!-- msuf-menu-link: none -->
 
 ### Fixes and improvements
@@ -18,6 +18,8 @@
 - **See New Features.** Unread notes are highlighted in the toolbar. Clicking the button takes you to the top of the latest notes, with links to highlighted settings.
 - **Player channels.** Penance and other casts that transition to channels keep their recipient names and spell ranks where ranks are supported.
 - **WoW Forever range fading.** Hostile targets recover when the initial range check has no result. Warlocks use the highest known Shadow Bolt rank, with Drain Life as a fallback.
+- **Combined aura bars.** Dragging joined buff and debuff bars in Edit Mode keeps the preview under the cursor until you release it.
+- **Party and raid class colors.** Health bars recover their class color after resurrection in instances, including when a frame reaches full health before combat ends.
 - **Profiles.** Inactive profiles stay compact, and restore points share identical settings to use less memory. Existing profiles retain supported aura-bar appearance options.
 - **Options.** Settings search uses less memory. Options and Edit Mode previews reflect the selected aura-bar layout and appearance. Choice popups and themed color fields render correctly.
 - **Textures.** The Blizzard-style unit frame texture is included in MSUF Core.

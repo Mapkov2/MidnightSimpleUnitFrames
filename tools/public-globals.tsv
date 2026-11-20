@@ -30,6 +30,7 @@ MSUF2.AddNavIcon	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2
 MSUF2.AddTooltip	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:237	MSUF_Suite_Options:Menu/SectionActions.lua:176	1	1	suite	all	Suite Menu2 reader
 MSUF2.AllowCombatClick	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua:62	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite Menu2 reader
 MSUF2.ApplyPopupFramePriority	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:1159	MSUF_Suite_Options:Menu/SectionActions.lua:147	1	1	suite	all	Suite Menu2 reader
+MSUF2.AttachOutlineOverview	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_OutlineOverview.lua:254	MSUF_Suite:Core/HostBridgeMenu.lua:22	1	1	suite	all	Suite outline settings
 MSUF2.AurasPage	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Workspace.lua:265	MSUF_Suite:Core/HostBridgeMenu.lua:206	1	1	suite	all	Optional Aura appearance provider; nested RegisterAppearanceType, AppearanceType and BlizzardVisibilityControlId are covered by the Suite integration contract
 MSUF2.BeginHistoryTransaction	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:1107	MSUF_Suite_Skin_Options:MSKIN_OptionsBootstrap.lua:151	1	1	suite	all	Suite Menu2 reader
 MSUF2.BindBoolWidget	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua:731	MSUF_Suite_Options:Menu/Controls.lua:706	1	1	suite	all	Suite Menu2 reader
@@ -73,6 +74,7 @@ MSUF2.RefreshSectionLayout	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/
 MSUF2.RegisterControlMetadata	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlCatalog.lua:997	MSUF_Suite_Options:Menu/Bridge.lua:590	1	1	suite	all	Suite Menu2 reader
 MSUF2.RegisterHistoryProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_History.lua:162	MSUF_Suite_Options:Menu/Register.lua:13	1	1	suite	all	Suite Menu2 reader
 MSUF2.RegisterLayerOverviewProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua:221	MSUF_Suite_Options:Menu/Register.lua:251	1	1	suite	all	Suite Menu2 reader
+MSUF2.RegisterOutlineOverviewProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_OutlineOverview.lua:9	MSUF_Suite:Core/HostBridgeMenu.lua:18	1	1	suite	all	Suite outline settings
 MSUF2.RegisterPage	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageLifecycle.lua:220	MSUF_Suite_Options:Menu/Register.lua:186	1	1	suite	all	Suite Menu2 reader
 MSUF2.RegisterPageResetProvider	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua:81	MSUF_Suite:Core/HostBridge.lua:351	1	1	suite	all	Suite Menu2 reader
 MSUF2.RegisterSearchAvailability	nsfield	MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua:2133	MSUF_Suite_Options:Menu/Search.lua:598	1	1	suite	all	Suite Menu2 reader

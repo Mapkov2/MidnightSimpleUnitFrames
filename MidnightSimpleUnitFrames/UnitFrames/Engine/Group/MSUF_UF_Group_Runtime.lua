@@ -35,7 +35,8 @@ end
 
 local function SyncCombatState(inCombat)
   ExportPublic("MSUF_InCombat", inCombat)
-  bars.SetGroupRezzOutOfCombat(not inCombat and IsOpenWorldRosterLocation())
+  -- Resurrection color recovery follows combat state in every location.
+  bars.SetGroupRezzOutOfCombat(not inCombat)
 end
 
 local IsUnitToken = UF and UF.IsUnitToken
@@ -305,7 +306,7 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
   if state.enabled == enabled and state.regenOnly == regenOnly
     and state.matchEvents == matchEvents and state.nameEvents == nameEvents
     and sceneEventsOn == sceneEvents and housingEventsOn == housingEvents then return end
-  -- Disabled frames miss zone events, so sample the location before resubscribing.
+  -- Disabled frames may have missed a combat transition.
   if active and (not state.enabled or state.regenOnly) then
     SyncCombatState(InCombat() == true)
   elseif not active then
@@ -1207,7 +1208,6 @@ local function RuntimeOnEvent(self, event, unit)
     end
     ScheduleHeaderLayoutSettle()
   elseif event == "ZONE_CHANGED_NEW_AREA" then
-    if not InCombat() then bars.SetGroupRezzOutOfCombat(IsOpenWorldRosterLocation()) end
     -- HeaderScope() is nil for this event, so an inline pass would be an exact
     -- duplicate of the settle's own RefreshHeaderLayout(). Rebuilding every raid
     -- button twice inside the post-loading-screen frame is what tripped the

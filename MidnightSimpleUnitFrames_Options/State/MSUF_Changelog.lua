@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6198286238401700666F8759162DC7834444A2B52628A1E0D077BCC249E5F23B",
+    sourceSha256 = "28E532F5040B21795171C80B1F8B99246C66E8AB0D3DA4824F38D6A1F2EB0666",
     currentVersion = "7.0.4",
     historyFromVersion = "7.0.2",
     previousVersion = "7.0.3",
@@ -52,7 +52,7 @@ local data = {
                             linkless = true,
                         },
                         {
-                            text = "Unit frame outlines. Use the gear next to Border thickness to adjust frame outline thickness and colors from one panel.",
+                            text = "Frame and castbar outlines. Use the gear next to Bar outline thickness under Appearance > Bars > Frame Outline. Edit thickness and colors for individual frames or castbars, or apply a common thickness to all outlines.",
                             linkless = true,
                         },
                     },
@@ -63,6 +63,8 @@ local data = {
                         "See New Features. Unread notes are highlighted in the toolbar. Clicking the button takes you to the top of the latest notes, with links to highlighted settings.",
                         "Player channels. Penance and other casts that transition to channels keep their recipient names and spell ranks where ranks are supported.",
                         "WoW Forever range fading. Hostile targets recover when the initial range check has no result. Warlocks use the highest known Shadow Bolt rank, with Drain Life as a fallback.",
+                        "Combined aura bars. Dragging joined buff and debuff bars in Edit Mode keeps the preview under the cursor until you release it.",
+                        "Party and raid class colors. Health bars recover their class color after resurrection in instances, including when a frame reaches full health before combat ends.",
                         "Profiles. Inactive profiles stay compact, and restore points share identical settings to use less memory. Existing profiles retain supported aura-bar appearance options.",
                         "Options. Settings search uses less memory. Options and Edit Mode previews reflect the selected aura-bar layout and appearance. Choice popups and themed color fields render correctly.",
                         "Textures. The Blizzard-style unit frame texture is included in MSUF Core.",

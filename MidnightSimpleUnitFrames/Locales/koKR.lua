@@ -11,6 +11,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
+L["%s / %s"] = "%s / %s"
+L["Outline settings"] = "테두리 설정"
+L["Match tooltip border"] = "툴팁 테두리 사용"
+L["All outlines"] = "모든 테두리"
+L["All pixel borders"] = "모든 픽셀 테두리"
+L["Screen pixels"] = "화면 픽셀"
+L["Scaled UI units"] = "배율이 적용된 UI 단위"
+L["The same value may render at different widths."] = "같은 값이라도 표시되는 두께는 다를 수 있습니다."
+L["Unavailable with the current settings."] = "현재 설정에서는 사용할 수 없습니다."
 L["Choose a unitframe preset or import a community profile from Wago."] = "유닛 프레임 프리셋을 선택하거나 Wago의 커뮤니티 프로필을 가져오세요."
 L["Presets are saved as new profiles."] = "프리셋은 새 프로필로 저장됩니다."
 L["Continue to Suite"] = "Suite로 계속"
@@ -7663,14 +7672,6 @@ L["Fade in when shown"] = "표시될 때 부드럽게 나타나기"
 L["Edit positions"] = "위치 편집"
 L["Continue to keep your current positions."] = "현재 위치를 유지하려면 계속 진행하세요."
 L["Back to %d%%"] = "%d%%로 되돌리기"
-L["Outline settings"] = "외곽선 설정"
-L["All pixel borders"] = "모든 픽셀 테두리"
-L["All outlines"] = "모든 외곽선"
-L["The same value may render at different widths."] = "같은 값이라도 두께가 다르게 표시될 수 있습니다."
-L["Screen pixels"] = "화면 픽셀"
-L["Scaled UI units"] = "배율이 적용된 UI 단위"
-L["Unavailable with the current settings."] = "현재 설정에서는 사용할 수 없습니다."
-L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

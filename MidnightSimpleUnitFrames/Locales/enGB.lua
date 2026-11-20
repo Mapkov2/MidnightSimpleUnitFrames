@@ -8,6 +8,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
+L["%s / %s"] = "%s / %s"
+L["Outline settings"] = "Outline settings"
+L["Match tooltip border"] = "Match tooltip border"
+L["All outlines"] = "All outlines"
+L["All pixel borders"] = "All pixel borders"
+L["Screen pixels"] = "Screen pixels"
+L["Scaled UI units"] = "Scaled UI units"
+L["The same value may render at different widths."] = "The same value may render at different widths."
+L["Unavailable with the current settings."] = "Unavailable with the current settings."
 L["Choose a unitframe preset or import a community profile from Wago."] = "Choose a unitframe preset or import a community profile from Wago."
 L["Presets are saved as new profiles."] = "Presets are saved as new profiles."
 L["Continue to Suite"] = "Continue to Suite"
@@ -5420,14 +5429,6 @@ L["Fade in when shown"] = "Fade in when shown"
 L["Edit positions"] = "Edit positions"
 L["Continue to keep your current positions."] = "Continue to keep your current positions."
 L["Back to %d%%"] = "Back to %d%%"
-L["Outline settings"] = "Outline settings"
-L["All pixel borders"] = "All pixel borders"
-L["All outlines"] = "All outlines"
-L["The same value may render at different widths."] = "The same value may render at different widths."
-L["Screen pixels"] = "Screen pixels"
-L["Scaled UI units"] = "Scaled UI units"
-L["Unavailable with the current settings."] = "Unavailable with the current settings."
-L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

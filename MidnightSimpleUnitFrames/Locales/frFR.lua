@@ -11,6 +11,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("frFR")) or (MSUF.L or {})
+L["%s / %s"] = "%s / %s"
+L["Outline settings"] = "Réglages des contours"
+L["Match tooltip border"] = "Reprendre la bordure de l’infobulle"
+L["All outlines"] = "Tous les contours"
+L["All pixel borders"] = "Toutes les bordures en pixels"
+L["Screen pixels"] = "Pixels de l’écran"
+L["Scaled UI units"] = "Unités d’interface mises à l’échelle"
+L["The same value may render at different widths."] = "Une même valeur peut donner des épaisseurs différentes."
+L["Unavailable with the current settings."] = "Indisponible avec les réglages actuels."
 L["Choose a unitframe preset or import a community profile from Wago."] = "Choisissez un préréglage de cadres d’unité ou importez un profil de la communauté depuis Wago."
 L["Presets are saved as new profiles."] = "Les préréglages sont enregistrés comme de nouveaux profils."
 L["Continue to Suite"] = "Continuer vers la Suite"
@@ -7761,14 +7770,6 @@ L["Fade in when shown"] = "Apparition progressive à l’affichage"
 L["Edit positions"] = "Modifier les positions"
 L["Continue to keep your current positions."] = "Cliquez sur Continuer pour garder vos positions actuelles."
 L["Back to %d%%"] = "Revenir à %d%%"
-L["Outline settings"] = "Réglages des contours"
-L["All pixel borders"] = "Toutes les bordures en pixels"
-L["All outlines"] = "Tous les contours"
-L["The same value may render at different widths."] = "Une même valeur peut produire des épaisseurs différentes."
-L["Screen pixels"] = "Pixels à l’écran"
-L["Scaled UI units"] = "Unités d’interface mises à l’échelle"
-L["Unavailable with the current settings."] = "Indisponible avec les réglages actuels."
-L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end
