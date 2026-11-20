@@ -8,24 +8,25 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "52A1500F96ABBF57DBB5F1A5735CD53458D2C66AE1C4C7D8CD994FBCF95E718F",
-    currentVersion = "7.0.4-beta3",
+    sourceSha256 = "A131C07C7EADB9EEABCC0A3A3D66887D4D8B395C379FE7C84C5A422CEEA1C6DB",
+    currentVersion = "7.0.4-beta4",
     historyFromVersion = "7.0.2",
     previousVersion = "7.0.4-beta2",
-    rangeLabel = "7.0.4-beta2 -> 7.0.4-beta3",
+    rangeLabel = "7.0.4-beta2 -> 7.0.4-beta4",
     entries = {
         {
-            version = "7.0.4-beta3",
+            version = "7.0.4-beta4",
             date = "2026-11-20",
-            title = "7.0.4 Beta 3",
+            title = "7.0.4 Beta 4",
             sections = {
                 {
                     title = "Fixes",
                     bullets = {
-                        "Player castbar. Fixed missing recipient names for Penance and other casts that transition to channels. On clients that show spell ranks, channel spells keep the correct rank.",
-                        "Target range fade. On WoW Forever, hostile targets recover when the first range check has no result. Warlocks use the highest known rank of Shadow Bolt for the target check, with Drain Life as a fallback.",
-                        "Edit Mode. Fixed the labels and an error when opening some addon-provided choice popups.",
-                        "Suite settings. The Reset page button can now show and confirm the specific HUD feature being reset when supported by the installed Suite version.",
+                        "Settings search. The search index uses less memory across all languages, including Russian. Search results and setting links retain their existing behavior.",
+                        "Player castbar. Fixed missing recipient names for Penance and other casts that transition to channels. Channel spells keep the correct rank where ranks are supported.",
+                        "Target range fade. On WoW Forever, hostile targets recover when the first range check has no result. Warlocks use the highest known rank of Shadow Bolt, with Drain Life as a fallback.",
+                        "Edit Mode. Fixed labels and an error in some addon-provided choice popups.",
+                        "Suite settings. Reset page can confirm the specific HUD feature being reset with a compatible Suite version.",
                     },
                 },
             },

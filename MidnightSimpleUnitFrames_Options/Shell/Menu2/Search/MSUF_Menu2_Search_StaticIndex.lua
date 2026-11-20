@@ -25,6 +25,7 @@ Search.StaticIndex = StaticIndex
 
 local CONTROL_TOKEN_LIMIT = 36
 local COLUMN_BLOCK_SIZE = 512
+local StringByte = string.byte
 -- Includes the retained source blob, columns and localized strings, after full GC.
 -- Fuzzy/query caches belong to IndexQuery and are discarded on menu quiescence.
 StaticIndex.HEAP_BUDGET_KIB = 5632
@@ -35,6 +36,32 @@ local FIELD = {
     prepareKinds = 11, prepareContracts = 12, prepareKind = 13, prepareValue = 14,
 }
 local PAGE_FIELD = { title = "title", group = "group", titleNorm = "titleNorm", groupNorm = "groupNorm", key = "key", pageKey = "key" }
+
+-- Kind, section and preparation repeat within each block. Keep their shared
+-- values in a dictionary and store a two-byte index per row (zero means nil).
+local function PackedColumn()
+    return { bytes = {}, values = {}, codes = {} }
+end
+
+local function PutPackedValue(column, id, value)
+    local token = "\0\0"
+    if value ~= nil then
+        token = column.codes[value]
+        if not token then
+            local code = #column.values + 1
+            column.values[code] = value
+            token = string.char(code % 256, math.floor(code / 256))
+            column.codes[value] = token
+        end
+    end
+    column.bytes[id] = token
+end
+
+local function PackedValue(column, id)
+    local i = (id - 1) * 2 + 1
+    local low, high = StringByte(column.bytes, i, i + 1)
+    return column.values[low + high * 256]
+end
 
 local function RowIdentity(store, id)
     local offsets = store.columns[5]
@@ -59,9 +86,10 @@ local function ColumnField(row, key)
     local column = FIELD[key]
     if column then
         if column >= 11 then
-            local preparation = store.preparations[id]
+            local preparation = PackedValue(store.preparations, id)
             return preparation and preparation[column - 10]
         end
+        if column == 2 or column == 10 then return PackedValue(store.columns[column], id) end
         return store.columns[column][id]
     end
     local pageField = PAGE_FIELD[key]
@@ -345,7 +373,6 @@ end
 -- Each block retains one string instead of one interned string per control.
 -- The compact offsets are resolved only when search or navigation uses an ID.
 local function FinishIdentityColumn(store)
-    if not store then return end
     local identities = store.columns[5]
     local joined = table.concat(identities)
     if #joined >= 65535 then return end
@@ -357,6 +384,19 @@ local function FinishIdentityColumn(store)
     end
     identities[#identities + 1] = string.char(offset % 256, math.floor(offset / 256))
     store.columns[5], store.identities = table.concat(identities), joined
+end
+
+local function FinishPackedColumn(column)
+    column.bytes = table.concat(column.bytes)
+    column.codes = nil
+end
+
+local function FinishColumnBlock(store)
+    if not store then return end
+    FinishIdentityColumn(store)
+    FinishPackedColumn(store.columns[2])
+    FinishPackedColumn(store.columns[10])
+    FinishPackedColumn(store.preparations)
 end
 
 local function DecodeLine(decoder, line)
@@ -420,12 +460,11 @@ local function DecodeLine(decoder, line)
         decoder.count = count
         local rowMeta = decoder.rowMeta
         if not rowMeta or count > rowMeta.offset + COLUMN_BLOCK_SIZE then
-            FinishIdentityColumn(rowMeta)
+            FinishColumnBlock(rowMeta)
             -- Lua doubles a dense array when it fills. Limit the unused tail to the final block.
             -- Each group of rows owns its columns while keeping the public row IDs consecutive.
-            local columns = {}
-            for i = 1, 10 do columns[i] = {} end
-            rowMeta = { __index = RecordField, columns = columns, preparations = {}, invalidControls = {},
+            local columns = { {}, PackedColumn(), {}, {}, {}, {}, {}, {}, {}, PackedColumn() }
+            rowMeta = { __index = RecordField, columns = columns, preparations = PackedColumn(), invalidControls = {},
                 offset = count - 1, _staticColumns = true }
             decoder.rowMeta = rowMeta
         end
@@ -435,15 +474,17 @@ local function DecodeLine(decoder, line)
             labelInfo = { displayLabel, labelNorm, sourceLabelNorm ~= labelNorm and sourceLabelNorm or nil }
             decoder.labels[label] = labelInfo
         end
-        columns[1][id], columns[2][id] = labelInfo, kind ~= "" and kind or "control"
+        columns[1][id] = labelInfo
+        PutPackedValue(columns[2], id, kind ~= "" and kind or "control")
         columns[3][id] = hintInfo
         columns[5][id], columns[7][id] = searchIdentity, haystack
         columns[8][id] = settingKey ~= "" and settingKey or nil
         columns[9][id] = actionKey ~= "" and actionKey or nil
-        columns[10][id] = exactSectionId ~= "" and exactSectionId or nil
+        PutPackedValue(columns[10], id, exactSectionId ~= "" and exactSectionId or nil)
+        local preparation
         if exactTargetContracts ~= "" or exactTargetKinds ~= "" then
             local kinds = exactTargetKinds ~= "" and exactTargetKinds or prepareKind
-            local preparation = decoder.preparationsByContract[exactTargetContracts]
+            preparation = decoder.preparationsByContract[exactTargetContracts]
             if not preparation or preparation[1] ~= kinds
                 or preparation[3] ~= prepareKind or preparation[4] ~= prepareValue then
                 -- Controls can share a contract but select different views through their setting key.
@@ -451,8 +492,8 @@ local function DecodeLine(decoder, line)
                     prepareKind, prepareValue }
                 decoder.preparationsByContract[exactTargetContracts] = preparation
             end
-            rowMeta.preparations[id] = preparation
         end
+        PutPackedValue(rowMeta.preparations, id, preparation)
         if not hasControlId then rowMeta.invalidControls[id] = true end
         records[count] = setmetatable({ count }, rowMeta)
     end
@@ -481,7 +522,7 @@ local function Decode(deadline)
         DecodeLine(decoder, line)
         if deadline and debugprofilestop() >= deadline then return nil end
     end
-    FinishIdentityColumn(decoder.rowMeta)
+    FinishColumnBlock(decoder.rowMeta)
     state.decoder = nil
     -- Keep the compact source for a sliced rebuild after menu-close cache release.
     return decoder.records
