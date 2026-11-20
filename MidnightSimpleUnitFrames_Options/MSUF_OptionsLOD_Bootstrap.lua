@@ -80,6 +80,9 @@ function menu.SupportsSearchTarget(pageKey, settingKey, prepareKind, prepareValu
     if targetScope and targetScope ~= "party" then return false end
     if settingKey == "general.kickReadyShowNameplates"
         and not (menu.CastbarSuiteNameplatesSupported and menu.CastbarSuiteNameplatesSupported()) then return false end
+    if prepareKind == "unitAuraWorkspace" and (prepareValue == "buff_bars" or prepareValue == "debuff_bars") then
+        return main.Client.IsRetail == true
+    end
     if prepareKind == "unitStatusIndicator" then
         local unit = pageKey:match("^uf_(.+)$")
         local spec = unit and menu.UnitPage.FindStatusSpec(unit, prepareValue)

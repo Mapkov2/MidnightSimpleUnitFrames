@@ -4,20 +4,20 @@
 
 ### Highlights
 
-- **New Aura Lane and Aura Bar Layouts.** On Retail and WoW Forever, choose icons or duration bars separately for buff and debuff lanes on unit and group frames. Open Auras, select Buffs or Debuffs, and enable Show as Bars in the Bars tab.
-<!-- msuf-menu-link: none -->
-- **Player castbar Force Off.** Hide the Blizzard player castbar even when the MSUF Player frame is disabled. Choose Force Off under Castbar Provider when another addon, such as Quartz, supplies your castbar.
+- **Aura Lanes and Bars.** Icons or bars per buff and debuff lane. Retail and WoW Forever.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.lane.buff.layout.show-as-bars","settingKey":"","prepareKind":"unitAuraWorkspace","prepareValue":"buff_bars","query":"show as bars","label":"Player Buffs: Show as Bars"} -->
+- **Player castbar Force Off.** Hide Blizzard's castbar for Quartz or similar addons.
 <!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.provider","settingKey":"general.castbarPlayerBackend","prepareKind":"unitCastbarTab","prepareValue":"general","query":"castbar provider","label":"Castbar provider"} -->
-- **Party frames in raids.** Keep your own subgroup visible alongside the raid frames, including in small raids. Enable the option in Party/Raid Frames > Layout > Advanced.
+- **Party frames in raids.** Keep your own subgroup visible.
 <!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"layout_advanced","controlId":"menu2.gf_layout.group.field.showpartyinraid","settingKey":"gf_party.showPartyInRaid","prepareKind":"groupScope","prepareValue":"party","query":"Show Party Frames in Raid","label":"Show Party Frames in Raid"} -->
-- **New Outline Settings gear.** Open Appearance > Bars > Frame Outline and click the gear next to Bar outline thickness. Edit frame and castbar outlines individually, including their thickness and color. Select All outlines to apply a common thickness to every eligible entry. Compatible MSUF Suite builds add supported module borders, such as Minimap, Bags and Skinning, to the same panel.
-<!-- msuf-menu-link: none -->
+- **Outline Settings gear.** Edit individual borders or use All outlines. Supports compatible Suite borders.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_outline","controlId":"menu2.opt.bars.global.outline.thickness","settingKey":"","prepareKind":"","prepareValue":"","query":"bar outline thickness","label":"Frame Outline gear"} -->
 
 ### Aura Bar Layout options
 
-- **Growth and fill.** New bars can grow up, down, left, or right. Set the direction the duration bar fills separately.
-- **Combined buff and debuff bars.** Enable bars for both lanes to show buffs first and debuffs next in one list. The list follows the Buff lane's anchor and growth while each lane keeps its own filters, sorting and limits.
-- **Appearance.** Set the bar texture, icon position, size and spacing, fill color, and outline style, thickness and color.
+- **Growth and fill.** Four growth directions. Independent fill direction.
+- **Combined bars.** Buffs first, debuffs next. Shared Buff anchor and growth. Separate filters, sorting and limits.
+- **Appearance.** Textures, icon position and size, spacing, colors and outlines.
 
 ### Fixes and improvements
 

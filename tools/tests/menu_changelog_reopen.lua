@@ -166,19 +166,38 @@ assert(M.changelogSelectedVersion == olderVersion and scroll:GetVerticalScroll()
 button:Click()
 assert(M.cache.changelog == current and scroll:GetVerticalScroll() == 0, "toolbar did not restore the latest cached release")
 
-local function HasCastbarLink(frame)
-    for _, region in ipairs({ frame:GetRegions() }) do
-        if region.GetText and (region:GetText() or ""):find("Player castbar Force Off", 1, true) then return true end
-    end
+local function FindHighlight(prefix)
+    return FindButton(M.cache.changelog, function(frame)
+        for _, region in ipairs({ frame:GetRegions() }) do
+            if region.GetText and (region:GetText() or ""):find(prefix, 1, true) == 1 then return true end
+        end
+    end)
 end
 if version ~= "7.0.4" then
     local release = assert(FindButton(current, function(header) return IsVersion(header, "7.0.4") end))
     release:Click()
 end
-local castbarLink = assert(FindButton(M.cache.changelog, HasCastbarLink), "7.0.4 has no clickable castbar highlight")
+local castbarLink = assert(FindHighlight("Player castbar Force Off"), "7.0.4 has no clickable castbar highlight")
 castbarLink:Click()
 assert(M.activeKey == "uf_player" and M.cache.uf_player.sections.castbar._msuf2CollapsibleEntry.open,
     "rendered castbar highlight did not open its real settings section")
+
+assert(M.SelectPage("changelog"))
+local auraBarsLink = FindHighlight("Aura Lanes and Bars")
+assert((auraBarsLink ~= nil) == (mw.core.Client.IsRetail == true), "aura highlight link visibility differs from the Bars tab")
+if auraBarsLink then
+    auraBarsLink:Click()
+    local auraBars = M.RuntimeControlCatalog.Get("menu2.uf_player.auras.unit-workspace.lane.buff.layout.show-as-bars")
+    assert(M.activeKey == "uf_player" and auraBars and auraBars.widget:IsVisible(),
+        "aura highlight did not open the Player Buffs Bars toggle")
+end
+
+assert(M.SelectPage("changelog"))
+local outlineLink = assert(FindHighlight("Outline Settings gear"), "outline highlight has no direct link")
+outlineLink:Click()
+local outline = M.RuntimeControlCatalog.Get("menu2.opt.bars.global.outline.thickness")
+assert(M.activeKey == "opt_bars" and outline and outline.widget:IsVisible(),
+    "outline highlight did not open the Frame Outline thickness slider")
 
 local arenaLink = { pageKey = "uf_arena", sectionId = "arena", controlId = "test.arena" }
 local _, visibleArenaLink = M.GetChangelogBullet({ text = "Arena", link = arenaLink })
