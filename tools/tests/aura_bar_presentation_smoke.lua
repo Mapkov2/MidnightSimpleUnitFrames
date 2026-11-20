@@ -1,8 +1,11 @@
 -- aura_bar_presentation_smoke.lua <root> <flavor>
 local root, flavor = assert(arg[1]):gsub("\\", "/"):gsub("/$", ""), assert(arg[2])
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
+local cursorX, cursorY, mouseHeld = 300, 400, false
 local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = function(world)
     local methods = world.widgets.Methods
+    world.env.GetCursorPosition = function() return cursorX, cursorY end
+    world.env.IsMouseButtonDown = function(button) return button == "LeftButton" and mouseHeld end
     world.env.C_AddOns.IsAddOnLoaded = function() return true end
     if flavor == "Mainline" or flavor == "Forever" then
         world.env.UnitIsPlayerControlledOrGroupMember = function(unit)
@@ -381,6 +384,36 @@ local function AssertJoinedNative(cfg, frame, direction)
     return nativeOwner
 end
 
+local function AssertJoinedDrag(both)
+    local snap = core.EditModeController.Snap
+    local isSnapEnabled = snap.IsEnabled
+    snap.IsEnabled = function() return false end
+    local _, _, _, initialX, initialY = both:GetPoint(1)
+    local debuffX, debuffY = target.debuffOffsetX, target.debuffOffsetY
+    cursorX, cursorY, mouseHeld = 300, 400, true
+    MenuWorld.FireScript(both, "OnDragStart")
+    assert(both._dragging, "combined mover did not start dragging")
+    local ticker = core.EditModeDragDriver.GetFrame()
+    local function Move(dx, dy, elapsed)
+        cursorX, cursorY = 300 + dx, 400 + dy
+        MenuWorld.FireScript(ticker, "OnUpdate", elapsed)
+        local _, _, _, x, y = both:GetPoint(1)
+        assert(x == initialX + dx and y == initialY + dy,
+            ("combined mover jumped outside the cursor delta: expected %.1f/%.1f, got %.1f/%.1f")
+                :format(initialX + dx, initialY + dy, x, y))
+        assert(both:IsShown() and not auras.EditMode.groups.target.debuff:IsShown(), "a second mover appeared during the drag")
+    end
+    Move(13, 7, 0.016)
+    Move(24, 11, 0.016)
+    Move(30, 14, 0.060)
+    mouseHeld = false
+    MenuWorld.FireScript(both, "OnDragStop")
+    local _, _, _, finalX, finalY = both:GetPoint(1)
+    assert(not both._dragging and finalX == initialX + 30 and finalY == initialY + 14, "combined mover snapped on drop")
+    assert(target.debuffOffsetX == debuffX and target.debuffOffsetY == debuffY, "combined mover rewrote the separate debuff offsets")
+    snap.IsEnabled = isSnapEnabled
+end
+
 local function AssertGrowthAndJoining()
     editState.active = true
     core.ExportPublic("MSUF_UnitPreviewActive", true)
@@ -388,6 +421,7 @@ local function AssertGrowthAndJoining()
     model.WriteLaneAuraBars("target", "debuff", true)
     model.WriteLaneAuraBarFill("target", "buff", "DOWN")
     model.WriteLaneAuraBarStyle("target", "debuff", Appearance("RIGHT"))
+    target.buffAnchor = "CENTER"
     local nativeFrame = env.CreateFrame("Frame", nil, host)
     nativeFrame.MSUFUnitKey = "target"
     local owner
@@ -411,12 +445,14 @@ local function AssertGrowthAndJoining()
         AssertRelativeBarPositions(edit[1], edit[2], edit[4], direction, advance, advance * 3)
         assert(edit[4]._msufA3AuraBarSample.name:GetText() == auras.MockAuraPainter.AuraBarSampleName("debuff"))
         owner = AssertJoinedNative(cfg, nativeFrame, direction)
+        if direction == "UP" or direction == "RIGHT" then AssertJoinedDrag(both) end
     end
 
     -- Editing a filter on the second group reuses its native owner and leaves Buffs intact.
     local cfg = auras.ResolveUnitFrameConfig("target")
     cfg.lanes.debuff.nativeFilter = "HARMFUL|PLAYER"
-    assert(auras.Runtime.NativeApply.ApplyGroupSlots(nativeFrame.Auras, cfg.nativeOwnerPlan.owners.GroupAuraFlow, nativeFrame) == owner)
+    local ownerPlan = auras.Runtime.OwnerConfig.GetNativeOwnerPlan(cfg)
+    assert(auras.Runtime.NativeApply.ApplyGroupSlots(nativeFrame.Auras, ownerPlan.owners.GroupAuraFlow, nativeFrame) == owner)
     assert(owner.auraSmokeGroups.msuf_debuff.filter == "HARMFUL|PLAYER")
     assert(owner.auraSmokeGroups.msuf_buff.filter == cfg.lanes.buff.nativeFilter)
 

@@ -46,7 +46,6 @@ local GROUPS = config.GROUPS
 local GetFrame = layout.GetFrame
 local ApplyGroupScaleForFrame = layout.ApplyGroupScaleForFrame
 local PositionPreviewGroup = layout.PositionPreviewGroup
-local FallbackMetrics = layout.FallbackMetrics
 local function WriteOffset(auras, unit, kind, x, y)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
@@ -77,14 +76,10 @@ local function ApplyDragUnit(auras, unit, moverKind, x, y)
     WriteOffset(auras, unit, moverKind, x, y)
     local other = EM.groups and EM.groups[unit] and EM.groups[unit][moverKind]
     local frame = other and GetFrame(unit)
-    if other and frame then
-        local cfg = ReadGroupConfig(unit, moverKind)
-        local metrics = A3.BuildAuraLaneMetrics(unit, moverKind)
-        metrics = metrics or FallbackMetrics(cfg)
-        local laneW = metrics.width or cfg.size
-        local laneH = metrics.height or cfg.size
+    if frame and other._msufA3PreviewAnchor then
+        -- Preserve the painted footprint between refreshes, including both joined bar lanes.
         ApplyGroupScaleForFrame(other, frame)
-        PositionPreviewGroup(other, frame, metrics.anchor or cfg.anchor, x, y, laneW, laneH)
+        PositionPreviewGroup(other, frame, other._msufA3PreviewAnchor, x, y, other._msufA3PreviewWidth, other._msufA3PreviewHeight)
     end
 end
 

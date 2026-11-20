@@ -637,6 +637,7 @@ end
 local function ApplyLaneLayout(group, frame, unit, kind, spec, cfg, metrics, textCfg, entries, lane, chrome)
     if group.SetClampedToScreen then group:SetClampedToScreen(false) end
     ApplyGroupScaleForFrame(group, frame)
+    group._msufA3PreviewAnchor, group._msufA3PreviewWidth, group._msufA3PreviewHeight = lane.anchor, lane.laneW, lane.laneH
     PositionPreviewGroup(group, frame, lane.anchor, lane.x, lane.y, lane.laneW, lane.laneH)
     group:SetSize(lane.laneW, lane.laneH + HEADER_H)
     if group.Body then group.Body:SetSize(lane.laneW, lane.laneH) end
