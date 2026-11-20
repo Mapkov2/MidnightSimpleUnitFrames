@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "28E532F5040B21795171C80B1F8B99246C66E8AB0D3DA4824F38D6A1F2EB0666",
+    sourceSha256 = "7D6405628B669BC8E55F05907D53FFAA1498FA0877A1E178D4BD4A44867238B1",
     currentVersion = "7.0.4",
     historyFromVersion = "6.02",
     previousVersion = "7.0.3",
@@ -21,6 +21,10 @@ local data = {
                 {
                     title = "Highlights",
                     bullets = {
+                        {
+                            text = "New Aura Lane and Aura Bar Layouts. On Retail and WoW Forever, choose icons or duration bars separately for buff and debuff lanes on unit and group frames. Open Auras, select Buffs or Debuffs, and enable Show as Bars in the Bars tab.",
+                            linkless = true,
+                        },
                         {
                             text = "Player castbar Force Off. Hide the Blizzard player castbar even when the MSUF Player frame is disabled. Choose Force Off under Castbar Provider when another addon, such as Quartz, supplies your castbar.",
                             link = {
@@ -48,13 +52,17 @@ local data = {
                             },
                         },
                         {
-                            text = "Aura bar layouts on Retail and WoW Forever. Choose the direction new bars grow, combine buff and debuff bars, and customize fill colors and outlines. Find these controls in the Buffs or Debuffs workspace under Bars.",
+                            text = "New Outline Settings gear. Open Appearance > Bars > Frame Outline and click the gear next to Bar outline thickness. Edit frame and castbar outlines individually, including their thickness and color. Select All outlines to apply a common thickness to every eligible entry. Compatible MSUF Suite builds add supported module borders, such as Minimap, Bags and Skinning, to the same panel.",
                             linkless = true,
                         },
-                        {
-                            text = "Frame and castbar outlines. Use the gear next to Bar outline thickness under Appearance > Bars > Frame Outline. Edit thickness and colors for individual frames or castbars, or apply a common thickness to all outlines.",
-                            linkless = true,
-                        },
+                    },
+                },
+                {
+                    title = "Aura Bar Layout options",
+                    bullets = {
+                        "Growth and fill. New bars can grow up, down, left, or right. Set the direction the duration bar fills separately.",
+                        "Combined buff and debuff bars. Enable bars for both lanes to show buffs first and debuffs next in one list. The list follows the Buff lane's anchor and growth while each lane keeps its own filters, sorting and limits.",
+                        "Appearance. Set the bar texture, icon position, size and spacing, fill color, and outline style, thickness and color.",
                     },
                 },
                 {
