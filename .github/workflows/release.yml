@@ -1,0 +1,38 @@
+name: Announce a published MSUF beta through the Discord bot
+run-name: Publish ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published MSUF 7.0 beta tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-published-beta:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      # The MSUF bot receives successful runs through the signed GitHub
+      # webhook and routes prereleases to the server's beta changelog.
+      - name: Verify the public beta asset and matching changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^classic-v7\.[0-9]+(\.[0-9]+)?-beta[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" |
+            jq -e --arg tag "$RELEASE_TAG" '
+              .tag_name == $tag and .prerelease and (.draft | not)
+              and any(.assets[]; .state == "uploaded" and (.name | endswith(".zip")))
+            ' >/dev/null
+          version="${RELEASE_TAG#classic-v}"
+          gh api "repos/$GITHUB_REPOSITORY/contents/CHANGELOG.md?ref=$GITHUB_SHA" \
+            --jq '.content | gsub("[\r\n]"; "") | @base64d' |
+            awk -v prefix="## $version - " 'index($0, prefix) == 1 { print; found = 1 } END { if (!found) exit 1 }'
