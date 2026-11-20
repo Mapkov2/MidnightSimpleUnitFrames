@@ -607,7 +607,7 @@ end
 function Schema.Setter(spec)
     local write = assert(spec.write, "schema write policy missing")
     local args = write.args or {}
-    return function(value)
+    return function(value, ...)
         if write.accept and not write.accept(value) then return write.refused end
         local selected = write.selected and write.selected.get()
         if write.selected and not (selected and selected[write.selected.key]) then
@@ -615,7 +615,10 @@ function Schema.Setter(spec)
             return
         end
         local root, key = TargetParts(spec)
-        if write.convert then value = write.convert(value) end
+        if write.convert then
+            if spec.kind == "color" then value = write.convert(value, ...)
+            else value = write.convert(value) end
+        end
         if write.validNumber then
             value = tonumber(value)
             if value == nil then return false end

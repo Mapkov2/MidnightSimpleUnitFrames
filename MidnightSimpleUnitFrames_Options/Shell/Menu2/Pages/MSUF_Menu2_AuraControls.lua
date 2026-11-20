@@ -535,23 +535,21 @@ local function AuraBarSettingRow(ctx, adapter, key, token, label, values, isStyl
     local settingKey = isStyle and "auraBarStyle" or key
     local meta = AuraControlMetaAtVisiblePath(ctx, identity, path, nil, adapter.contract(settingKey, key))
     meta.id, meta.kind, meta.label, meta.values = key, widgetKind or (values and "dropdown" or "toggle"), label, values
+    local write = adapter.write(settingKey, meta.setting)
     if widgetKind == "color" then
         meta.get = function() return A.ReadAuraBarColor(adapter.get(settingKey), key) end
-        meta.set = function(r, g, b)
-            adapter.set(settingKey, A.CopyAuraBarStyle(adapter.get(settingKey), key, { r, g, b }))
-        end
+        write.convert = function(r, g, b) return A.CopyAuraBarStyle(adapter.get(settingKey), key, { r, g, b }) end
     elseif isStyle then
         meta.default = A.ReadAuraBarStyle(nil, key)
         meta.get = function() return A.ReadAuraBarStyle(adapter.get(settingKey), key) end
-        meta.set = function(value)
-            if meta.get() == value then return end
-            adapter.set(settingKey, A.CopyAuraBarStyle(adapter.get(settingKey), key, value))
-        end
+        local accept = write.accept
+        write.accept = function(value) return (not accept or accept()) and meta.get() ~= value end
+        write.convert = function(value) return A.CopyAuraBarStyle(adapter.get(settingKey), key, value) end
     else
         meta.default = key == "auraBarFill" and "RIGHT" or false
         meta.get = function() return adapter.get(key) end
-        meta.set = function(value) adapter.set(key, value) end
     end
+    meta.write = write
     return meta
 end
 

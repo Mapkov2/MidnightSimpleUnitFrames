@@ -10,7 +10,10 @@
 --                    reset = fn(key) -> bool,
 --                    prepare = fn(key) -> bool,        optional
 --                    finish = fn(key),                 optional
---                    historyLabel = fn(key) -> string } optional
+--                    historyLabel = fn(key) -> string, optional
+--                    resolveConfirmKey = fn(key) -> string | nil } optional
+--       A confirmation resolver chooses a fixed reset key owned by the same
+--       provider. Nil or a key that cannot reset refuses confirmation.
 --       A reset runs: combat refusal, canReset, prepare (before the undo
 --       snapshot, so what it loads is part of the state Undo restores), reset
 --       inside one undo history entry, then finish (the provider's refresh and
@@ -47,9 +50,10 @@ local function Snapshot(id, provider, caller)
     if type(id) ~= "string" or id == "" or type(provider) ~= "table" or type(provider.pages) ~= "table"
         or type(provider.canReset) ~= "function" or type(provider.warning) ~= "function"
         or type(provider.reset) ~= "function" or not OptionalFunction(provider.prepare)
-        or not OptionalFunction(provider.finish) or not OptionalFunction(provider.historyLabel) then
+        or not OptionalFunction(provider.finish) or not OptionalFunction(provider.historyLabel)
+        or not OptionalFunction(provider.resolveConfirmKey) then
         error("MSUF " .. caller .. ": expected (id, { pages, canReset, warning, reset"
-            .. " [, prepare, finish, historyLabel] })", 3)
+            .. " [, prepare, finish, historyLabel, resolveConfirmKey] })", 3)
     end
     local pages = {}
     for key, owned in pairs(provider.pages) do
@@ -59,6 +63,7 @@ local function Snapshot(id, provider, caller)
         id = id, source = provider, pages = pages,
         canReset = provider.canReset, warning = provider.warning, reset = provider.reset,
         prepare = provider.prepare, finish = provider.finish, historyLabel = provider.historyLabel,
+        resolveConfirmKey = provider.resolveConfirmKey,
     }
 end
 
@@ -162,6 +167,20 @@ function M.ResetProviderPage(key, provider)
     return ok
 end
 
+local function ResolveConfirmKey(key, provider)
+    if not provider.resolveConfirmKey then return key end
+    local target = provider.resolveConfirmKey(key)
+    if type(target) == "string" and byPage[target] == provider and provider.canReset(target) == true then
+        return target
+    end
+end
+
+function M.BuildScopedPageResetWarning(key)
+    local provider = byPage[key]
+    local target = provider and ResolveConfirmKey(key, provider)
+    if target and target ~= key then return M.BuildPageResetWarning(target) end
+end
+
 -- Blizzard's generic confirmation (Blizzard_StaticPopup SharedDialogDefs.lua
 -- GENERIC_CONFIRMATION, on every supported client): nothing is added to
 -- StaticPopupDialogs. One data table keeps one question open, like the host's
@@ -175,6 +194,8 @@ local confirmation = {
 }
 function M.ShowProviderPageResetConfirm(key, provider)
     if RefusedInCombat() or provider.canReset(key) ~= true then return false end
+    key = ResolveConfirmKey(key, provider)
+    if not key then return false end
     local warning = M.BuildPageResetWarning(key)
     if warning == nil then return false end
     confirmKey = key

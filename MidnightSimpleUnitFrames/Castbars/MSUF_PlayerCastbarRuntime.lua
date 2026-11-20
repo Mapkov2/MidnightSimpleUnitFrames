@@ -392,6 +392,7 @@ local function ClearActiveCastIdentity(frame)
     frame._msufActiveCastGUID = nil
     frame._msufActiveSpellID = nil
     frame._msufActiveCastBarID = nil
+    frame._msufChannelRankSpellID, frame._msufChannelSequenceID = nil, nil
 end
 
 local function StoreActiveCastIdentity(frame, castGUID, spellID, castBarID)
@@ -537,6 +538,113 @@ local function InvalidatePlayerInterruptHide(frame)
     end
 end
 
+local function ClearPendingTarget(frame)
+    frame._msufSentTarget, frame._msufSentGUID, frame._msufSentSpellID = nil, nil, nil
+    frame._msufSentUnit, frame._msufSentUntil = nil, nil
+end
+local function HasSentTarget(target)
+    if issecretvalue(target) then return true end
+    return type(target) == "string" and target ~= ""
+end
+
+local function CaptureSentTarget(frame, unit, target, guid, spellID)
+    ClearPendingTarget(frame)
+    if not Config.playerTargetName or not HasSentTarget(target) then return end
+    frame._msufSentTarget, frame._msufSentUnit = target, unit
+    frame._msufSentGUID = nil
+    if not issecretvalue(guid) then frame._msufSentGUID = guid end
+    frame._msufSentSpellID = PlainNumber(spellID)
+    frame._msufSentUntil = GetTime() + 2
+end
+local function ClearBoundTarget(frame)
+    frame._msufBoundTarget, frame._msufBoundTargetGUID, frame._msufBoundTargetUnit = nil, nil, nil
+end
+
+local function MatchSentTarget(frame, unit, guid, spellID, isChannel)
+    if issecretvalue(guid) or (isChannel and guid == "") then guid = nil end
+    -- A cast can become a channel without a second SENT, even after STOP.
+    if isChannel and guid ~= nil and guid == frame._msufBoundTargetGUID and unit == frame._msufBoundTargetUnit then
+        return frame._msufBoundTarget, true
+    end
+    if frame._msufBoundTargetGUID then ClearBoundTarget(frame) end
+    local target, captured
+    if frame._msufSentUntil ~= nil and GetTime() <= frame._msufSentUntil and frame._msufSentUnit == unit then
+        local sentGUID = frame._msufSentGUID
+        local valid
+        if guid ~= nil and sentGUID ~= nil and (not isChannel or sentGUID ~= "") then
+            valid = guid == sentGUID
+            if valid and guid ~= "" then
+                frame._msufBoundTarget, frame._msufBoundTargetGUID, frame._msufBoundTargetUnit = frame._msufSentTarget, guid, unit
+            end
+        else
+            local id = PlainNumber(spellID)
+            valid = id ~= nil and id == frame._msufSentSpellID
+            if not valid and isChannel and unit == "player" and id ~= nil and frame._msufSentSpellID ~= nil then
+                valid = ChannelTicks.GetPenanceRequestSpellID(id) == frame._msufSentSpellID
+            end
+        end
+        if valid then
+            target, captured = frame._msufSentTarget, true
+        end
+    end
+    -- A distinct channel identity can still be confirmed by SUCCEEDED.
+    if captured or not isChannel then ClearPendingTarget(frame) end
+    return target, captured == true
+end
+
+local function ClearConfirmedTarget(frame)
+    frame._msufConfirmedTarget, frame._msufConfirmedTargetUnit = nil, nil
+    frame._msufConfirmedTargetBarID, frame._msufConfirmedTargetGUID, frame._msufConfirmedTargetUntil = nil, nil, nil
+end
+
+local function MatchChannelTarget(frame, unit, guid, spellID, castBarID)
+    if castBarID ~= nil and frame._msufConfirmedTargetBarID == castBarID
+        and frame._msufConfirmedTargetUnit == unit then
+        local target, deadline = frame._msufConfirmedTarget, frame._msufConfirmedTargetUntil
+        if frame._msufSentGUID == frame._msufConfirmedTargetGUID then ClearPendingTarget(frame) end
+        ClearConfirmedTarget(frame)
+        if GetTime() <= deadline then return target, true end
+    end
+    return MatchSentTarget(frame, unit, guid, spellID, true)
+end
+
+local function ConfirmSentTarget(frame, sentGUID, unit, guid, castBarID)
+    if sentGUID == "" or frame._msufSentUnit ~= unit or castBarID == nil
+        or issecretvalue(guid) or guid ~= sentGUID then
+        return
+    end
+    local target, deadline = frame._msufSentTarget, frame._msufSentUntil
+    if GetTime() > deadline then
+        ClearPendingTarget(frame)
+        return
+    end
+
+    if frame._msufChannelStartBarID == castBarID and frame._msufChannelStartUnit == unit then
+        ClearPendingTarget(frame)
+        if not frame._msufChannelStartHasTarget then
+            frame._msufChannelStartTarget, frame._msufChannelStartHasTarget = target, true
+        end
+    elseif frame.MSUF_castActive == true and frame.MSUF_isChanneled == true
+        and frame._msufActiveCastBarID == castBarID and frame._msufActiveCastUnit == unit then
+        ClearPendingTarget(frame)
+        if not frame._msufPlayerTargetCaptured then
+            frame._msufPlayerCastTarget, frame._msufPlayerTargetCaptured = target, true
+            Player.UpdateTargetText(frame)
+        end
+    else
+        frame._msufConfirmedTarget, frame._msufConfirmedTargetUnit = target, unit
+        -- Success can report a parent bar ID. Keep the request for direct
+        -- matching until we see the channel's own ID.
+        frame._msufConfirmedTargetBarID = castBarID
+        frame._msufConfirmedTargetGUID, frame._msufConfirmedTargetUntil = sentGUID, deadline
+    end
+end
+
+local function ClearPendingChannelStart(frame)
+    frame._msufChannelStartUnit, frame._msufChannelStartBarID = nil, nil
+    frame._msufChannelStartTarget, frame._msufChannelStartHasTarget, frame._msufChannelStartSpellID = nil, nil, nil
+end
+
 local function ApplyActiveCast(
     frame,
     unit,
@@ -556,8 +664,11 @@ local function ApplyActiveCast(
     local isChannel = castType == "CHANNEL"
     if frame._msufFadeDriver then Fade.Begin(frame) end
 
-    if Config.playerSpellRank then Utils.CapturePlayerSpellRank(frame, spellID, nil, unit)
-    elseif frame._msufPlayerCastRank then frame._msufPlayerCastRank, frame._msufBaseCastText = nil, nil end
+    if Config.playerSpellRank then
+        Utils.CapturePlayerSpellRank(frame, spellID, nil, unit, frame._msufChannelRankSpellID)
+    elseif frame._msufPlayerCastRank then
+        frame._msufPlayerCastRank, frame._msufBaseCastText = nil, nil
+    end
     InvalidatePlayerInterruptHide(frame)
     frame.interruptFeedbackEndTime = nil
     frame.interrupted = nil
@@ -665,9 +776,33 @@ local function ApplyActiveCast(
     end
 end
 
+local function ApplyChannelDetails(frame, state)
+    local sequenceID = state.spellSequenceID
+    local pendingUnit, pendingBarID = frame._msufChannelStartUnit, frame._msufChannelStartBarID
+    if pendingUnit == state.unit and (pendingBarID == nil or pendingBarID == state.castBarID) then
+        if frame._msufFadeDriver then Fade.Begin(frame) end
+        frame._msufPlayerCastTarget = frame._msufChannelStartTarget
+        frame._msufPlayerTargetCaptured = frame._msufChannelStartHasTarget == true
+        frame._msufChannelRankSpellID = frame._msufChannelStartSpellID
+        ClearPendingChannelStart(frame)
+    elseif frame._msufChannelSequenceID ~= sequenceID or frame._msufActiveCastUnit ~= state.unit
+        or frame._msufActiveCastBarID ~= state.castBarID then
+        frame._msufPlayerCastTarget, frame._msufPlayerTargetCaptured = nil, false
+        frame._msufChannelRankSpellID = nil
+    end
+    frame._msufChannelSequenceID = sequenceID
+end
+
 local function ApplyCastState(frame, state)
     if not (frame and state and state.active == true) then return false end
     local castType = state.castType == "CHANNEL" and "CHANNEL" or "CAST"
+    if castType == "CHANNEL" then
+        if frame._msufChannelStartUnit or frame._msufChannelSequenceID or frame._msufPlayerTargetCaptured then
+            ApplyChannelDetails(frame, state)
+        end
+    elseif frame._msufChannelSequenceID then
+        frame._msufChannelRankSpellID, frame._msufChannelSequenceID = nil, nil
+    end
     ApplyActiveCast(
         frame,
         state.unit or frame.unit or "player",
@@ -690,7 +825,7 @@ local function ApplyCastState(frame, state)
     -- start shift on clients whose cast tuple carries no delay.
     frame._msufPushbackMS = ResolvePushbackMS(frame, state)
     if frame.castText then
-        Utils.RefreshCastbarSpellNameText(frame)
+        Utils.RefreshCastbarSpellNameText(frame, true)
     end
     return true
 end
@@ -762,7 +897,7 @@ local function StopPlayerCastbar(frame)
     end
 end
 
-local function UnhaltedUpdate(frame, event)
+local function UnhaltedUpdate(frame, event, eventUnit, guid, eventSpellID, castBarID)
     if not frame or not frame.unit or not frame.statusBar then return end
     if frame.isEmpower then return end
 
@@ -789,6 +924,16 @@ local function UnhaltedUpdate(frame, event)
     if CHANNEL_START_EVENTS[event] then
         if not state or state.unit ~= unit then
             state = BuildCastState(unit, frame)
+        end
+        local showTarget = Config.playerTargetName or frame._msufPlayerTargetPainted
+        local showRank = Config.playerSpellRank and Utils.PlayerSpellRanksSupported and eventUnit == "player"
+        if (showTarget or showRank) and (castBarID ~= nil or (state and state.castType == "CHANNEL" and state.unit == eventUnit)) then
+            -- Preserve the details through a cast-first read of the outgoing cast.
+            local target, captured
+            if showTarget then target, captured = MatchChannelTarget(frame, eventUnit, guid, eventSpellID, castBarID) end
+            frame._msufChannelStartUnit, frame._msufChannelStartBarID = eventUnit, castBarID
+            frame._msufChannelStartTarget, frame._msufChannelStartHasTarget = target, captured
+            frame._msufChannelStartSpellID = showRank and PlainNumber(eventSpellID) or nil
         end
         if ApplyCastState(frame, state) then
             return
@@ -958,6 +1103,10 @@ local function DisablePlayerCastbar(frame)
     frame.interruptFeedbackEndTime = nil
     MarkPlayerStateInactive(frame)
     ClearActiveCastIdentity(frame)
+    ClearPendingChannelStart(frame)
+    ClearPendingTarget(frame)
+    ClearConfirmedTarget(frame)
+    ClearBoundTarget(frame)
     frame._msufActiveCastUnit = nil
     ClearPendingPlayerInterrupt(frame)
     if frame.timeText then SetTextIfChanged(frame.timeText, "") end
@@ -1076,38 +1225,15 @@ function Player.UpdateTargetText(frame)
     playerTargetPainter(frame, frame)
     frame._msufPlayerTargetPainted = PlayerTargetActive(frame)
 end
-local function ClearPendingTarget(frame)
-    frame._msufSentTarget, frame._msufSentGUID, frame._msufSentSpellID = nil, nil, nil
-    frame._msufSentUnit, frame._msufSentUntil = nil, nil
-end
-local function CaptureSentTarget(frame, unit, target, guid, spellID)
-    ClearPendingTarget(frame)
-    if Config.Read().general.castbarPlayerShowTargetName ~= true then return end
-    frame._msufSentTarget, frame._msufSentUnit = target, unit
-    frame._msufSentGUID = nil
-    if not issecretvalue(guid) then frame._msufSentGUID = guid end
-    frame._msufSentSpellID = PlainNumber(spellID)
-    frame._msufSentUntil = GetTime() + 2
-end
-local function BeginPlayerTarget(frame, unit, guid, spellID)
-    frame._msufPlayerCastTarget, frame._msufPlayerTargetCaptured = nil, false
-    local valid = frame._msufSentUntil ~= nil and GetTime() <= frame._msufSentUntil and frame._msufSentUnit == unit
-    if valid then
-        if not issecretvalue(guid) and guid ~= nil and frame._msufSentGUID ~= nil then
-            valid = guid == frame._msufSentGUID
-        else
-            local id = PlainNumber(spellID)
-            valid = id ~= nil and id == frame._msufSentSpellID
-        end
-    end
-    if valid then
-        frame._msufPlayerCastTarget = frame._msufSentTarget
-        frame._msufPlayerTargetCaptured = true
-    end
-    ClearPendingTarget(frame)
-end
-
 local function PlayerCastbarOnEventImpl(frame, event, ...)
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then
+        local sentGUID = frame._msufSentGUID
+        if sentGUID and not frame.MSUF_testMode then
+            local unit, guid, _, castBarID = ...
+            ConfirmSentTarget(frame, sentGUID, unit, guid, castBarID)
+        end
+        return
+    end
     if not Bridge.IsCastbarEnabledForUnit("player") then
         DisablePlayerCastbar(frame)
         return
@@ -1118,6 +1244,14 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if event == "UNIT_SPELLCAST_SENT" then
         CaptureSentTarget(frame, eventUnit, select(2, ...))
         return
+    end
+    if (frame._msufSentGUID or frame._msufConfirmedTargetGUID)
+        and (event == "UNIT_SPELLCAST_FAILED" or event == "UNIT_SPELLCAST_INTERRUPTED") then
+        local guid = select(2, ...)
+        if not issecretvalue(guid) and guid ~= nil and guid ~= "" then
+            if guid == frame._msufSentGUID and eventUnit == frame._msufSentUnit then ClearPendingTarget(frame) end
+            if guid == frame._msufConfirmedTargetGUID and eventUnit == frame._msufConfirmedTargetUnit then ClearConfirmedTarget(frame) end
+        end
     end
     -- Failed/interrupted spell spam and duplicate channel-stop events are common
     -- while no castbar exists. They cannot change visible state, so reject them
@@ -1136,8 +1270,14 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         or event == "UNIT_SPELLCAST_CHANNEL_START"
         or event == "UNIT_SPELLCAST_EMPOWER_START" then
         if frame._msufFadeDriver then Fade.Begin(frame) end
-        if Config.playerTargetName or frame._msufPlayerTargetPainted then
-            BeginPlayerTarget(frame, eventUnit, select(2, ...), select(3, ...))
+        if event ~= "UNIT_SPELLCAST_CHANNEL_START" then
+            if frame._msufChannelStartUnit == eventUnit then ClearPendingChannelStart(frame) end
+            if Config.playerTargetName or frame._msufPlayerTargetPainted then
+                frame._msufPlayerCastTarget, frame._msufPlayerTargetCaptured =
+                    MatchSentTarget(frame, eventUnit, (select(2, ...)), (select(3, ...)))
+            elseif frame._msufBoundTargetGUID then
+                ClearBoundTarget(frame)
+            end
         end
         local engine = CastbarEngine()
         if engine and type(engine.AdvanceGeneration) == "function" then
@@ -1172,12 +1312,15 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             or event == "UNIT_SPELLCAST_CHANNEL_START"
             or event == "UNIT_SPELLCAST_INTERRUPTIBLE"
             or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
-            UnhaltedUpdate(frame, event)
+            UnhaltedUpdate(frame, event, ...)
             return
         elseif event == "UNIT_SPELLCAST_CHANNEL_UPDATE" or event == "UNIT_SPELLCAST_DELAYED" then
             if not ActiveUnitMatches(frame, eventUnit) then return end
             local castBarID = select(4, ...)
-            if not ActiveCastBarIDMatches(frame, castBarID) then return end
+            if not ActiveCastBarIDMatches(frame, castBarID) and not (event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
+                and frame._msufChannelStartUnit == eventUnit and frame._msufChannelStartBarID == castBarID) then
+                return
+            end
             CastPlayerCastbar(frame)
             return
         elseif event == "UNIT_SPELLCAST_STOP" then
@@ -1234,6 +1377,13 @@ local function CastDebugValue(value)
 end
 
 local function TracePlayerCastEvent(frame, event, unit, castGUID, spellID, arg4, arg5, arg6)
+    if event == "UNIT_SPELLCAST_SENT" then
+        -- SENT includes its target before the GUID and spell ID.
+        local target = issecretvalue(castGUID) and "<secret>" or (HasSentTarget(castGUID) and "<present>" or "<empty>")
+        print("MSUF castdebug", CastDebugValue(GetTime()), event, "unit=" .. CastDebugValue(unit),
+            "castGUID=" .. CastDebugValue(spellID), "spellID=" .. CastDebugValue(arg4), "target=" .. target)
+        return
+    end
     local complete, interruptedBy, castBarID
     if event == "UNIT_SPELLCAST_EMPOWER_STOP" then
         complete, interruptedBy, castBarID = arg4, arg5, arg6
@@ -1266,19 +1416,25 @@ local function PlayerCastbarOnEvent(frame, event, ...)
     return playerEventHandler(frame, event, ...)
 end
 
+function Player.SyncSuccessEvent(frame, enabled)
+    local hasTargetOption = frame._msufPlayerSentRegistered == true
+    if not hasTargetOption then
+        ClearPendingTarget(frame)
+        ClearConfirmedTarget(frame)
+        ClearBoundTarget(frame)
+    end
+    local wantSuccess = enabled and (hasTargetOption or castDebug) or false
+    if frame._msufPlayerSuccessRegistered == wantSuccess then return end
+    frame._msufPlayerSuccessRegistered = wantSuccess
+    if wantSuccess then frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
+    else frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED") end
+end
+
 function Player.ToggleCastDebug()
     castDebug = not castDebug
     playerEventHandler = castDebug and TracedPlayerCastbarOnEvent or PlayerCastbarOnEventImpl
     local frame = Castbars.Frames.Get("player")
-    if frame then
-        -- SUCCEEDED is observation-only: the normal player runtime, like the
-        -- native player castbar, does not use it to decide completion.
-        if castDebug then
-            frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
-        else
-            frame:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-        end
-    end
+    if frame then Player.SyncSuccessEvent(frame, frame._msufPlayerEventsRegistered == true) end
     return castDebug
 end
 

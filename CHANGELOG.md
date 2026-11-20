@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.4-beta3 - 2026-11-20
+
+**7.0.4 Beta 3**
+
+### Fixes
+
+- **Player castbar.** Fixed missing recipient names for Penance and other casts that transition to channels. On clients that show spell ranks, channel spells keep the correct rank.
+- **Target range fade.** On WoW Forever, hostile targets recover when the first range check has no result. Warlocks use the highest known rank of Shadow Bolt for the target check, with Drain Life as a fallback.
+- **Edit Mode.** Fixed the labels and an error when opening some addon-provided choice popups.
+- **Suite settings.** The Reset page button can now show and confirm the specific HUD feature being reset when supported by the installed Suite version.
+
 ## 7.0.4-beta2 - 2026-11-20
 
 **7.0.4 Beta 2**

@@ -8,89 +8,24 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "BAFD26A99FC9F408180A58927A3173032B8811227A5B75E309EC58B3BAD844F9",
-    currentVersion = "7.0.4-beta2",
+    sourceSha256 = "52A1500F96ABBF57DBB5F1A5735CD53458D2C66AE1C4C7D8CD994FBCF95E718F",
+    currentVersion = "7.0.4-beta3",
     historyFromVersion = "6.02",
-    previousVersion = "7.0.4-beta1",
-    rangeLabel = "7.0.4-beta1 -> 7.0.4-beta2",
+    previousVersion = "7.0.4-beta2",
+    rangeLabel = "7.0.4-beta2 -> 7.0.4-beta3",
     entries = {
         {
-            version = "7.0.4-beta2",
+            version = "7.0.4-beta3",
             date = "2026-11-20",
-            title = "7.0.4 Beta 2",
+            title = "7.0.4 Beta 3",
             sections = {
                 {
-                    title = "Highlights",
+                    title = "Fixes",
                     bullets = {
-                        {
-                            text = "Aura bar growth. Choose whether new bars appear above, below, to the left, or to the right. The duration fill direction is independent.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "growth direction",
-                                label = "Growth Direction",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_player.auras.unit-workspace.lane.buff.bars.bar-growth",
-                                settingKey = "",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "buff_bars",
-                            },
-                        },
-                        {
-                            text = "Combined buff and debuff bars. Optionally show buffs first and debuffs next in one list. Enable bars for both aura types. The combined list uses the buff anchor and growth direction while each type keeps its own filters, sorting and limits.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "combine buff and debuff bars",
-                                label = "Combine Buff and Debuff Bars",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_player.auras.unit-workspace.lane.buff.bars.combine-debuff-bars",
-                                settingKey = "",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "buff_bars",
-                            },
-                        },
-                        {
-                            text = "Aura bar fill colors. Use the global timer color, pick a custom fill color, or choose normal or dark colors based on aura type.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "fill color mode",
-                                label = "Fill Color Mode",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_player.auras.unit-workspace.lane.buff.bars.fill-color-mode",
-                                settingKey = "",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "buff_bars",
-                            },
-                        },
-                        {
-                            text = "Aura bar outlines. Set the outline style and thickness and choose a default, custom or aura-type outline color.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "outline color mode",
-                                label = "Outline Color Mode",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_player.auras.unit-workspace.lane.buff.bars.outline-color-mode",
-                                settingKey = "",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "buff_bars",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Aura bar details",
-                    bullets = {
-                        "The new bar controls are available on Retail and WoW Forever. Open Auras, choose Buffs or Debuffs, and select Bars.",
-                        "Aura-type colors use your configured dispel colors when available. Other auras use green for buffs and red for debuffs.",
-                        "Combined bars are off by default. Group layouts keep their lanes separate when their visibility rules require it.",
-                        "The Bars workspace also exposes icon, spacing and opacity options for the bar presentation.",
-                    },
-                },
-                {
-                    title = "Fixes and polish",
-                    bullets = {
-                        "Options and Edit Mode previews show the configured aura-bar layout and appearance, including combined lanes.",
-                        "Aura-bar appearance settings are preserved when normalizing older unit-frame and group-frame profiles.",
-                        "Options labels retain their inherited font style when resized. The color picker draws its themed input fields again.",
+                        "Player castbar. Fixed missing recipient names for Penance and other casts that transition to channels. On clients that show spell ranks, channel spells keep the correct rank.",
+                        "Target range fade. On WoW Forever, hostile targets recover when the first range check has no result. Warlocks use the highest known rank of Shadow Bolt for the target check, with Drain Life as a fallback.",
+                        "Edit Mode. Fixed the labels and an error when opening some addon-provided choice popups.",
+                        "Suite settings. The Reset page button can now show and confirm the specific HUD feature being reset when supported by the installed Suite version.",
                     },
                 },
             },

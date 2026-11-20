@@ -16,6 +16,21 @@ local Publish = PublicAPI.Publish
 local IS_FOREVER = MSUF.Client.IsForever == true
 local HAS_ERA_SPELL_DATA = IS_FOREVER or MSUF.Client.IsVanilla == true
 
+-- Penance requests the cast spell. The heal/damage channel uses its own ID.
+-- Preserve the individual ranks when matching cast requests to effects.
+local PENANCE_REQUEST_ID = IS_FOREVER and {
+    [402261] = 402174, [402277] = 402174,
+    [1240734] = 1240720, [1240732] = 1240720,
+    [1240736] = 1240721, [1240733] = 1240721,
+    [1316994] = 1316995, [1316992] = 1316995,
+} or ((MSUF.Client.IsRetail or MSUF.Client.IsMists) and {
+    [47757] = 47540, [47758] = 47540,
+}) or {}
+
+function ChannelTicks.GetPenanceRequestSpellID(channelSpellID)
+    return PENANCE_REQUEST_ID[channelSpellID]
+end
+
 local DEFAULT_MARKER_COUNT = 5
 local MAX_CUSTOM_MARKER_COUNT = 10
 -- Hellfire, the longest Classic Era channel below, ticks 15 times.
@@ -106,14 +121,12 @@ if HAS_ERA_SPELL_DATA then
         },
     }
     if IS_FOREVER then
-        -- Penance ranks 1-4 (damage, heal, cast): three bolts including the
-        -- one at channel start, so two periods and one marker at 50%.
-        ERA_CHANNEL_TICKS[2] = {
-            402261, 402277, 402174,
-            1240734, 1240732, 1240720,
-            1240736, 1240733, 1240721,
-            1316994, 1316992, 1316995,
-        }
+        -- Three bolts including the one at channel start, so two periods.
+        local penanceTicks = { ticks = 2 }
+        for channelID, requestID in pairs(PENANCE_REQUEST_ID) do
+            CHANNEL_TICK_DATA[channelID] = penanceTicks
+            CHANNEL_TICK_DATA[requestID] = penanceTicks
+        end
     end
     for ticks, spellIDs in pairs(ERA_CHANNEL_TICKS) do
         local tickData = { ticks = ticks }

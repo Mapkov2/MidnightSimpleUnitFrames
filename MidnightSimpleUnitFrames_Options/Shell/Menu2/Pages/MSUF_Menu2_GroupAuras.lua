@@ -534,6 +534,15 @@ end
 local function BuildGroupAuraBars(ctx, b, scope, lane)
     local A = MSUF.AuraConfig
     local previewFrame = lane == "debuff" and { _msufGFIsPreviewFrame = true, MSUFUnitKey = "player" }
+    local base = "auras." .. lane .. "."
+    local function CanEdit() return not CombatLocked() end
+    local function EnsureLane() return AuraGroup(CurrentScope(), lane) end
+    local function Refresh()
+        local active = CurrentScope()
+        QueueGF(active, "auras")
+        RefreshAuraPreviews(active)
+        RefreshContext(ctx)
+    end
     M.AuraControls.BuildAuraBarWorkspace(ctx, b, lane, {
         scope = "groups", path = "group-workspace.lane." .. AuraCatalogToken(lane),
         shown = function() return LaneBackendEnabled(CurrentScope(), lane) end,
@@ -552,22 +561,16 @@ local function BuildGroupAuraBars(ctx, b, scope, lane)
             if key == "auraBarFill" then return A.NormalizeAuraBarFill(group.auraBarFill) end
             return group.auraBarStyle
         end,
-        set = function(key, value)
-            if CombatLocked() then return end
-            local active = CurrentScope()
-            AuraGroup(active, lane)[key] = value
-            QueueGF(active, "auras")
-            RefreshAuraPreviews(active)
-            RefreshContext(ctx)
+        write = function(key)
+            return {
+                source = EnsureLane, accept = CanEdit, after = Refresh,
+                resolve = function() return "gf_" .. CurrentScope() .. "." .. base .. key end,
+            }
         end,
         contract = function(key, field)
-            local base = ".auras." .. lane .. "."
-            local route = { searchSettingKeys = GroupAuraSettingKeys(scope, base .. key) }
-            if key == "auraBarStyle" then
-                route.setting = M.ControlSchema.GroupKeys(base:sub(2) .. key)
-                route.searchSettingKeys = GroupAuraSettingKeys(scope, base .. key .. "." .. field)
-            end
-            return route
+            local searchKey = base .. key
+            if key == "auraBarStyle" then searchKey = searchKey .. "." .. field end
+            return { setting = Schema.GroupKeys(base .. key), searchSettingKeys = GroupAuraSettingKeys(scope, "." .. searchKey) }
         end,
     })
 end

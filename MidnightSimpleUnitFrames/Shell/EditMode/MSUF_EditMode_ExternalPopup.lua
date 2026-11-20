@@ -15,8 +15,20 @@ local function Blocked()
     return Quick.BlockConfigCombatLocked and Quick.BlockConfigCombatLocked() or false
 end
 
+-- Quick buttons come in two looks: the plain one keeps its caption in _label,
+-- the menu-styled one (Quick.Button with Menu2Style.Button) in _msuf2Label and
+-- sets it through its own SetText.
+local function ButtonLabel(button)
+    return button and (button._label or button._msuf2Label) or nil
+end
+
 local function SetButtonText(button, text)
-    if button and button._label and button._label.SetText then button._label:SetText(text or "") end
+    if not button then return end
+    if button._label then
+        if button._label.SetText then button._label:SetText(text or "") end
+    elseif button._msuf2Label and button.SetText then
+        button:SetText(text or "", true)
+    end
 end
 
 local function SetButtonEnabled(button, enabled)
@@ -173,8 +185,11 @@ local function ChoiceButton(spec, y, set)
         External.ApplyControl(openedKey, spec.id, row.value)
         Popup.Sync()
     end, { flashSelection = false })
-    button._label:SetWidth(356)
-    button._label:SetMaxLines(1)
+    local label = ButtonLabel(button)
+    if label then
+        label:SetWidth(356)
+        label:SetMaxLines(1)
+    end
     menu:HookScript("OnShow", function() ScrollChoices(menu) end)
     choice.btn = button
     set.choices[#set.choices + 1] = choice

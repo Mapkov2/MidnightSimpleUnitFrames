@@ -1180,17 +1180,17 @@ local CARD_MOVE_JUSTIFY = { slider = "LEFT", dropdown = "LEFT", segment = "LEFT"
 --- Create + bind one control row, placing it at (x, y) inside the card via the SAME
 --- MoveWidget call the hand-written pages use. Returns the widget, or nil for
 --- non-interactive rows (text/divider/spacer handled by the caller).
-local function BuildCardControl(ctx, card, row, x, y, width)
+local function BuildCardControl(ctx, card, row, set, x, y, width)
     local kind = row.kind or row.type
     local widget
     if kind == "toggle" then
         widget = W.ToggleAt(card, CardResolve(row.label), x, y, width)
-        M.BindBoolWidget(ctx, widget, row.get, row.set, row)
+        M.BindBoolWidget(ctx, widget, row.get, set, row)
         return widget
     elseif kind == "color" then
         widget = W.Color(card, CardResolve(row.label))
         W.MoveWidget(widget, card, x, y)
-        M.BindColor(ctx, widget, row.get, row.set, row)
+        M.BindColor(ctx, widget, row.get, set, row)
         return widget
     elseif kind == "slider" then
         widget = W.Slider(card, CardResolve(row.label), row.min or 0, row.max or 100, row.step or 1, row.width or width)
@@ -1200,13 +1200,13 @@ local function BuildCardControl(ctx, card, row, x, y, width)
         for key, value in pairs(row) do metadata[key] = value end
         metadata.step = row.step or 1
         metadata.roundStep = row.roundStep ~= false
-        M.BindNumberWidget(ctx, widget, row.get, row.set, row.default, metadata)
+        M.BindNumberWidget(ctx, widget, row.get, set, row.default, metadata)
     elseif kind == "segment" then
         widget = W.Segment(card, CardResolve(row.label), CardResolve(row.values), row.width or width)
-        M.BindSegment(ctx, widget, row.get, row.set, row)
+        M.BindSegment(ctx, widget, row.get, set, row)
     elseif kind == "dropdown" then
         widget = W.Dropdown(card, CardResolve(row.label), CardResolve(row.values), row.width or width)
-        M.BindDropdownWidget(ctx, widget, row.get, row.set, row)
+        M.BindDropdownWidget(ctx, widget, row.get, set, row)
     else
         return nil
     end
@@ -1246,11 +1246,12 @@ function W.SettingsRows(ctx, parent, spec)
         local cellH = row.height or CARD_ROW_HEIGHT[kind] or 30
         local x = x0 + col * (colW + colGap)
         local hasReset = type(row.reset) == "function"
-        local widget = BuildCardControl(ctx, parent, row, x, y, colW - (hasReset and 22 or 0))
+        local set = row.write and M.ControlSchema.Setter(row) or row.set
+        local widget = BuildCardControl(ctx, parent, row, set, x, y, colW - (hasReset and 22 or 0))
         if widget then
             M.ControlSchema.Custom(widget, { id = row.controlId or row.id, kind = kind,
                 scope = ctx.key, applyDomain = "settingsRows", meta = row, setting = row.setting,
-                settingPath = row.settingKey, get = row.get, set = row.set, write = row.write,
+                settingPath = row.settingKey, get = row.get, set = set, write = row.write,
                 customSetReason = row.customSetReason or "Uses the selected aura lane model's compatibility and layout writer." })
             if row.id then controls[row.id] = widget end
             list[#list + 1] = widget

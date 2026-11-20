@@ -7,6 +7,7 @@ local function Check(value, message)
     checks = checks + 1
 end
 local world = World.New(root, { flavor = flavor, setup = function(env)
+    env.UnitShouldDisplaySpellTargetName = function(unit) return unit ~= "player" end
     env.C_Spell.GetSpellSubtext = function(id)
         assert(not env.issecretvalue(id), "secret spell ID passed to rank API")
         rankReads = rankReads + 1
@@ -34,7 +35,7 @@ local stopWatch = world:Watch({
 local function Cast(guid, name, id, seconds)
     id = id or 133
     world:Fire(player, "UNIT_SPELLCAST_SENT", "player", name, guid, id)
-    world:StartCast("player", "Healing spell", seconds or 10, 101, { spellID = id, castID = guid })
+    world:StartCast("player", "Healing spell", seconds or 10, 101, { spellID = id, guid = guid })
     world:Fire(player, "UNIT_SPELLCAST_START", "player", guid, id, 101)
 end
 Cast("Cast-A", "First recipient")
@@ -107,6 +108,142 @@ Check(not player.MSUF_castActive and player:IsShown(), "natural completion bypas
 world.casting.player = nil
 world:Advance(.5)
 Check(not player:IsShown(), "natural completion fade did not finish")
+
+local function StartChannel(guid, name, barID, spellID)
+    world:StartChannel("player", name, 10, barID, { spellID = spellID or 999 })
+    world:Fire(player, "UNIT_SPELLCAST_CHANNEL_START", "player", guid, 133, barID)
+end
+
+-- The visible channel can report a different, unranked spell ID from the
+-- event that started it. The SENT target and rank belong to that same cast.
+world:Fire(player, "UNIT_SPELLCAST_SENT", "player", "Channel recipient", "Ranked-channel", 133)
+StartChannel("Ranked-channel", "Ranked channel", 110)
+local rankedChannelText = ranked and "Ranked channel (Rank 4)" or "Ranked channel"
+Check(player.MSUF_isChanneled == true, "channel start did not activate the channel")
+Check(player.castTargetText:IsShown() and player.castTargetText.text == "Channel recipient", "channel target missing")
+Check(player.castText.text == rankedChannelText, "channel ignored the rank from its start event")
+local channelRankReads = rankReads
+world:Fire(player, "UNIT_SPELLCAST_CHANNEL_UPDATE", "player", "Ranked-channel", 133, 110)
+Check(player.castTargetText.text == "Channel recipient", "channel update lost the recipient")
+Check(player.castText.text == rankedChannelText, "channel update lost the rank")
+Check(rankReads == channelRankReads, "channel update repeated the rank lookup")
+
+local function ChannelWithoutGUID(startGUID, barID)
+    world:Fire(player, "UNIT_SPELLCAST_SENT", "player", "Identified recipient", "Pending-channel", 133)
+    StartChannel(startGUID, "Identified channel", barID, 133)
+    Check(player.castTargetText:IsShown() and player.castTargetText.text == "Identified recipient",
+        "channel with an empty or missing start GUID lost its matching SENT recipient")
+end
+ChannelWithoutGUID(nil, 111)
+ChannelWithoutGUID("", 112)
+
+world:Fire(player, "UNIT_SPELLCAST_SENT", "player", "Failed recipient", "Failed-channel", 133)
+world:Fire(player, "UNIT_SPELLCAST_FAILED", "player", "Failed-channel", 133)
+world:StartChannel("player", "Channel after failure", 10, 118, { spellID = 133 })
+world:Fire(player, "UNIT_SPELLCAST_CHANNEL_START", "player", "", 133, 118)
+Check(not player.castTargetText:IsShown(), "channel reused a recipient from a failed request")
+
+world:Fire(player, "UNIT_SPELLCAST_SENT", "player", "Unrelated queued recipient", "Queued-channel", 133)
+StartChannel("Current-channel", "Unrelated channel", 113, 133)
+Check(not player.castTargetText:IsShown(), "a distinct channel GUID reused the queued recipient for the same spell ID")
+world.channeling.player = nil
+Cast("Cast-to-channel", "Initial cast recipient")
+world.casting.player = nil
+StartChannel("Cast-to-channel", "Continued channel", 114)
+Check(player.castTargetText:IsShown() and player.castTargetText.text == "Initial cast recipient",
+    "cast-to-channel transition lost the recipient for the same GUID")
+
+world.channeling.player = nil
+Cast("Previous-cast", "Previous recipient", 999)
+world:Fire(player, "UNIT_SPELLCAST_SENT", "player", "New channel recipient", "Overlapping-channel", 133)
+StartChannel("Overlapping-channel", "Overlapping channel", 115)
+Check(player.MSUF_isChanneled == false and player.castTargetText.text == "Previous recipient",
+    "early CHANNEL_START applied new details to the previous cast")
+world.casting.player = nil
+world:Fire(player, "UNIT_SPELLCAST_CHANNEL_UPDATE", "player", "Overlapping-channel", 133, 115)
+Check(player.MSUF_isChanneled == true and player.castTargetText.text == "New channel recipient",
+    "CHANNEL_UPDATE did not restore the queued details when the previous cast cleared")
+Check(player.castText.text == (ranked and "Overlapping channel (Rank 4)" or "Overlapping channel"),
+    "CHANNEL_UPDATE did not restore the queued rank after overlap")
+
+world.channeling.player = nil
+Cast("Cast-stop-to-channel", "Recipient before STOP")
+world.casting.player = nil
+world:Fire(player, "UNIT_SPELLCAST_STOP", "player", "Cast-stop-to-channel", 133, 101)
+Check(player.MSUF_castActive == false, "stop-to-channel fixture did not stop the initial cast")
+StartChannel("Cast-stop-to-channel", "Channel after STOP", 116)
+Check(player.MSUF_isChanneled == true and player.castTargetText.text == "Recipient before STOP",
+    "channel start after STOP lost the recipient for the same GUID")
+
+world:Fire(player, "UNIT_SPELLCAST_SENT", "player", "Unnumbered recipient", "No-bar-ID", 133)
+StartChannel("No-bar-ID", "Unnumbered channel", nil)
+local unnumberedChannelText = ranked and "Unnumbered channel (Rank 4)" or "Unnumbered channel"
+Check(player.castText.text == unnumberedChannelText, "channel without a bar ID did not acquire the rank")
+world:Fire(player, "UNIT_SPELLCAST_CHANNEL_UPDATE", "player", "No-bar-ID", 133)
+Check(player.castText.text == unnumberedChannelText and player.castTargetText.text == "Unnumbered recipient",
+    "channel update without a bar ID lost the rank or recipient")
+
+if flavor == "Forever" then
+    local function Penance(effectID, barID, parentBarID)
+        world:Broadcast("UNIT_SPELLCAST_SENT", "player", "Penance recipient", "Penance request", 402174)
+        if parentBarID then
+            world:Broadcast("UNIT_SPELLCAST_SUCCEEDED", "player", "Penance request", 402174, parentBarID)
+        end
+        world:StartChannel("player", "Penance", 3, barID, { spellID = effectID })
+        world:Broadcast("UNIT_SPELLCAST_CHANNEL_START", "player", nil, effectID, barID)
+    end
+    Penance(402261, 121)
+    Check(player.castTargetText:IsShown() and player.castTargetText.text == "Penance recipient",
+        "Penance damage variant lost a matching sent recipient without a channel GUID")
+    Penance(402277, 122)
+    Check(player.castTargetText:IsShown() and player.castTargetText.text == "Penance recipient",
+        "Penance healing variant lost a matching sent recipient without a channel GUID")
+    Penance(1240734, 123)
+    Check(not player.castTargetText:IsShown(), "Penance reused a recipient from a different spell rank")
+    Penance(402277, 129, 130)
+    Check(player.castTargetText:IsShown() and player.castTargetText.text == "Penance recipient",
+        "Penance lost its recipient when the request was confirmed on a different parent bar")
+end
+
+local function ChannelWithSuccess(beforeStart, barID, confirmedBarID)
+    local requestGUID = "Channel request " .. barID
+    local channelGUID = "Channel effect " .. barID
+    world:Broadcast("UNIT_SPELLCAST_SENT", "player", "Confirmed recipient " .. barID, requestGUID, 133)
+    world:StartChannel("player", "Channel using a different spell ID", 10, barID, { spellID = 999 })
+    if beforeStart then
+        world:Broadcast("UNIT_SPELLCAST_SUCCEEDED", "player", requestGUID, 133, confirmedBarID)
+    end
+    world:Broadcast("UNIT_SPELLCAST_CHANNEL_START", "player", channelGUID, 999, barID)
+    if not beforeStart then
+        Check(not player.castTargetText:IsShown(), "an unmatched channel inherited an unconfirmed recipient")
+        world:Broadcast("UNIT_SPELLCAST_SUCCEEDED", "player", requestGUID, 133, confirmedBarID)
+    end
+end
+
+ChannelWithSuccess(true, 124, 124)
+Check(player.castTargetText:IsShown() and player.castTargetText.text == "Confirmed recipient 124",
+    "channel lost the recipient confirmed before start by its cast-bar ID")
+ChannelWithSuccess(false, 125, 125)
+Check(player.castTargetText:IsShown() and player.castTargetText.text == "Confirmed recipient 125",
+    "channel lost the recipient confirmed after start by its cast-bar ID")
+ChannelWithSuccess(true, 126, 127)
+Check(not player.castTargetText:IsShown(), "channel reused another bar's confirmed recipient")
+ChannelWithSuccess(false, 128, 127)
+Check(not player.castTargetText:IsShown(), "late confirmation changed a different active channel")
+
+local applySettings = world.core.Require("MSUF_Castbars_OnSettingsChanged", "castbar recipient registration test")
+g.castbarPlayerShowTargetName = false
+applySettings()
+Check(not player.events.UNIT_SPELLCAST_SENT and not player.events.UNIT_SPELLCAST_SUCCEEDED,
+    "player target event listeners remained active with the option disabled")
+g.castbarPlayerShowTargetName = true
+applySettings()
+Check(player.events.UNIT_SPELLCAST_SENT, "enabling the player target option did not restore SENT capture")
+
+world.channeling.player = nil
+C.Runtime:Stop(player, "STOPPED")
+world:Advance(.5)
+
 if flavor == "Mainline" or flavor == "Forever" then
 Cast("Before-empower", "Old empower recipient")
 world:Advance(.5)

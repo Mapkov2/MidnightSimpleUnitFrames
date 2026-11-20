@@ -45,6 +45,7 @@ local C_SpellBook = C_SpellBook
 -- DirectRange (spell range first, then CheckInteractDistance out of combat), as
 -- ElvUI does. Retail keeps its event-owned target path unchanged.
 local CLASSIC_TARGET_SAMPLING = MSUF.Client.IsClassic == true
+local IS_FOREVER = MSUF.Client.IsForever == true
 -- No _G.IsSpellInRange fallback: the legacy global takes a spell name or a
 -- spellbook slot, never a spell ID, so SpellRange's numeric IDs would be read
 -- as book slots and return wrong answers instead of failing visibly.
@@ -82,6 +83,11 @@ local ENEMY_SPELLS = {
   SHAMAN = { 8042, 188196, 370, 117014, 73899 },
   WARLOCK = { 234153, 198590, 232670, 686, 5782 },
   WARRIOR = { 355, 100, 5246 },
+}
+
+local FOREVER_WARLOCK_TARGET_SPELLS = {
+  25307, 11661, 11660, 11659, 7641, 1106, 1088, 705, 695, 686, -- Shadow Bolt, highest rank first
+  11700, 11699, 7651, 709, 699, 689, -- Shorter-range Drain Life fallback
 }
 
 local FRIENDLY_SPELLS = {
@@ -133,7 +139,7 @@ local targetStates = {}
 local targetFriendlySpells = {}
 local unitEventUnits = Driver.unitEventUnits
 
-local enemySpell, friendlySpell, resSpell, targetFriendlySpell
+local enemySpell, friendlySpell, resSpell, targetFriendlySpell, targetEnemySpell
 local activeCount = 0
 local pollCount = 0
 local pollBlindCount = 0
@@ -144,6 +150,10 @@ local pollNextAt
 local pollFallbackNextAt
 local pollBossNextAt
 local POLL_SCHEDULE_KEY = "MSUF_UF_RangeFade_Poll"
+local TARGET_RETRY_KEY = "MSUF_UF_RangeFade_TargetRetry"
+local TARGET_RETRY_DELAYS = { 0.15, 0.50, 1.00 }
+local targetRetryStep -- Set only while a retry is scheduled.
+local targetShowPending
 local pollSetDirty = true
 local targetChecked = 0
 local targetInRange = 0
@@ -182,14 +192,14 @@ local function SpellOverrideID(spellID)
   return nil
 end
 
-local function SpellRange(spellID, unit)
-  if not (spellID and IsSpellInRange and unit) then return nil end
+local function SpellRange(spellID, ...)
+  if not (spellID and IsSpellInRange) then return nil end
   local overrideID = SpellOverrideID(spellID)
   if overrideID then
-    local overrideResult = PlainBool(IsSpellInRange(overrideID, unit))
+    local overrideResult = PlainBool(IsSpellInRange(overrideID, ...))
     if overrideResult ~= nil then return overrideResult end
   end
-  return PlainBool(IsSpellInRange(spellID, unit))
+  return PlainBool(IsSpellInRange(spellID, ...))
 end
 
 local function AddTargetWantedSpell(spellID)
@@ -245,6 +255,9 @@ local function RebuildSpells()
     _, class = UnitClass("player")
   end
   enemySpell = PickFirstKnown(ENEMY_SPELLS[class])
+  -- Use the ranked Forever probe for the current target's spell events.
+  local foreverProbe = IS_FOREVER and class == "WARLOCK" and PickFirstKnown(FOREVER_WARLOCK_TARGET_SPELLS)
+  targetEnemySpell = foreverProbe or enemySpell
   friendlySpell = PickFirstKnown(FRIENDLY_SPELLS[class])
   resSpell = PickFirstKnown(RES_SPELLS[class])
   targetFriendlySpell = PickKnownSet(TARGET_FRIENDLY_SPELLS[class], targetFriendlySpells) or friendlySpell
@@ -425,11 +438,15 @@ local function ApplyUnitInRangeEvent(unit, inRange, force)
   return true
 end
 
-local function EvaluateAll(force)
+local function EvaluateAll(force, reseedForeverTarget)
   for i = 1, #RANGE_UNITS do
     local unit = RANGE_UNITS[i]
     if activeUnits[unit] then
-      EvaluateUnit(unit, force)
+      if reseedForeverTarget and unit == "target" and targetChecked == 0 then
+        TargetRefresh(force)
+      else
+        EvaluateUnit(unit, force)
+      end
     end
   end
 end
@@ -466,6 +483,11 @@ local function TargetClearStates()
   targetInRange = 0
 end
 
+local function CancelTargetRetry()
+  targetRetryStep = nil
+  Scheduler.CancelScheduled(TARGET_RETRY_KEY)
+end
+
 local function TargetSetState(spellID, inRange)
   local newState = inRange == true
   local old = targetStates[spellID]
@@ -473,6 +495,7 @@ local function TargetSetState(spellID, inRange)
     targetStates[spellID] = newState
     targetChecked = targetChecked + 1
     if newState then targetInRange = targetInRange + 1 end
+    if targetRetryStep then CancelTargetRetry() end
   elseif old ~= newState then
     targetStates[spellID] = newState
     targetInRange = targetInRange + (newState and 1 or -1)
@@ -490,14 +513,14 @@ local function TargetRemoveState(spellID)
   if targetInRange < 0 then targetInRange = 0 end
 end
 
-local function TargetActive()
+local function ActiveTargetFrame()
+  if not activeUnits.target then return nil end
   local frame = FrameForUnit("target")
-  return activeUnits.target == true
-    and FrameRangeActive(frame)
-    and FrameVisible(frame)
+  if FrameRangeActive(frame) and FrameVisible(frame) then return frame end
 end
 
 local function TargetUnregisterSpells()
+  if targetRetryStep then CancelTargetRetry() end
   if EnableSpellRangeCheck then
     for spellID in pairs(targetRegistered) do
       EnableSpellRangeCheck(spellID, false)
@@ -513,7 +536,7 @@ SyncTargetSpells = function()
     return
   end
   targetSpellSyncDirty = nil
-  if not (TargetActive() and EnableSpellRangeCheck) then
+  if not (EnableSpellRangeCheck and ActiveTargetFrame()) then
     TargetUnregisterSpells()
     return
   end
@@ -526,7 +549,7 @@ SyncTargetSpells = function()
   else
     AddTargetWantedSpell(targetFriendlySpell)
   end
-  AddTargetWantedSpell(enemySpell)
+  AddTargetWantedSpell(targetEnemySpell)
   AddTargetWantedSpell(resSpell)
 
   for spellID in pairs(targetRegistered) do
@@ -544,11 +567,21 @@ SyncTargetSpells = function()
   end
 end
 
-TargetRefresh = function(force, preparedFrame)
-  SyncTargetSpells()
+local function RetryTargetRange()
+  local step = targetRetryStep
+  targetRetryStep = nil
+  if not step or targetChecked > 0 then return end
+  local frame = ActiveTargetFrame()
+  if frame then TargetRefresh(false, frame, step + 1) end
+end
+
+TargetRefresh = function(force, activeFrame, retryStep)
+  targetShowPending = nil
+  if targetRetryStep then CancelTargetRetry() end
+  if targetSpellSyncDirty then SyncTargetSpells() end
   TargetClearStates()
-  local frame = preparedFrame or FrameForUnit("target")
-  if not FrameRangeActive(frame) then
+  local frame = activeFrame or FrameForUnit("target")
+  if not activeFrame and not FrameRangeActive(frame) then
     ClearUnit("target", force)
     return false
   end
@@ -566,10 +599,27 @@ TargetRefresh = function(force, preparedFrame)
 
   if IsSpellInRange then
     for spellID in pairs(targetRegistered) do
-      local result = SpellRange(spellID, "target")
+      local result
+      if IS_FOREVER then
+        -- The native Forever Auto Shot check uses the implicit current target.
+        result = SpellRange(spellID)
+      else
+        result = SpellRange(spellID, "target")
+      end
       if result ~= nil then
         TargetSetState(spellID, result)
       end
+    end
+  end
+  -- An armed spell can return nil as the target becomes available. Retry
+  -- an unresolved enemy briefly, then leave further updates to range events.
+  if IS_FOREVER and targetChecked == 0 then
+    local step = retryStep or 1
+    local delay = TARGET_RETRY_DELAYS[step]
+    if delay and targetRegistered[targetEnemySpell]
+      and UnitCanAttack and PlainBool(UnitCanAttack("player", "target")) == true then
+      targetRetryStep = step
+      Scheduler.ScheduleAfter(TARGET_RETRY_KEY, delay, RetryTargetRange)
     end
   end
   if checkedSecret then
@@ -845,6 +895,11 @@ local visibilitySyncQueued = false
 local function FlushVisibilityRuntime()
   visibilitySyncQueued = false
   if SyncRuntime then SyncRuntime() end
+  if targetShowPending then
+    targetShowPending = nil
+    local frame = ActiveTargetFrame()
+    if frame then TargetRefresh(true, frame) end
+  end
 end
 
 local function QueueVisibilityRuntime()
@@ -861,7 +916,13 @@ local function SetFrameDriverActive(frame, active)
     and FrameVisible(frame)
   local wasActive = activeUnits[unit] == true
   if wasActive == active then return false end
-  if unit == "target" then MarkTargetSpellSyncDirty() end
+  if unit == "target" then
+    MarkTargetSpellSyncDirty()
+    if not active then
+      targetShowPending = nil
+      if targetRetryStep then CancelTargetRetry() end
+    end
+  end
   activeUnits[unit] = active and true or nil
   activeCount = activeCount + (active and 1 or -1)
   if activeCount < 0 then activeCount = 0 end
@@ -933,7 +994,13 @@ local function RangeFrameOnShow(self)
   if not spellsBuilt then
     RebuildSpells()
   end
-  EvaluateIfActive(self._msufRangeUnit or self.MSUFUnitKey, true)
+  local unit = self._msufRangeUnit or self.MSUFUnitKey
+  if IS_FOREVER and unit == "target" and activeUnits.target then
+    -- Reuse the visibility flush when a target-change event has not seeded
+    -- this frame by then. A direct refresh clears the pending read.
+    targetShowPending = true
+  end
+  EvaluateIfActive(unit, true)
   -- RegisterUnitWatch can reveal all boss frames in one event. Evaluate each
   -- frame immediately, but coalesce their shared-driver mask rebuild so five
   -- OnShow hooks produce one authoritative subscription pass before rendering
@@ -1072,8 +1139,9 @@ local function DriverOnEvent(source, event, unit, a, b, c)
     or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
     or event == "TRAIT_CONFIG_UPDATED" then
     MarkPollSetDirty()
+    local previousTargetSpell = targetEnemySpell
     RebuildSpells()
-    EvaluateAll(true)
+    EvaluateAll(true, IS_FOREVER and (not targetRetryStep or targetEnemySpell ~= previousTargetSpell))
     RebuildPollSet()
     return
   end
@@ -1166,7 +1234,7 @@ local function DriverOnEvent(source, event, unit, a, b, c)
     if event == "PLAYER_ENTERING_WORLD" then
       RebuildSpells()
     end
-    EvaluateAll(true)
+    EvaluateAll(true, IS_FOREVER and event == "PLAYER_ENTERING_WORLD")
   elseif unit and activeUnits[unit] then
     if unit == "target" then
       -- Unit-range/phase/connection edges do not imply a new target identity.
@@ -1256,14 +1324,18 @@ function Range.RegisterFrame(frame, spec)
     return false
   end
 
-  SetFrameDriverActive(frame, true)
+  local activated = SetFrameDriverActive(frame, true)
   if activeUnits[unit] == true then
     if not spellsBuilt then
       RebuildSpells()
     elseif unit == "target" and targetSpellSyncDirty == true then
       SyncTargetSpells()
     end
-    EvaluateUnit(unit, true)
+    if IS_FOREVER and unit == "target" and (activated or (targetChecked == 0 and not targetRetryStep)) then
+      TargetRefresh(true, frame)
+    else
+      EvaluateUnit(unit, true)
+    end
   end
   SyncRuntime()
   return true

@@ -147,6 +147,7 @@ local function SetPlayerCastbarEventsRegistered(frame, enabled)
         if sent then frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player", "vehicle")
         else frame:UnregisterEvent("UNIT_SPELLCAST_SENT") end
     end
+    Player.SyncSuccessEvent(frame, enabled)
 
     if enabled then
         if frame._msufPlayerEventsRegistered then return end

@@ -6,6 +6,14 @@
       "phase": "runtime"
     },
     {
+      "test": "tools/tests/target_range_fade_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/unitframe_appearance_menu_smoke.lua",
       "phase": "runtime",
       "clients": [

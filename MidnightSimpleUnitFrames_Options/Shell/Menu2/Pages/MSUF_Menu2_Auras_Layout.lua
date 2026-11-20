@@ -241,7 +241,11 @@ end
 
 local function BuildUnitAuraBars(ctx, b, unit, kind)
     local controls = M.AuraControls
-    local savedStyle = MSUF.MSUF_Auras3.LaneKeySchema.LANE_SPECS[kind].auraBarStyleKey
+    local lane = MSUF.MSUF_Auras3.LaneKeySchema.LANE_SPECS[kind]
+    local fields = { showAuraBars = lane.showAuraBarsKey, auraBarFill = lane.auraBarFillKey, auraBarStyle = lane.auraBarStyleKey }
+    local function Refresh()
+        ApplyUnit(ctx, unit, "AURAS3_BAR_PRESENTATION", true)
+    end
     controls.BuildAuraBarWorkspace(ctx, b, kind, {
         scope = "auras", path = "unit-workspace.lane." .. AuraCatalogToken(kind),
         shown = function() return UnitLaneShown(unit, kind) end,
@@ -254,18 +258,20 @@ local function BuildUnitAuraBars(ctx, b, unit, kind)
             if key == "auraBarFill" then return Model.ReadLaneAuraBarFill(unit, kind) end
             return Model.ReadLaneAuraBarStyle(unit, kind)
         end,
-        set = function(key, value)
-            if key == "showAuraBars" then Model.WriteLaneAuraBars(unit, kind, value)
-            elseif key == "auraBarFill" then Model.WriteLaneAuraBarFill(unit, kind, value)
-            else Model.WriteLaneAuraBarStyle(unit, kind, value) end
-            ApplyUnit(ctx, unit, "AURAS3_BAR_PRESENTATION", true)
+        write = function(key, setting)
+            local path = setting.keys[1]
+            return {
+                call = Model.WriteValue, context = unit, boolean = key == "showAuraBars",
+                convert = key == "auraBarFill" and MSUF.AuraConfig.NormalizeAuraBarFill or nil,
+                resolve = function() return path end, after = Refresh,
+            }
         end,
         contract = function(key, field)
-            if key ~= "auraBarStyle" then return end
-            return {
-                setting = controls.UnitLayoutSetting(unit, { savedStyle }),
-                searchSettingKeys = { "auras3." .. unit .. "." .. kind .. ".auraBarStyle." .. field },
-            }
+            local route = { setting = controls.UnitLayoutSetting(unit, { fields[key] }) }
+            if key == "auraBarStyle" then
+                route.searchSettingKeys = { "auras3." .. unit .. "." .. kind .. ".auraBarStyle." .. field }
+            end
+            return route
         end,
     })
 end

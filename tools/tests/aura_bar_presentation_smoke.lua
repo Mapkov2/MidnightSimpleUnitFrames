@@ -455,4 +455,47 @@ tail.groupAccessGate = true
 assert(not core.AuraConfig.CombinedAuraBarLanes(partyConfig.lanes), "joined AuraGroups with different visibility policies")
 tail.groupAccessGate = nil
 
+local function AuraBarCommand(page, prefix, suffix, prepareKind, prepareValue)
+    local id = prefix .. suffix
+    local _, found, exact = menu.Search._CoreAPI.OpenSearchTarget(page, "Aura bars", nil, nil, nil, {
+        controlId = id, sectionId = page == "uf_target" and "auras" or "group_auras",
+        prepareKind = prepareKind, prepareValue = prepareValue,
+    })
+    local record = menu.RuntimeControlCatalog.Get(id)
+    assert(found and exact and record, "missing aura bar control: " .. id)
+    local widget = record.widget
+    assert(widget._msuf2ControlSchema.write, "aura bar write policy missing: " .. id)
+    return assert(widget._msuf2CommandAction)
+end
+
+local function UnitControl(path)
+    return AuraBarCommand("uf_target", "menu2.uf_target.auras.unit-workspace.lane.buff.", path, "unitAuraWorkspace", "buff_bars")
+end
+
+local function GroupControl(path)
+    return AuraBarCommand("gf_auras", "menu2.gf_auras.auras.group-workspace.lane.buff.", path, "groupAuraWorkspace", "party_buff_bars")
+end
+
+local showUnitBars = UnitControl("layout.show-as-bars")
+showUnitBars.set(false)
+assert(not model.ReadLaneAuraBars("target", "buff"))
+showUnitBars.set(true)
+assert(model.ReadLaneAuraBars("target", "buff"))
+UnitControl("layout.aura-bar-fill").set("RIGHT")
+assert(model.ReadLaneAuraBarFill("target", "buff") == "RIGHT")
+UnitControl("bars.fill-color-mode").set("CUSTOM")
+UnitControl("bars.fill-color").set(0.15, 0.35, 0.65)
+local unitStyle = model.ReadLaneAuraBarStyle("target", "buff")
+assert(unitStyle and unitStyle.fillColorMode == "CUSTOM")
+assert(unitStyle.fillColor[1] == 0.15 and unitStyle.fillColor[2] == 0.35 and unitStyle.fillColor[3] == 0.65)
+
+GroupControl("layout.show-as-bars").set(true)
+GroupControl("layout.aura-bar-fill").set("LEFT")
+GroupControl("bars.fill-color-mode").set("CUSTOM")
+GroupControl("bars.fill-color").set(0.25, 0.45, 0.75)
+local savedBuff = menu.EnsureDB().gf_party.auras.buff
+assert(savedBuff.showAuraBars and savedBuff.auraBarFill == "LEFT")
+assert(savedBuff.auraBarStyle.fillColorMode == "CUSTOM")
+assert(savedBuff.auraBarStyle.fillColor[1] == 0.25 and savedBuff.auraBarStyle.fillColor[2] == 0.45 and savedBuff.auraBarStyle.fillColor[3] == 0.75)
+
 print("aura_bar_presentation_smoke " .. flavor .. ": fill, growth, colors, joined native groups and both preview layouts")

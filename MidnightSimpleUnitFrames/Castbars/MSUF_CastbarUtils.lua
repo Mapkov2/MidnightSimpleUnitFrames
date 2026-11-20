@@ -1109,7 +1109,14 @@ Utils.Castbar_ResolvePushbackMS = ResolveCastbarPushbackMS
 
 Utils.PlayerSpellRanksSupported = MSUF.Client.IsForever or MSUF.Client.IsTBC or MSUF.Client.IsVanilla
 
-function Utils.CapturePlayerSpellRank(frame, spellID, sampleRank, unit)
+local function ReadSpellRank(api, spellID)
+    local rank = api.GetSpellSubtext(spellID)
+    if (not IsSecretValue or not IsSecretValue(rank)) and type(rank) == "string" and rank:find("%d") then
+        return rank
+    end
+end
+
+function Utils.CapturePlayerSpellRank(frame, spellID, sampleRank, unit, channelStartSpellID)
     if frame.unit ~= "player" then return end
     if unit == "vehicle" or not Utils.PlayerSpellRanksSupported or not Config.playerSpellRank then
         frame._msufPlayerCastRank, frame._msufBaseCastText, frame._msufPlayerRankSpellID = nil, nil, nil
@@ -1119,18 +1126,21 @@ function Utils.CapturePlayerSpellRank(frame, spellID, sampleRank, unit)
         frame._msufPlayerCastRank, frame._msufBaseCastText, frame._msufPlayerRankSpellID = sampleRank, nil, nil
         return
     end
-    if (IsSecretValue and IsSecretValue(spellID)) or type(spellID) ~= "number" then
-        frame._msufPlayerCastRank, frame._msufBaseCastText, frame._msufPlayerRankSpellID = nil, nil, nil
+    if (IsSecretValue and IsSecretValue(spellID)) or type(spellID) ~= "number" then spellID = nil end
+    local rankSpellID = channelStartSpellID or spellID
+    local fallbackID = spellID ~= rankSpellID and spellID or nil
+    if rankSpellID ~= nil and frame._msufPlayerRankSpellID == rankSpellID
+        and frame._msufPlayerRankFallbackID == fallbackID and frame._msufPlayerCastRank then
         return
     end
-    if frame._msufPlayerRankSpellID == spellID and frame._msufPlayerCastRank then return end
-    frame._msufPlayerRankSpellID, frame._msufPlayerCastRank, frame._msufBaseCastText = spellID, nil, nil
+    frame._msufPlayerRankSpellID, frame._msufPlayerRankFallbackID = rankSpellID, fallbackID
+    frame._msufPlayerCastRank, frame._msufBaseCastText = nil, nil
     local api = C_Spell
-    if not (api and api.GetSpellSubtext) then return end
-    local rank = api.GetSpellSubtext(spellID)
-    if (not IsSecretValue or not IsSecretValue(rank)) and type(rank) == "string" and rank:find("%d") then
-        frame._msufPlayerCastRank = rank
-    end
+    if not (rankSpellID and api and api.GetSpellSubtext) then return end
+    -- A channel's live spell may be an effect with a different ID.
+    local rank = ReadSpellRank(api, rankSpellID)
+    if rank == nil and fallbackID ~= nil then rank = ReadSpellRank(api, fallbackID) end
+    frame._msufPlayerCastRank = rank
 end
 
 local function ComposeCastText(frame, text)
@@ -1153,16 +1163,16 @@ local function ComposeCastText(frame, text)
     return out
 end
 
-local function RefreshCastbarSpellNameText(frame)
+local function RefreshCastbarSpellNameText(frame, rankAlreadyCaptured)
     if not (frame and frame.castText) then return end
 
     local rawText = frame._msufBaseCastText or frame._msufRawCastText
     if rawText == nil then return end
-    if frame.unit == "player" and Config.playerSpellRank and not frame.interrupted then
+    if not rankAlreadyCaptured and frame.unit == "player" and Config.playerSpellRank and not frame.interrupted then
         if frame.MSUF_testMode then
             Utils.CapturePlayerSpellRank(frame, nil, (MSUF.L and MSUF.L["Rank 4"]) or "Rank 4")
         elseif frame.MSUF_castActive == true and not frame._msufPreviewScope then
-            Utils.CapturePlayerSpellRank(frame, frame._msufActiveSpellID, nil, frame._msufActiveCastUnit)
+            Utils.CapturePlayerSpellRank(frame, frame._msufActiveSpellID, nil, frame._msufActiveCastUnit, frame._msufChannelRankSpellID)
         end
     end
     SetText(frame.castText, ComposeCastText(frame, rawText))

@@ -376,10 +376,16 @@ local function BuildLaneKeySchema()
     }
     local seedDefaults, fallbackDefaults, ownerOf = {}, {}, {}
     local function AddKey(key, owner, default, defaults)
-        assert(ownerOf[key] == nil, "MSUF Auras3 lane key listed twice: " .. tostring(key))
+        if ownerOf[key] ~= nil then
+            error("MSUF Auras3 lane key listed twice: " .. key)
+        end
         ownerOf[key] = owner
-        assert(owner == false or OWNER_SETS[owner], "MSUF Auras3 lane key has an unknown owner: " .. tostring(key))
-        for _, set in ipairs(owner and OWNER_SETS[owner] or {}) do set[key] = true end
+        local sets = OWNER_SETS[owner]
+        if sets then
+            for _, set in ipairs(sets) do set[key] = true end
+        elseif owner ~= false then
+            error("MSUF Auras3 lane key has an unknown owner: " .. key)
+        end
         if defaults == SF or defaults == S then seedDefaults[key] = default end
         if defaults == SF or defaults == F then fallbackDefaults[key] = default end
     end

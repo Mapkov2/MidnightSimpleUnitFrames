@@ -660,6 +660,8 @@ local function BuildWindowToolbar(state)
     T.CenterButtonLabel(toolbarReset)
     M.AddTooltip(toolbarReset, "Reset page", function()
         local key = M.activeKey
+        local scoped = key and M.BuildScopedPageResetWarning and M.BuildScopedPageResetWarning(key)
+        if scoped then return scoped end
         local route = key and M.GetMenuBreadcrumb(key) or ""
         if route == "" then return nil end
         return M.Format("Resets all settings on %s to their defaults. Asks for confirmation first.", route)
