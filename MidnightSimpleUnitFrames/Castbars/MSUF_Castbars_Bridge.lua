@@ -142,11 +142,19 @@ local function RevealNativeFrame(frame, record)
     end
 end
 
+local function DeferNativeOwnership()
+    nativeOwnershipPending = true
+    eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
 local function HideSuppressedNativeFrame(frame)
     local record = nativeRecords[frame]
-    if record and record.suppressed then
-        ConcealNativeFrame(frame)
+    if not record or not record.suppressed then return end
+    if record.forceOff and ns.Util.InCombat() then
+        DeferNativeOwnership()
+        return
     end
+    ConcealNativeFrame(frame)
 end
 
 local function EnsureNativeHideGuard(frame, record)
@@ -158,34 +166,55 @@ local function EnsureNativeHideGuard(frame, record)
     record.hideGuardInstalled = true
 end
 
-local function SetNativeFrameSuppressed(frame, suppressed)
+--- Force Off may take over a castbar that an external addon already muted.
+--- Track just the native events we remove so selecting Blizzard again does
+--- not restore subscriptions that we never detached.
+local function DetachForceOffEvents(frame, record)
+    local events = record.forceOffEvents
+    for index = 1, #NATIVE_CAST_EVENTS do
+        local event = NATIVE_CAST_EVENTS[index]
+        if frame:IsEventRegistered(event) then
+            if not events then
+                events = {}
+                record.forceOffEvents = events
+            end
+            frame:UnregisterEvent(event)
+            events[event] = true
+        end
+    end
+    if frame:IsEventRegistered("PLAYER_ENTERING_WORLD") then
+        frame:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        record.forceOffWorldEvent = true
+    end
+end
+
+local function SetNativeFrameSuppressed(frame, suppressed, forceOff)
     if not frame then return false end
 
     local record = nativeRecords[frame]
     local unit = "player"
 
     if suppressed then
-        if record and record.suppressed then
-            ConcealNativeFrame(frame)
-            return true
-        end
-
         record = record or {}
         nativeRecords[frame] = record
-        record.unit = frame.unit or unit
-        EnsureNativeHideGuard(frame, record)
-        if type(frame.UnregisterAllEvents) == "function" then
-            frame:UnregisterAllEvents()
-            record.detached = true
+        if not record.suppressed then
+            record.unit = frame.unit or unit
+            EnsureNativeHideGuard(frame, record)
+            if not forceOff and type(frame.UnregisterAllEvents) == "function" then
+                frame:UnregisterAllEvents()
+                record.detached = true
+            end
         end
+        if forceOff then DetachForceOffEvents(frame, record) end
         ConcealNativeFrame(frame)
         record.suppressed = true
+        record.forceOff = forceOff
         return true
     end
 
     -- A bar the previews concealed has a record without the suppression.
     if record then RevealNativeFrame(frame, record) end
-    if not (record and (record.suppressed or record.detached)) then
+    if not (record and (record.suppressed or record.detached or record.forceOffEvents or record.forceOffWorldEvent)) then
         return false
     end
 
@@ -198,28 +227,34 @@ local function SetNativeFrameSuppressed(frame, suppressed)
     -- the next cast; a cast already running at the release stays unshown
     -- (SetUnit's PLAYER_ENTERING_WORLD resync is Blizzard code). Only a
     -- CastingBarMixin bar (it has SetUnit) is known to want exactly these.
-    if record.detached and type(frame.SetUnit) == "function" then
+    if type(frame.SetUnit) == "function" then
         local castUnit = record.unit or unit
-        for index = 1, #NATIVE_CAST_EVENTS do
-            frame:RegisterUnitEvent(NATIVE_CAST_EVENTS[index], castUnit)
+        local events = record.forceOffEvents
+        if record.detached or events then
+            for index = 1, #NATIVE_CAST_EVENTS do
+                local event = NATIVE_CAST_EVENTS[index]
+                if record.detached or events[event] then frame:RegisterUnitEvent(event, castUnit) end
+            end
         end
-        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        if record.detached or record.forceOffWorldEvent then frame:RegisterEvent("PLAYER_ENTERING_WORLD") end
     end
     record.detached = nil
+    record.forceOff = nil
+    record.forceOffEvents = nil
+    record.forceOffWorldEvent = nil
     record.suppressed = nil
     return true
 end
 
-function NativeOwner:Apply()
-    local suppress = not ShouldUseBlizzard("player")
+function NativeOwner:Apply(event)
+    local player = Config.Read("player")
+    local suppress = player.backend ~= "BLIZZARD"
+    local forceOff = player.backend == "HIDE" and Backend.IsForceOff("player", player.general)
     SetBlizzardPlayerCastbarAllowed(not suppress)
 
-    if type(InCombatLockdown) == "function" and InCombatLockdown() then
-        nativeOwnershipPending = true
-        ForEachBlizzardPlayerCastbar(function(frame)
-            if suppress then ConcealNativeFrame(frame) end
-        end)
-        if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
+    if (forceOff and ns.Util.InCombat(event)) or (type(InCombatLockdown) == "function" and InCombatLockdown()) then
+        DeferNativeOwnership()
+        if suppress and not forceOff then ForEachBlizzardPlayerCastbar(ConcealNativeFrame) end
         return false
     end
 
@@ -228,7 +263,7 @@ function NativeOwner:Apply()
     local foundAny = false
     ForEachBlizzardPlayerCastbar(function(frame)
         foundAny = true
-        SetNativeFrameSuppressed(frame, suppress)
+        SetNativeFrameSuppressed(frame, suppress, forceOff)
     end)
     nativeOwnershipPending = false
     if hadPending then eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
@@ -288,7 +323,7 @@ eventFrame:SetScript("OnEvent", function(_, event, addonName)
         return
     end
 
-    SuppressBlizzardPlayerCastbars()
+    NativeOwner:Apply(event)
 end)
 
 -- The unit-frame apply queue has already passed its combat fence.

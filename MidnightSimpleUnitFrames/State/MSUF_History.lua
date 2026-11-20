@@ -998,9 +998,11 @@ local function BarHistoryFlag(key)
 end
 local function CaptureRuntimeSettings(db, values)
     values.castbarBackends, values.barSettings = {}, {}
+    local backend = MSUF.Castbars.Backend
     for _, unit in ipairs(CASTBAR_HISTORY_UNITS) do
-        values.castbarBackends[unit] = MSUF.Castbars.Backend.Resolve(unit, db.general)
+        values.castbarBackends[unit] = backend.Resolve(unit, db.general)
     end
+    values.playerCastbarForceOff = backend.IsForceOff("player", db.general)
     for scope, config in pairs(db) do
         if type(config) == "table" then
             local fields
@@ -1015,8 +1017,10 @@ local function CaptureRuntimeSettings(db, values)
     end
 end
 local function ResyncRuntimeSettings(db, before)
+    local backend = MSUF.Castbars.Backend
+    local forceOffChanged = before.playerCastbarForceOff ~= backend.IsForceOff("player", db.general)
     for _, unit in ipairs(CASTBAR_HISTORY_UNITS) do
-        if before.castbarBackends[unit] ~= MSUF.Castbars.Backend.Resolve(unit, db.general) then
+        if before.castbarBackends[unit] ~= backend.Resolve(unit, db.general) or (unit == "player" and forceOffChanged) then
             ApplyService.RequestCastbarUnit(unit, "MSUF2_HISTORY_BACKEND", "history")
         end
     end

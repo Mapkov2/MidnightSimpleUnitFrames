@@ -1,5 +1,14 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.4-beta5 - 2026-11-20
+
+**7.0.4 Beta 5**
+
+### Highlights
+
+- **Player castbar Force Off.** Open Unit Frames > Player > Castbar and select Force Off under Castbar Provider to hide the standard Blizzard player castbar, even when the MSUF Player frame is disabled. The section header turns red and shows FORCE OFF. Use this option if Quartz or another addon supplies your player castbar.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.provider","settingKey":"general.castbarPlayerBackend","prepareKind":"unitCastbarTab","prepareValue":"general","query":"castbar provider","label":"Castbar provider"} -->
+
 ## 7.0.4-beta4 - 2026-11-20
 
 **7.0.4 Beta 4**

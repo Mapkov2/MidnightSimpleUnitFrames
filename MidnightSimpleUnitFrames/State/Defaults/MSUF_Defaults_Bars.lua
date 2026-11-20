@@ -35,7 +35,7 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
         if value == false then return "BLIZZARD" end
         if type(value) ~= "string" then return nil end
         local v = value:upper()
-        if v == "MSUF" then return "MSUF" end
+        if v == "MSUF" or v == "FORCE_OFF" then return v end
         if v == "BLIZZARD" or v == "BLIZZ" or v == "DEFAULT" or v == "SHOW" then return "BLIZZARD" end
         if v == "HIDE" or v == "HIDDEN" or v == "NONE" or v == "DISABLED" then return "HIDE" end
         return nil
@@ -44,7 +44,7 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
         local backend = _NormalizeCastbarBackendDefault(g[backendKey])
         if not backend then
             backend = (g[enableKey] == false) and ((unit == "player") and "BLIZZARD" or "HIDE") or "MSUF"
-        elseif backend == "BLIZZARD" and unit ~= "player" then
+        elseif unit ~= "player" and (backend == "BLIZZARD" or backend == "FORCE_OFF") then
             backend = "HIDE"
         end
         g[backendKey] = backend

@@ -34,7 +34,13 @@ local SuppressBlizzardPlayerCastbars, ShowReloadRecommendedPopup = runtime.Suppr
 local NormalizeTabKey, CurrentTab, SetSectionBodyHeight = tabs.Normalize, tabs.Current, tabs.SetBodyHeight
 local BuildSectionTabs, PrepareTabTarget = tabs.Build, tabs.PrepareTarget
 
-local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
+local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar", "FORCE_OFF", "Force Off")
+local FORCE_OFF_SUBSCRIBER = "Menu2.PlayerCastbar.ForceOff"
+local visibleForceOffHeader
+local FORCE_OFF_HEADER = { bg = { 0.52, 0.06, 0.085, 0.92 }, labelColor = { 1, 0.94, 0.94, 1 } }
+local FORCE_OFF_WARNING = "Blizzard castbar is forced off. Without another castbar addon, you may have no player castbar."
+local SetFontChecked = MSUF.Require("MSUF_SetFontChecked", FILE)
+local ResolveFontKeyPath = MSUF.Require("MSUF_ResolveFontKeyPath", FILE)
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast", arena = "arenaCast" }
 -- Castbar width and height an unset key reads as: the values the defaults
 -- pass seeds (State/Defaults/MSUF_Defaults_Bars.lua). One table for the
@@ -66,6 +72,68 @@ end
 local function PlayerFrameDisabled(unit)
     return unit == "player" and not ReadBool(unit, "enabled", true)
 end
+local function OrdinaryPlayerCastbarHidden()
+    local general = GetGeneral()
+    return not CastbarBackend.IsForceOff("player", general)
+        and CastbarBackend.Resolve("player", general, PlayerFrameDisabled("player")) == "HIDE"
+end
+CASTBAR_BACKEND_VALUES[1].disabled = function() return PlayerFrameDisabled("player") or OrdinaryPlayerCastbarHidden() end
+CASTBAR_BACKEND_VALUES[2].disabled = OrdinaryPlayerCastbarHidden
+
+local function TrackForceOffHeader(ctx, sec, entry, switch, isForceOff)
+    local forceOffStatus
+    entry._msuf2ForceOffHeader = false
+    local function Refresh(active)
+        if active == nil then active = isForceOff() end
+        if active == entry._msuf2ForceOffHeader then return end
+        entry._msuf2ForceOffHeader = active
+        entry._msuf2HeaderAlwaysEnabled = active
+        entry.openHighlightEnabled = not active
+        if active and not forceOffStatus then
+            forceOffStatus = entry.header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            forceOffStatus:SetPoint("RIGHT", switch, "LEFT", -8, 0)
+            forceOffStatus:SetWidth(68)
+            forceOffStatus:SetJustifyH("RIGHT")
+            forceOffStatus:SetWordWrap(false)
+            forceOffStatus:SetMaxLines(1)
+            SetFontChecked(forceOffStatus, ResolveFontKeyPath("EXPRESSWAY_BOLD"), 12, "")
+            forceOffStatus:SetText(M.Tr("FORCE OFF"))
+            forceOffStatus:SetTextColor(1, 0.94, 0.94, 1)
+        end
+        if forceOffStatus then forceOffStatus:SetShown(active) end
+        W.SetControlGateEnabled(switch, "playerCastbarForceOff", not active)
+        entry._msuf2FeatureSwitchLabel:SetShown(not active)
+        entry.header:SetAlpha((active or not PlayerFrameDisabled("player")) and 1 or 0.48)
+        SetSectionHeaderStatus(sec, active and FORCE_OFF_HEADER or nil)
+    end
+    local function OnConfigApplied()
+        local active = isForceOff()
+        if active == entry._msuf2ForceOffHeader then return end
+        Refresh(active)
+        M.RequestRefresh(ctx, "player-castbar-provider")
+    end
+    local function OnShow()
+        if visibleForceOffHeader ~= entry then
+            visibleForceOffHeader = entry
+            MSUF.EventBus:Register("CONFIG_APPLIED", FORCE_OFF_SUBSCRIBER, OnConfigApplied)
+        end
+        OnConfigApplied()
+    end
+    local function OnHide()
+        if visibleForceOffHeader ~= entry then return end
+        visibleForceOffHeader = nil
+        MSUF.EventBus:Unregister("CONFIG_APPLIED", FORCE_OFF_SUBSCRIBER)
+    end
+    M.AddRefresher(ctx, Refresh)
+    Refresh()
+    if not ctx.hiddenBuild and not (ctx.entry and ctx.entry.hiddenBuild) then
+        entry.header:HookScript("OnShow", OnShow)
+        entry.header:HookScript("OnHide", OnHide)
+        if entry.header:IsVisible() then OnShow() end
+    end
+    return Refresh
+end
+
 local function PrepareCastbarSwitch(ctx, sec, unit)
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then Schema.Section(sec, unit) end
@@ -82,19 +150,32 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
     local function ReadCastbarBackend()
         return CastbarBackend.Resolve(unit, GetGeneral(), PlayerFrameDisabled(unit)) or "MSUF"
     end
+    local function IsForceOff()
+        return canUseBlizzardProvider and CastbarBackend.IsForceOff(unit, GetGeneral())
+    end
     local function SetCastbarBackend(value)
-        if PlayerFrameDisabled(unit) then return end
         local backend = NormalizeBackend(value)
+        local wasForceOff = IsForceOff()
+        local forceOff = backend == "FORCE_OFF"
+        if PlayerFrameDisabled(unit) and not forceOff and not (wasForceOff and backend == "BLIZZARD") then return false end
+        if forceOff and wasForceOff then return false end
         local g = GetGeneral()
-        if providerMemoryKey and backend ~= "HIDE" then g[providerMemoryKey] = backend end
+        if providerMemoryKey and backend ~= "HIDE" and not forceOff then g[providerMemoryKey] = backend end
         fnSetBackend(unit, backend, g)
-        M.RequestUnitDomains(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
-        CastbarsOnSettingsChanged("menu2_backend")
-        if unit == "player" then SuppressBlizzardPlayerCastbars() end
+        if forceOff or wasForceOff then
+            M.ApplyService.RequestCastbarUnit(unit, "MSUF2_CASTBAR_BACKEND", "menu2_backend")
+        else
+            M.RequestUnitDomains(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
+            CastbarsOnSettingsChanged("menu2_backend")
+            if unit == "player" then SuppressBlizzardPlayerCastbars() end
+        end
+        if state.refreshHeader then state.refreshHeader() end
         if state.refresh then state.refresh() end
+        return true
     end
     local function ReadCastbarProvider()
         if not canUseBlizzardProvider then return "MSUF" end
+        if IsForceOff() then return "FORCE_OFF" end
         local backend = ReadCastbarBackend()
         if backend == "BLIZZARD" then return "BLIZZARD" end
         if backend == "MSUF" then return "MSUF" end
@@ -107,12 +188,15 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
         local backend = NormalizeBackend(value)
         if backend == "HIDE" then backend = "MSUF" end
         local previousBackend = ReadCastbarBackend()
-        SetCastbarBackend(backend)
-        if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" then
+        local wasForceOff = IsForceOff()
+        if previousBackend == "HIDE" and not wasForceOff and backend ~= "FORCE_OFF" then return end
+        if not SetCastbarBackend(backend) then return end
+        if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" and not wasForceOff then
             ShowReloadRecommendedPopup("Player Blizzard castbar")
         end
     end
     local function SetCastbarEnabled(enabled)
+        if IsForceOff() then return end
         if enabled then
             SetCastbarBackend(canUseBlizzardProvider and ReadCastbarProvider() or "MSUF")
         else
@@ -123,7 +207,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
     end
     state.read, state.set = ReadCastbarBackend, SetCastbarBackend
     state.readProvider, state.setProvider = ReadCastbarProvider, SetCastbarProvider
-    state.setEnabled = SetCastbarEnabled
+    state.setEnabled, state.isForceOff = SetCastbarEnabled, IsForceOff
     local enabled = ControlRow(ctx, sec, { "sectionSwitch", "enabled", true, { "Enable Castbar" },
         get = function() return ReadCastbarBackend() ~= "HIDE" end,
         customSetReason = "Coordinates the selected castbar provider, enabled state and dependent backend settings.", set = SetCastbarEnabled,
@@ -135,6 +219,9 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
             W.AttachUnitEditFocus(widget, unit, "castbar")
         end,
     })
+    if canUseBlizzardProvider and entry then
+        state.refreshHeader = TrackForceOffHeader(ctx, sec, entry, enabled, IsForceOff)
+    end
     return enabled
 end
 -- The unit Castbar section builds in order through these functions; s carries
@@ -347,6 +434,7 @@ function CastbarSection.Cards(s)
     s.ReadCastbarBackend, s.SetCastbarBackend = ReadCastbarBackend, SetCastbarBackend
     s.ReadCastbarProvider, s.SetCastbarProvider = ReadCastbarProvider, SetCastbarProvider
     s.SetCastbarEnabled, s.controlWLeft, s.controlWRight = SetCastbarEnabled, controlWLeft, controlWRight
+    s.IsForceOff, s.RefreshForceOffHeader = castbarState.isForceOff, castbarState.refreshHeader
     s.tabFrames, s.generalTab = tabFrames, generalTab
     s.generalCard, s.providerCard, s.sizeCard, s.iconCard = generalCard, providerCard, sizeCard, iconCard
     s.portraitIconCard, s.spellCard, s.targetNameCard = portraitIconCard, spellCard, targetNameCard
@@ -398,17 +486,26 @@ function CastbarSection.General(s)
     local enabled = PrepareCastbarSwitch(ctx, sec, unit)
     local provider
     if canUseBlizzardProvider then
-        provider = ControlRow(ctx, providerCard, { "dropdown", "provider", "MSUF", { "Castbar provider", CASTBAR_BACKEND_VALUES, min(260,
-            controlWRight) }, { 16, -52, min(260, controlWRight) },
+        local providerWidth = min(260, controlWRight, rightW - 32)
+        provider = ControlRow(ctx, providerCard, { "dropdown", "provider", "MSUF", { "Castbar provider", CASTBAR_BACKEND_VALUES,
+            providerWidth }, { 16, -52, providerWidth },
             get = ReadCastbarProvider,
             companionWrites = { "general." .. fields.enable,
                 "general." .. (fields.providerMemory or (fields.backend .. "BeforeHide")) },
             customSetReason = "Coordinates the selected castbar provider, enabled state and dependent backend settings.", set = SetCastbarProvider,
             scope = unit, meta = SettingMeta(ctx, "castbar.provider", "general", fields.backend),
             beforeBind = function(widget)
+                widget._msuf2UnitFrameGateAlwaysEnabled = true
                 W.AttachUnitEditFocus(widget, unit, "castbar")
             end,
         })
+        BindExactCastbarTabTarget(provider, "general", "general." .. fields.backend)
+        local notice, warningText = CreateSectionNotice(providerCard, -106)
+        notice:SetHeight(52)
+        warningText:SetWordWrap(true)
+        warningText:SetMaxLines(4)
+        notice:SetMessage(M.Tr(FORCE_OFF_WARNING), "warning")
+        s.forceOffNotice = notice
     else
         SectionNote(ctx, unit, providerCard, "providerCard", "MSUF castbar", 16, -58, rightW - 32)
     end
@@ -457,7 +554,7 @@ function CastbarSection.General(s)
     local manualWidth = SizeSlider("manualWidth", widthKey, defaultSize.width, "Manual width", 40, 900, -52, "MSUF2_CASTBAR_WIDTH",
         "castbar.manual_width")
     SizeSlider("height", heightKey, defaultSize.height, "Height", 6, 80, -106, "MSUF2_CASTBAR_HEIGHT", "castbar.height")
-    s.castbarNotice, s.enabled, s.provider, s.interrupt = castbarNotice, enabled, provider, interrupt
+    s.castbarNotice, s.enabled, s.interrupt = castbarNotice, enabled, interrupt
     s.manualWidth, s.defaultSize = manualWidth, defaultSize
 end
 function CastbarSection.IconAndText(s)
@@ -677,13 +774,15 @@ local function BuildCastbar(ctx, builder, unit)
     CastbarSection.IconAndText(s)
     CastbarSection.Advanced(s)
     local ReadWidthSource, ReadCastbarBackend, castbarNotice = s.ReadWidthSource, s.ReadCastbarBackend, s.castbarNotice
-    local enabled, provider, interrupt, manualWidth, icon = s.enabled, s.provider, s.interrupt, s.manualWidth, s.icon
+    local enabled, interrupt, manualWidth, icon = s.enabled, s.interrupt, s.manualWidth, s.icon
     local portraitCastIcon, text, targetNameToggle = s.portraitCastIcon, s.text, s.targetNameToggle
     local IsManualSpellTextWidth, spellTextManualWidth, time = s.IsManualSpellTextWidth, s.spellTextManualWidth, s.time
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end
+    local IsForceOff, forceOffNotice, RefreshForceOffHeader = s.IsForceOff, s.forceOffNotice, s.RefreshForceOffHeader
     -- Hover reason for the locked castbar controls: the section notice wording.
     local function BackendReason()
+        if IsForceOff() then return M.Tr(FORCE_OFF_WARNING) end
         local backend = ReadCastbarBackend()
         if backend == "MSUF" then return nil end
         if backend == "HIDE" then return M.Format("%s castbar is off. Turn it on to use the MSUF castbar.", UnitTopLabel(unit)) end
@@ -691,8 +790,6 @@ local function BuildCastbar(ctx, builder, unit)
     end
     RefreshCastbarEnabled = RefreshCastbarEnabled(M.BindGateGroup(ctx, nil, {
         { enable = { enabled }, controls = castbarFeatureToggles, on = MsufOn, reason = BackendReason },
-        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end,
-            reason = BackendReason },
         { controls = allCastbarControls, on = MsufOn, reason = BackendReason },
         { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },
         { controls = iconControls, on = function() return MsufOn() and ReadGeneralBool(fields.icon, true) end },
@@ -704,8 +801,10 @@ local function BuildCastbar(ctx, builder, unit)
         { controls = portraitCastIcon, on = function() return NormalizePortrait(unit) ~= "OFF" end },
     }, {
         also = function()
+            local forceOff = IsForceOff()
+            if forceOffNotice then forceOffNotice:SetShown(forceOff) end
             local backend = ReadCastbarBackend()
-            if backend ~= "MSUF" and not PlayerFrameDisabled(unit) then
+            if not forceOff and backend ~= "MSUF" and not PlayerFrameDisabled(unit) then
                 if backend == "HIDE" then
                     castbarNotice:SetMessage(M.Format("%s castbar is off. Turn it on to use the MSUF castbar.", UnitTopLabel(unit)), "warning")
                 else
@@ -716,7 +815,7 @@ local function BuildCastbar(ctx, builder, unit)
             else
                 castbarNotice:Hide()
             end
-            SetSectionHeaderStatus(sec, nil)
+            if RefreshForceOffHeader then RefreshForceOffHeader(forceOff) else SetSectionHeaderStatus(sec, nil) end
         end,
         track = function(c, r) return M.TrackCollapsibleRefresh(c, sec, r) end,
     }))

@@ -866,7 +866,7 @@ local function CheckSizeHistory()
     ns.PublicGlobals.MSUF_EM_RefreshHistoryControls = noop
     ns.PublicGlobals.MSUF_EM_RefreshAfterHistoryRestore = noop
     ns.PublicGlobals.MSUF_ApplySpecProfileIfEnabled = noop
-    ns.Castbars = { Backend = { Resolve = noop }, Config = { Invalidate = noop } }
+    ns.Castbars = { Backend = { Resolve = noop, IsForceOff = function() return false end }, Config = { Invalidate = noop } }
     _G.MSUF_DB.general = {}
     _G.MSUF_ActiveProfile = "Swing test"
     _G.MSUF_GlobalDB = { profiles = { [_G.MSUF_ActiveProfile] = _G.MSUF_DB } }

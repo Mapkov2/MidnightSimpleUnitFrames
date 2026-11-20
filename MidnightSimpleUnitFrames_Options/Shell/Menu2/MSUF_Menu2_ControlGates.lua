@@ -65,7 +65,7 @@ function Gates.ApplySections(ctx, gateKey, enabled, opts)
             Gates.Apply(entry.outer, gateKey, enabled, opts)
             local primary = id == "frame_basics" or id == "general"
             if primary then entry._msuf2HeaderDisabled = not enabled end
-            entry.header:SetAlpha((enabled or primary) and 1 or 0.48)
+            entry.header:SetAlpha((enabled or primary or entry._msuf2HeaderAlwaysEnabled) and 1 or 0.48)
             if primary and entry.label then
                 local title = M.Tr("Basics")
                 if not enabled then title = title .. " - " .. M.Tr("Frame disabled") end

@@ -1,9 +1,8 @@
 --- Backend policy for each castbar unit.
 ---
 --- Public settings still include older `enable*Castbar` booleans, while newer
---- code needs a three-state backend: MSUF, Blizzard, or Hide. This adapter keeps
---- both representations synchronized so menus, imports, and old profile data
---- continue to agree.
+--- runtime uses MSUF, Blizzard, or Hide. Player Force Off is a stored choice
+--- that resolves to Hide even when the player frame is disabled.
 
 local _, ns = ...
 local Castbars = ns.Require("MSUF", "Castbars/MSUF_Castbars_Backend.lua").Castbars
@@ -88,8 +87,8 @@ function Backend.Normalize(value)
     end
 
     value = value:upper()
-    if value == "MSUF" then
-        return "MSUF"
+    if value == "MSUF" or value == "FORCE_OFF" then
+        return value
     end
 
     if value == "BLIZZARD" or value == "BLIZZ" or value == "DEFAULT" or value == "SHOW" then
@@ -103,15 +102,16 @@ function Backend.Normalize(value)
     return nil
 end
 
-function Backend.NormalizeForUnit(unit, value)
-    unit = NormalizeUnit(unit)
+local function NormalizeBackendForUnit(unit, value)
     value = Backend.Normalize(value)
-
-    if value == "BLIZZARD" and not BLIZZARD_SUPPORTED_UNITS[unit] then
+    if (value == "BLIZZARD" or value == "FORCE_OFF") and not BLIZZARD_SUPPORTED_UNITS[unit] then
         return "HIDE"
     end
-
     return value
+end
+
+function Backend.NormalizeForUnit(unit, value)
+    return NormalizeBackendForUnit(NormalizeUnit(unit), value)
 end
 
 function Backend.Unit(unit)
@@ -126,30 +126,25 @@ function Backend.LegacyEnableKey(unit)
     return LEGACY_ENABLE_KEYS[NormalizeUnit(unit)]
 end
 
---- Resolve the stored preference, with an optional player-frame override for
---- runtime readers. Get/Sync never pass the override when repairing storage.
+local function ReadStoredBackend(unit, general)
+    if not general then return "MSUF" end
+    return NormalizeBackendForUnit(unit, general[BACKEND_KEYS[unit]])
+        or (general[LEGACY_ENABLE_KEYS[unit]] == false and (BLIZZARD_SUPPORTED_UNITS[unit] and "BLIZZARD" or "HIDE") or "MSUF")
+end
+
+function Backend.IsForceOff(unit, general)
+    if NormalizeUnit(unit) ~= "player" then return false end
+    general = ResolveGeneralDB(general)
+    return general ~= nil and Backend.Normalize(general.castbarPlayerBackend) == "FORCE_OFF"
+end
+
 function Backend.Resolve(unit, general, playerFrameDisabled)
     unit = NormalizeUnit(unit)
+    if not BACKEND_KEYS[unit] then return nil end
+
+    local backend = ReadStoredBackend(unit, ResolveGeneralDB(general))
+    if backend == "FORCE_OFF" then return "HIDE" end
     if unit == "player" and playerFrameDisabled then return "BLIZZARD" end
-
-    local backendKey = BACKEND_KEYS[unit]
-    local legacyEnableKey = LEGACY_ENABLE_KEYS[unit]
-    if not backendKey then
-        return nil
-    end
-
-    general = ResolveGeneralDB(general)
-    if not general then
-        return "MSUF"
-    end
-
-    local backend = Backend.NormalizeForUnit(unit, general[backendKey])
-    if not backend then
-        backend = (general[legacyEnableKey] == false)
-            and (BLIZZARD_SUPPORTED_UNITS[unit] and "BLIZZARD" or "HIDE")
-            or "MSUF"
-    end
-
     return backend
 end
 
@@ -159,16 +154,16 @@ function Backend.Get(unit, general)
     unit = NormalizeUnit(unit)
     general = ResolveGeneralDB(general)
 
-    local backend = Backend.Resolve(unit, general)
     local backendKey = BACKEND_KEYS[unit]
+    if not backendKey then return nil end
+    local backend = ReadStoredBackend(unit, general)
     local legacyEnableKey = LEGACY_ENABLE_KEYS[unit]
-    if general and backendKey
-        and (general[backendKey] ~= backend or general[legacyEnableKey] ~= (backend == "MSUF")) then
+    if general and (general[backendKey] ~= backend or general[legacyEnableKey] ~= (backend == "MSUF")) then
         general[backendKey] = backend
         general[legacyEnableKey] = backend == "MSUF"
         Config.Invalidate()
     end
-    return backend
+    return backend == "FORCE_OFF" and "HIDE" or backend
 end
 
 --- Set both the modern backend key and the legacy boolean in one place. Only
@@ -184,7 +179,7 @@ function Backend.Set(unit, value, general)
         return nil
     end
 
-    local backend = Backend.NormalizeForUnit(unit, value) or "MSUF"
+    local backend = NormalizeBackendForUnit(unit, value) or "MSUF"
     if general[backendKey] ~= backend or general[legacyEnableKey] ~= (backend == "MSUF") then
         general[backendKey] = backend
         general[legacyEnableKey] = backend == "MSUF"
@@ -203,7 +198,7 @@ function Backend.Sync(general)
     if general == Config.sourceGeneral and previous then
         for unit, key in pairs(BACKEND_KEYS) do
             local enableKey = LEGACY_ENABLE_KEYS[unit]
-            if general[key] == previous[key] and general[enableKey] ~= previous[enableKey] then
+            if general[key] ~= "FORCE_OFF" and general[key] == previous[key] and general[enableKey] ~= previous[enableKey] then
                 local disabled = BLIZZARD_SUPPORTED_UNITS[unit] and "BLIZZARD" or "HIDE"
                 Backend.Set(unit, general[enableKey] ~= false and "MSUF" or disabled, general)
             end

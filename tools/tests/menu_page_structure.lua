@@ -74,8 +74,8 @@ end
 -- 7.0.3: 28 Mainline and 27 Classic additions; all 7.021 identities retained.
 local indexes = {
     -- Beta 2 expands the Mainline and Forever aura bar catalog.
-    { "", 4879, 3985897938 },
-    { "_Classic", 4255, 4263915646 },
+    { "", 4879, 701958734 },
+    { "_Classic", 4255, 2311471339 },
 }
 local moved = {
     { "opt_colors", "workbench_accessibility", "accessibility", "preview review" },

@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "6932BF1A4727A80C2A3CAA6208D18D08160A1D4DE2F9E0B72346CA2D6DE817BF"
+Search.StaticIndexSourceSha256 = "9AF8FA8E368DB44EAF56A68AD8D0EE551CFD99F43AF5FF9DC90F0D3F091F213A"
 Search.StaticIndexRecordCount = 4879
 Search.StaticIndexContextBlob = [==[auras3_buffs
 Border Alpha (%)
@@ -5521,6 +5521,7 @@ castbarplayericonborderstyle
 castbarplayericonborderthickness
 Castbar provider
 castbar provider
+unitCastbarTab=general=general.castbarPlayerBackend
 castbarplayerbackend
 unitTextureLayer=1_rules=player.texLayerHealthLowAlphaEnabled
 iduf_playermenu2%2Euf_player%2Eunit%2Ebasics%2E
@@ -7480,6 +7481,7 @@ pettarget level
 !320!While the defensive bar or portrait icon is enabled, hides every enabled tracked defensive from the normal player Buffs lane. Disabled defensive entries remain visible there.
 MSUF castbar
 Blizzard castbar
+Force Off
 combat icon
 Kampfsymbol
 Defensives
@@ -8573,18 +8575,18 @@ aura enchants 1
 aura enchants 2
 aura enchants 3
 player none dark castbar border color67,1278,1279
-player backend msuf castbar blizzard castbar1665,1666
+player backend msuf castbar blizzard castbar force off1665,1666,1667
 aura player
-icons status icons combat icon kampfsymbol474,1667,1668
-buffs debuffs custom 1 custom 2 custom 3 defensives306,307,1296,1297,1298,1669
+icons status icons combat icon kampfsymbol474,1668,1669
+buffs debuffs custom 1 custom 2 custom 3 defensives306,307,1296,1297,1298,1670
 aura player cooldown cooldown text format remaining time below this value uses one decimal place timers show unitless seconds below 1 minute and localized minutes above it set 0 for whole seconds only310,311
-bar round crystal orb independent powerbar shape changes only player power class resources keep their own shape setting round and crystal fill horizontally orb fills bottom to top71,100,101,102,156,1670
+bar round crystal orb independent powerbar shape changes only player power class resources keep their own shape setting round and crystal fill horizontally orb fills bottom to top71,100,101,102,156,1671
 aura player frame basics off border border symbol130,313,314
 player show
 player show spell name
 show player cast
-enable defensive buffs core feature enabled by default for new profiles and once for existing profiles it works as a normal defensive buff bar without an enabled portrait turn this off to disable both bar and portrait position display1671,1672
-aura enchants 1 weapon enchant duration sets the swipe s full duration because blizzard exposes only the remaining time oils normally use 60 minutes change this for stones or poisons with a different duration1673,1674
+enable defensive buffs core feature enabled by default for new profiles and once for existing profiles it works as a normal defensive buff bar without an enabled portrait turn this off to disable both bar and portrait position display1672,1673
+aura enchants 1 weapon enchant duration sets the swipe s full duration because blizzard exposes only the remaining time oils normally use 60 minutes change this for stones or poisons with a different duration1674,1675
 aura player remaining elapsed duration bar fill mode remaining shrinks as the aura expires elapsed grows until the aura expires343,344,345,346
 player remaining elapsed elapsed total remaining total343,344,948,949
 aura player duration bar
@@ -8592,33 +8594,33 @@ player bar
 aura player frame basics
 player level offset
 player frame level offset
-icons status icons leader icon gruppenleiter474,1675,1676
+icons status icons leader icon gruppenleiter474,1676,1677
 bar automatic current behavior mana displayed resource automatic preserves the current profile behavior for the active class and specialization including maelstrom insanity and ebon might hand offs mana explicitly keeps mana on the player power bar vehicles always use their native resource classes without a mana pool keep their normal resource while the preference stays sa111,112,113,114
 player name max
-max portrait icons limits the number of simultaneous defensive icons at the portrait from 1 to 8 existing profiles remain at 1 until this value is changed1376,1677
-aura enchants 1 oil or stone paste the consumable these slots should offer on click a weapon enchant cannot be cast so only an item makes them clickable leave it empty to keep them as pure indicators1678,1679
+max portrait icons limits the number of simultaneous defensive icons at the portrait from 1 to 8 existing profiles remain at 1 until this value is changed1376,1678
+aura enchants 1 oil or stone paste the consumable these slots should offer on click a weapon enchant cannot be cast so only an item makes them clickable leave it empty to keep them as pure indicators1679,1680
 aura player bottom top duration bar position places the duration bar at the top or bottom edge of the aura slot272,271,376,377
 player left right inside left inside right197,199,1398,1399
 player name left center right above below197,198,199,947,226
 player left center right above below197,198,199,947,226
-icons status icons resting icon rested icon ruhesymbol474,1680,1681,1682
-icons indicator enabled status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer pvp timer flag duration countdown show the remaining time next to your pvp flag show pvp countdown474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1683,1684,1685,1686,1687
+icons status icons resting icon rested icon ruhesymbol474,1681,1682,1683
+icons indicator enabled status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer pvp timer flag duration countdown show the remaining time next to your pvp flag show pvp countdown474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1684,1685,1686,1687,1688
 aura player frame basics aura tooltip controls this aura lane independently always out of combat modifier never under general miscellaneous unitframe tooltips affect only unit and group frames auras only reuse the selected blizzard msuf look and cursor placement423,424
-show buffs at portrait position optional presentation mode the defensive buffs feature itself does not require a portrait with an enabled portrait the first icon occupies it when the portrait is off enable the position option below to keep the icons there otherwise msuf safely falls back to the normal defensive bar1688,1689
-show cooldown text on portrait shows the active defensive buff s remaining duration over its portrait icon blizzard updates the text natively1443,1690
+show buffs at portrait position optional presentation mode the defensive buffs feature itself does not require a portrait with an enabled portrait the first icon occupies it when the portrait is off enable the position option below to keep the icons there otherwise msuf safely falls back to the normal defensive bar1689,1690
+show cooldown text on portrait shows the active defensive buff s remaining duration over its portrait icon blizzard updates the text natively1443,1691
 player name font
 player font
 icons use default icon status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer specific icon custom icon single icon icon asset sharedmedia icon override icon status icon controls include the level indicator visibility anchor size and layer position is edited in preview icons use default icon classic pvp alliance midnight pvp alliance ux pro pvp alliance ux pro midnight pvp alliance glossy orbs pvp alliance glossy orbs midnight pvp alliance dark emboss pvp alliance dark emboss midnight pvp alliance glass panels pvp alliance glass panels midnight pvp alliance neon outline pvp alliance neon outline midnight pvp alliance ring symbols pvp alliance ring symbols midnight pvp alliance dots pvp alliance dots midnight pvp alliance shapes pvp alliance shapes midnight pvp alliance diamonds pvp alliance diamonds midnight pvp alliance squares pvp alliance squares midnight pvp alliance custom glyphs pvp alliance custom badges pvp alliance classic pvp horde midnight pvp horde ux pro pvp horde ux pro midnight pvp horde glossy orbs pvp horde glossy orbs midnight pvp horde dark emboss pvp horde status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer specific icon custom icon single icon icon asset sharedmedia icon override icon status icon controls include the level indicator visibility anchor size and layer position is edited in preview493,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1453,1454,1455,1456,1457,1458,1239,1625,1626,1627,1628,1629,1630,1631,1632,1633,1634,1635,1636,1637,1638,1639,1640,1641,1642,1643,1644,1645,1646,1647,1648,1649,1650,1651,1652,1653,1654,1655
 icons right to name left to name top left top right bottom left bottom right center top bottom left right status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer level text anchor level text anchoring right to player name left to player name right to target name left to target name right to boss name left to boss name status icon controls include the level indicator visibility anchor size and layer position is edited in preview icons top left top right bottom left bottom right center top bottom left right status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer level text anchor level text anchoring right to name left to name right to player name left to player name right to target name left to target name right to boss name left to boss name status icon controls include the level indicator visibility anchor size and layer position is edited in preview1466,1467,267,268,269,270,198,271,272,197,199,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1468,1469,1470,1471,1472,1473,1474,1475,1476,1477,1478,1479,1480,1481,1239
-icons leader icon assist icon raid marker level text race text class text raid group dead offline text ghost text afk text afk timer dnd text combat rested player only incoming rez stance pvp flag war mode pvp status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview icons leader icon assist icon raid marker level text race text class text raid group dead offline text ghost text afk text afk timer dnd text combat rested player only incoming rez stance pvp flag war mode pvp eating drinking text status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview1691,1692,562,559,1492,1493,1656,1494,532,478,482,525,1693,1694,1695,1696,561,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1495,1496,1497,1498,1499,1500,1501,1502,1503,1504,1505,1506,1507,1508,1509,1510,1511,1512,1513,527
+icons leader icon assist icon raid marker level text race text class text raid group dead offline text ghost text afk text afk timer dnd text combat rested player only incoming rez stance pvp flag war mode pvp status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview icons leader icon assist icon raid marker level text race text class text raid group dead offline text ghost text afk text afk timer dnd text combat rested player only incoming rez stance pvp flag war mode pvp eating drinking text status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview1692,1693,562,559,1492,1493,1656,1494,532,478,482,525,1694,1695,1696,1697,561,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1495,1496,1497,1498,1499,1500,1501,1502,1503,1504,1505,1506,1507,1508,1509,1510,1511,1512,1513,527
 aura player normal reverse cooldown swipe direction reverses only the swipe overlay icon size and position stay unchanged372,448,449,450
 aura player cooldown
 aura player stack
-exact aura tracking enter a spell id paste a spell link or type a spell name the visible helpful aura is matched even when its buff id differs from the cast spell id1200,1697
-aura enchants 1 track the main hand enchant adds a reminder slot for the temporary enchant on your main hand a weapon oil a stone or a weapon applied poison unlike an aura this state is plainly readable so the icon lights up while the enchant runs and dims when it is gone in every kind of content1698,1699
-aura enchants 1 track the off hand enchant same slot for your off hand both hands share the consumable set below which is what you normally want1700,1701
+exact aura tracking enter a spell id paste a spell link or type a spell name the visible helpful aura is matched even when its buff id differs from the cast spell id1200,1698
+aura enchants 1 track the main hand enchant adds a reminder slot for the temporary enchant on your main hand a weapon oil a stone or a weapon applied poison unlike an aura this state is plainly readable so the icon lights up while the enchant runs and dims when it is gone in every kind of content1699,1700
+aura enchants 1 track the off hand enchant same slot for your off hand both hands share the consumable set below which is what you normally want1701,1702
 enable player
-use portrait position while portrait is off keeps the configured portrait size and position as an invisible anchor so the defensive icon can remain there while the portrait itself is disabled1561,1702
+use portrait position while portrait is off keeps the configured portrait size and position as an invisible anchor so the defensive icon can remain there while the portrait itself is disabled1561,1703
 player name truncate auto fit manual width no width limit1577,1578,1579
 player match manual width auto unit frame auto essential cooldowns auto utility cooldowns1578,1580,1581,1582
 aura target top left top top right left center right bottom left bottom bottom right267,271,268,197,198,199,269,272,270
@@ -8639,7 +8641,7 @@ target remaining elapsed elapsed total remaining total343,344,948,949
 aura target duration bar
 target bar
 aura target frame basics
-tot mode auto tot name color target name color npc type color default font color1277,1703,1704,1705,1078
+tot mode auto tot name color target name color npc type color default font color1277,1704,1705,1706,1078
 tot space custom78,79,80,81,82,83,84,85,86,232
 target level offset
 target frame level offset
@@ -8654,7 +8656,7 @@ to t in name
 aura target frame basics aura tooltip controls this aura lane independently always out of combat modifier never under general miscellaneous unitframe tooltips affect only unit and group frames auras only reuse the selected blizzard msuf look and cursor placement423,424
 target name font
 target font
-icons leader icon assist icon raid marker level text race text class text raid group elite rare dead offline text ghost text afk text afk timer dnd text combat incoming rez pvp flag war mode pvp status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview icons leader icon assist icon raid marker level text race text class text raid group elite rare dead offline text ghost text afk text afk timer dnd text combat incoming rez pvp flag war mode pvp eating drinking text threat status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview1691,1692,562,559,1492,1493,1656,1596,1494,532,478,482,525,1693,1695,561,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1495,1496,1497,1498,1499,1500,1501,1502,1503,1504,1505,1506,1507,1508,1509,1510,1511,1512,1513,527,569
+icons leader icon assist icon raid marker level text race text class text raid group elite rare dead offline text ghost text afk text afk timer dnd text combat incoming rez pvp flag war mode pvp status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview icons leader icon assist icon raid marker level text race text class text raid group elite rare dead offline text ghost text afk text afk timer dnd text combat incoming rez pvp flag war mode pvp eating drinking text threat status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview1692,1693,562,559,1492,1493,1656,1596,1494,532,478,482,525,1694,1696,561,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1228,1229,1230,1231,1232,1233,1234,1235,1236,1495,1496,1497,1498,1499,1500,1501,1502,1503,1504,1505,1506,1507,1508,1509,1510,1511,1512,1513,527,569
 aura target frame basics border border icon icon313,1551,320
 aura target normal reverse cooldown swipe direction reverses only the swipe overlay icon size and position stay unchanged372,448,449,450
 aura target cooldown
@@ -8662,26 +8664,26 @@ aura target stack
 enable target
 target name truncate auto fit manual width no width limit1577,1578,1579
 target match manual width auto unit frame auto essential cooldowns auto utility cooldowns1578,1580,1581,1582
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer advanced reset reset status icon advanced status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1237,1238,1239
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer advanced layer status icon advanced status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1240,1241,1239
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer advanced test mode status icon advanced preview status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1242,1243,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer advanced reset reset status icon advanced status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1237,1238,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer advanced layer status icon advanced status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1240,1241,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer advanced test mode status icon advanced preview status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1242,1243,1239
 unitframe global anchor essential cooldown viewer utility cooldown viewer tracked buffs viewer player frame target frame focus target frame focus frame pet frame1251,1252,1253,1254,233,1255,1257,1258,1259
-use force blizzard frame on keeps blizzard s native frame active independently of the msuf frame leave msuf enable on to show both or turn msuf enable off to use only blizzard a ui reload is required blizzard target of target is a child of blizzard target so both native frames must remain active1341,1708
-icons indicator status icons status icon status indicators status indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level color level colors level difficulty difficulty color level color curve color level by difficulty red level gray level grey level skull level color red far above your level white at your level gray when trivial turn off to use the status text color instead color by level difficulty474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1363,1364,1365,1366,1367,1368,1369,1370,1371,1372,1373,489
-icons name 2 status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer raid group style parentheses brackets no brackets group number style status icon controls include the level indicator visibility anchor size and layer position is edited in preview566,567,290,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1405,1406,1407,1408,1409,1239
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer reset level reset level position reset level anchor reset indicator position status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1410,1411,1412,1413,1239
-icons indicator status icons status icon status indicators status indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level badge level circle round level camelot level level medallion centers the level on a dark round medallion with a gold rim on every supported wow version round level badge474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1418,1419,1420,1421,1422,1423,1424
-icons use default icon status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer specific icon custom icon single icon icon asset sharedmedia icon override icon status icon controls include the level indicator visibility anchor size and layer position is edited in preview493,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1453,1454,1455,1456,1457,1458,1239
-icons right to name left to name top left top right bottom left bottom right center top bottom left right status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level text anchor level text anchoring right to player name left to player name right to target name left to target name right to boss name left to boss name status icon controls include the level indicator visibility anchor size and layer position is edited in preview1466,1467,267,268,269,270,198,271,272,197,199,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1468,1469,1470,1471,1472,1473,1474,1475,1476,1477,1478,1479,1480,1481,1239
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer enabled show selected indicator hide selected indicator hide level turn level on turn level off status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1482,1483,1484,1485,1486,1487,1239
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level layer indicator layer above text behind text status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1488,1489,1490,1491,1239
-icons raid marker level text race text class text raid group elite rare dead offline text ghost text afk text afk timer dnd text pvp flag war mode pvp status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview562,559,1492,1493,1656,1596,1494,532,478,482,525,561,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1495,1496,1497,1498,1499,1500,1501,1502,1503,1504,1505,1506,1507,1508,1509,1510,1511,1512,1513
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level size level text size indicator size icon size font size raid group size raid group name size group number size status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1514,1515,1516,1517,1518,1519,1520,1521,1239
-icons use status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer midnight style status style indicator style icon style status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1522,1523,1524,1525,1239
-icons default status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer symbol icon status symbol indicator symbol combat symbol rested symbol incoming rez symbol status icon controls include the level indicator visibility anchor size and layer position is edited in preview275,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1526,1527,1528,1529,1530,1531,1532,1239
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer test mode preview level test level status preview status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1533,1534,1535,1536,1239
-icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level color level text color race text color class text color raid group color dead text color ghost text color afk text color dnd text color status text color indicator color status text font status text settings status icon controls include the level indicator visibility anchor size and layer position is edited in preview text quick settings open the fonts and colors used in this area474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1363,1537,1538,1539,1540,1541,1542,1543,1544,1545,1546,1547,1548,1239,1549,1550
-icons blizzard default msuf roles classic midnight ux pro glossy orbs dark emboss glass panels neon outline ring symbols dots shapes diamonds squares status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator style icon style icon design icon pack leader indicator style leader icon design leader icon pack assist indicator style assist icon design assist icon pack role indicator style role icon design role icon pack status indicator style status icon design status icon pack status icon controls include the level indicator visibility anchor size and layer position is edited in preview533,534,535,536,537,539,541,543,545,547,549,551,553,555,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1706,1707,1228,1229,1230,1231,1232,1233,1234,1235,1236,1524,1525,1563,1564,1565,1566,1567,1568,1569,1570,1571,1572,1573,1574,1575,1576,1239]==]
+use force blizzard frame on keeps blizzard s native frame active independently of the msuf frame leave msuf enable on to show both or turn msuf enable off to use only blizzard a ui reload is required blizzard target of target is a child of blizzard target so both native frames must remain active1341,1709
+icons indicator status icons status icon status indicators status indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level color level colors level difficulty difficulty color level color curve color level by difficulty red level gray level grey level skull level color red far above your level white at your level gray when trivial turn off to use the status text color instead color by level difficulty474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1363,1364,1365,1366,1367,1368,1369,1370,1371,1372,1373,489
+icons name 2 status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer raid group style parentheses brackets no brackets group number style status icon controls include the level indicator visibility anchor size and layer position is edited in preview566,567,290,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1405,1406,1407,1408,1409,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer reset level reset level position reset level anchor reset indicator position status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1410,1411,1412,1413,1239
+icons indicator status icons status icon status indicators status indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level badge level circle round level camelot level level medallion centers the level on a dark round medallion with a gold rim on every supported wow version round level badge474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1418,1419,1420,1421,1422,1423,1424
+icons use default icon status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer specific icon custom icon single icon icon asset sharedmedia icon override icon status icon controls include the level indicator visibility anchor size and layer position is edited in preview493,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1453,1454,1455,1456,1457,1458,1239
+icons right to name left to name top left top right bottom left bottom right center top bottom left right status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level text anchor level text anchoring right to player name left to player name right to target name left to target name right to boss name left to boss name status icon controls include the level indicator visibility anchor size and layer position is edited in preview1466,1467,267,268,269,270,198,271,272,197,199,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1468,1469,1470,1471,1472,1473,1474,1475,1476,1477,1478,1479,1480,1481,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer enabled show selected indicator hide selected indicator hide level turn level on turn level off status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1482,1483,1484,1485,1486,1487,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level layer indicator layer above text behind text status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1488,1489,1490,1491,1239
+icons raid marker level text race text class text raid group elite rare dead offline text ghost text afk text afk timer dnd text pvp flag war mode pvp status icons status icon status indicators status indicator indicator selected indicator level levels level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator dropdown select level choose level status icon dropdown level dropdown raid group name group number subgroup afk dnd ghost select afk afk status status text unit info choose a status icon or an independent level race or class text preview562,559,1492,1493,1656,1596,1494,532,478,482,525,561,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1495,1496,1497,1498,1499,1500,1501,1502,1503,1504,1505,1506,1507,1508,1509,1510,1511,1512,1513
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level size level text size indicator size icon size font size raid group size raid group name size group number size status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1514,1515,1516,1517,1518,1519,1520,1521,1239
+icons use status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer midnight style status style indicator style icon style status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1522,1523,1524,1525,1239
+icons default status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer symbol icon status symbol indicator symbol combat symbol rested symbol incoming rez symbol status icon controls include the level indicator visibility anchor size and layer position is edited in preview275,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1526,1527,1528,1529,1530,1531,1532,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer test mode preview level test level status preview status icon controls include the level indicator visibility anchor size and layer position is edited in preview474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1533,1534,1535,1536,1239
+icons status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer level color level text color race text color class text color raid group color dead text color ghost text color afk text color dnd text color status text color indicator color status text font status text settings status icon controls include the level indicator visibility anchor size and layer position is edited in preview text quick settings open the fonts and colors used in this area474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1363,1537,1538,1539,1540,1541,1542,1543,1544,1545,1546,1547,1548,1239,1549,1550
+icons blizzard default msuf roles classic midnight ux pro glossy orbs dark emboss glass panels neon outline ring symbols dots shapes diamonds squares status icons status icon status indicators status indicator indicator selected indicator level levels level text level indicator show level enable level disable level turn on level turn off level unit level player level target level focus level boss level pet level target of target level targettarget level anchor level level anchor level anchoring position level level position level positioning preview position size layer indicator style icon style icon design icon pack leader indicator style leader icon design leader icon pack assist indicator style assist icon design assist icon pack role indicator style role icon design role icon pack status indicator style status icon design status icon pack status icon controls include the level indicator visibility anchor size and layer position is edited in preview533,534,535,536,537,539,541,543,545,547,549,551,553,555,474,1207,1208,475,1209,1210,1211,1212,1213,1214,1215,1216,1217,1218,1219,1220,1221,1222,1223,1224,1225,1707,1708,1228,1229,1230,1231,1232,1233,1234,1235,1236,1524,1525,1563,1564,1565,1566,1567,1568,1569,1570,1571,1572,1573,1574,1575,1576,1239]==]
 Search.StaticIndexBlob = [==[
 @1	@2	@3			@4	@5	@7:appearance%2Eicon-style%2Estylebordercolor-alpha	@6			@8,9,10,11,12,13,12,10,11,12,14,9,15,16,3|@1
 @1	@17	@18			@4	@19	@7:appearance%2Eicon-style%2Eborder-style	@6			@8,12,10,11,12,13,12,10,11,12,8,12,15,16,18|@2
@@ -12487,33 +12489,33 @@ Search.StaticIndexBlob = [==[
 @5467	@1649	@3	player.powerBarBorderThickness		@4450	@21	@5487:powerbarborderthickness	@4451			@8,22,2567,128,2567,128,1650,4284,69,3,69,1650|@20
 @5467	@4454	@32			@4391	@4455	@5470:filters%2Ecancelable	@13	@4290	@4393	@4455,271,1014,937,13,271,1014,937,4455,4284,69,32|@13
 @5467	@4454	@32	auras3.player.buff.filter.cancelable		@1106	@4455	@5473:lane%2Ebuff%2Efilters%2Ecancelable	@13	@4290	@4346	@4455,28,937,13,2567,725,30,28,937,4455,4284,69,32,15,69,28,1444,4455|@698
-@5467	@5508	@18	general.castbarPlayerBackend		@4595	@5509	@5475:provider	@2528	@1369	@1681	@2528,1834,2567,2528,2567,2528,1834,4284,69,18,148,5510|@1052
-@5467	@4456	@32	player.texLayerHealthLowAlphaEnabled		@4316	@4457	@5474:healthlowalphaenabled	@4318	@4319	@5511	@226,179,1047,229,2567,190,239,2567,190,239,4459,4284,69,32,69,4460|@699
-@5467	@1659	@32	player.chunkedFill		@4461	@1660	@5512:chunked_fill	@4462			@1661,301,1662,2567,1638,2567,1638,1661,306,4284,69,32,69,1663|@700
+@5467	@5508	@18	general.castbarPlayerBackend		@4595	@5509	@5475:provider	@2528	@4899	@5510	@2528,1834,2567,2528,2567,2528,1834,4284,69,18,148,5511|@1052
+@5467	@4456	@32	player.texLayerHealthLowAlphaEnabled		@4316	@4457	@5474:healthlowalphaenabled	@4318	@4319	@5512	@226,179,1047,229,2567,190,239,2567,190,239,4459,4284,69,32,69,4460|@699
+@5467	@1659	@32	player.chunkedFill		@4461	@1660	@5513:chunked_fill	@4462			@1661,301,1662,2567,1638,2567,1638,1661,306,4284,69,32,69,1663|@700
 @5467	@1664	@32	player.powerChunkedFill		@4450	@1665	@5487:powerchunkedfill	@4451			@1661,128,1662,2567,128,2567,128,1666,4284,69,32,69,1666|@701
 @5467	@4464	@1043			@4279	@4465	@5468:indicator%2Eclasstext	@4280	@4281	@4466	@127,162,1348,922,2567,1348,922,4467,4284,69,1043|@657
 @5467	@1667	@18	player.portraitClassStyle		@4351	@1668	@5478:portraitclassstyle	@1621	@1369	@1474	@127,1621,12,2567,1621,2567,1621,1669,4284,69,18,69,1669|@288
 @5467	@1670	@96		clear_unit_custom_anchor	@1671	@1672	@5485:custom%2Eclear	@4378			@1672,113,271,2567,4378,271,1672,4284,69,96,1672,2567,271,113|@13
 @5467	@4468	@32			@4469	@4470	@5470:reminder%2Eclick-cast	@4471	@4290	@4412	@805,689,11,126,641,689,716,271,1014,4472,13,271,1014,4472,805,641,4284,69,32|@702
-@5467	@1679	@32	player.portraitClickable		@4351	@1680	@5478:portraitclickable	@1621	@4353	@5513	@1682,1621,2567,1621,2567,1621,1683,4284,69,32,69,1683|@13
-@5467	@4474	@32	player.texLayerRoundedClip		@4316	@4475	@5474:roundedclip	@4318	@4319	@5514	@4477,126,2681,38,2567,190,239,2567,190,239,4478,4284,69,32,69,4479|@703
-@5467	@3343	@227			@4480	@227	@5480:lane%2Ebuff%2Efull-frame%2Ecolor	@5515	@4290	@4363	@227,28,403,38,13,12,30,28,403,38,227,4284,69,227|@1053
+@5467	@1679	@32	player.portraitClickable		@4351	@1680	@5478:portraitclickable	@1621	@4353	@5514	@1682,1621,2567,1621,2567,1621,1683,4284,69,32,69,1683|@13
+@5467	@4474	@32	player.texLayerRoundedClip		@4316	@4475	@5474:roundedclip	@4318	@4319	@5515	@4477,126,2681,38,2567,190,239,2567,190,239,4478,4284,69,32,69,4479|@703
+@5467	@3343	@227			@4480	@227	@5480:lane%2Ebuff%2Efull-frame%2Ecolor	@5516	@4290	@4363	@227,28,403,38,13,12,30,28,403,38,227,4284,69,227|@1053
 @5467	@3343	@227			@4482	@227	@5470:effect%2Ecolor	@4483	@4290	@4426	@227,271,1014,557,13,271,1014,557,227,4284,69,227|@705
-@5467	@3343	@227			@4484	@227	@5480:lane%2Edebuff%2Efull-frame%2Ecolor	@5516	@4290	@4367	@227,43,403,38,13,12,30,43,403,38,227,4284,69,227|@1053
-@5467	@4486	@18	player.texLayerHealthAboveMode		@4316	@4487	@5474:healthabovemode	@4318	@4319	@5517	@227,2187,229,2567,190,239,2567,190,239,4489,4284,69,18,69,4490|@706
-@5467	@4491	@18	player.texLayerColorMode		@4316	@4492	@5474:colormode	@4318	@4319	@5518	@227,602,2567,190,239,2567,190,239,4494,4284,69,18,69,4495|@707
-@5467	@5519	@1043			@4279	@370	@5468:indicator%2Estatuscombat	@4280	@4281	@5520	@370,1348,922,2567,1348,922,5521,4284,69,1043|@1054
+@5467	@3343	@227			@4484	@227	@5480:lane%2Edebuff%2Efull-frame%2Ecolor	@5517	@4290	@4367	@227,43,403,38,13,12,30,43,403,38,227,4284,69,227|@1053
+@5467	@4486	@18	player.texLayerHealthAboveMode		@4316	@4487	@5474:healthabovemode	@4318	@4319	@5518	@227,2187,229,2567,190,239,2567,190,239,4489,4284,69,18,69,4490|@706
+@5467	@4491	@18	player.texLayerColorMode		@4316	@4492	@5474:colormode	@4318	@4319	@5519	@227,602,2567,190,239,2567,190,239,4494,4284,69,18,69,4495|@707
+@5467	@5520	@1043			@4279	@370	@5468:indicator%2Estatuscombat	@4280	@4281	@5521	@370,1348,922,2567,1348,922,5522,4284,69,1043|@1054
 @5467	@4496	@18	player.texLayerVisibility		@4316	@4497	@5474:combat_state	@4318	@4319	@4498	@370,296,2567,190,239,2567,190,239,370,296,4284,69,18,69,4499|@708
 @5467	@1009	@32			@960	@1010	@5473:lane%2Ebuff%2Ebars%2Ecombine-debuff-bars	@13	@4290	@4405	@1011,28,956,43,109,28,109,13,2567,725,30,28,109,1011,43,109,4284,69,32|@133
 @5467	@4500	@713			@4410	@4501	@5470:setup%2Ename	@13	@4290	@4412	@1014,720,271,1014,569,13,271,1014,569,720,4284,69,713|@13
-@5467	@4502	@520			@1013	@1014	@5473:container-selector	@13	@4290	@5522	@1014,13,13,2567,725,1014,696,4284,69,520|@1055
+@5467	@4502	@520			@1013	@1014	@5473:container-selector	@13	@4290	@5523	@1014,13,13,2567,725,1014,696,4284,69,520|@1055
 @5467	@1028	@3			@4423	@1029	@5470:appearance%2Ecooldownx	@4504	@4290	@4426	@138,487,271,1014,10,13,271,1014,10,1030,4284,69,3|@710
 @5467	@1031	@3			@4423	@1032	@5470:appearance%2Ecooldowny	@4504	@4290	@4426	@138,492,271,1014,10,13,271,1014,10,1033,4284,69,3|@710
 @5467	@4505	@18			@4423	@1016	@5470:appearance%2Ecooldown-anchor	@4504	@4290	@4426	@138,113,271,1014,10,13,271,1014,10,138,113,4284,69,18|@711
 @5467	@4506	@3			@4423	@4507	@5470:appearance%2Ecooldownsize	@4504	@4290	@4426	@138,57,271,1014,10,13,271,1014,10,1027,4284,69,3|@710
 @5467	@4508	@32			@4423	@4509	@5470:appearance%2Ecooldown-swipe	@4504	@4290	@4426	@138,1192,271,1014,10,13,271,1014,10,138,1192,4284,69,32|@710
 @5467	@4510	@32			@4423	@4511	@5470:appearance%2Ecooldown-text	@4504	@4290	@4426	@138,162,271,1014,10,13,271,1014,10,138,162,4284,69,32|@710
-@5467	@4512	@96			@4513	@4514	@5523:open				@1038,126,2471,2567,1038,2567,1038,1039,4284,69,96|@13
+@5467	@4512	@96			@4513	@4514	@5524:open				@1038,126,2471,2567,1038,2567,1038,1039,4284,69,96|@13
 @5467	@4516	@32			@4391	@1041	@5470:filters%2Ecrowdcontrol	@13	@4290	@4393	@1042,1043,271,1014,937,13,271,1014,937,4517,4284,69,32|@13
 @5467	@4516	@32	auras3.player.debuff.filter.crowdControl		@1109	@1041	@5473:lane%2Edebuff%2Efilters%2Ecrowdcontrol	@13	@4290	@4349	@1042,1043,43,937,13,2567,725,30,43,937,4517,4284,69,32,15,69,43,1444,4517|@712
 @5467	@4518	@32	player.texLayerTargetOnly		@4316	@4519	@5474:current_target_only	@4318	@4319	@4498	@1312,87,1141,2567,190,239,2567,190,239,1312,87,1141,4284,69,32,69,4520|@703
@@ -12530,44 +12532,44 @@ Search.StaticIndexBlob = [==[
 @5467	@1717	@32	player.powerBarDetached		@4450	@1718	@5487:detached	@4451			@1719,690,38,2567,128,2567,128,129,4284,69,32,69,287|@20
 @5467	@1720	@3	player.detachedPowerBarHeight		@4450	@1721	@5487:detachedpowerbarheight	@4451			@129,347,2567,128,2567,128,535,4284,69,3,69,535|@20
 @5467	@1722	@3	player.detachedPowerBarFrameLevelOffset		@4450	@1723	@5487:detachedpowerbarframeleveloffset	@4451			@129,239,2567,128,2567,128,515,4284,69,3,69,515|@719
-@5467	@5524	@18	player.detachedPowerBarShape		@4450	@5525	@5487:detached_shape	@4451			@129,29,2567,128,2567,128,129,29,4284,69,18,69,554|@1057
+@5467	@5525	@18	player.detachedPowerBarShape		@4450	@5526	@5487:detached_shape	@4451			@129,29,2567,128,2567,128,129,29,4284,69,18,69,554|@1057
 @5467	@1724	@3	player.detachedPowerBarWidth		@4450	@1725	@5487:detachedpowerbarwidth	@4451			@129,272,2567,128,2567,128,549,4284,69,3,69,549|@720
-@5467	@1279	@32	player.unitDispelOverlayEnabled		@4535	@1280	@5526:overlay%2Eenabled	@4536			@951,1281,951,1281,2567,951,1281,235,4284,69,32,69,4538|@192
-@5467	@1283	@32	player.unitDispelSymbolEnabled		@4539	@1284	@5526:symbol%2Eenabled	@4540			@951,357,951,357,2567,951,357,235,4284,69,32,69,4541|@193
-@5467	@1050	@18			@76	@1051	@5480:lane%2Edebuff%2Eauras3-debuff-type-border-mode	@5527	@4290	@4367	@951,255,8,12,43,13,12,30,43,15,43,255,8,602,4284,69,18|@1058
+@5467	@1279	@32	player.unitDispelOverlayEnabled		@4535	@1280	@5527:overlay%2Eenabled	@4536			@951,1281,951,1281,2567,951,1281,235,4284,69,32,69,4538|@192
+@5467	@1283	@32	player.unitDispelSymbolEnabled		@4539	@1284	@5527:symbol%2Eenabled	@4540			@951,357,951,357,2567,951,357,235,4284,69,32,69,4541|@193
+@5467	@1050	@18			@76	@1051	@5480:lane%2Edebuff%2Eauras3-debuff-type-border-mode	@5528	@4290	@4367	@951,255,8,12,43,13,12,30,43,15,43,255,8,602,4284,69,18|@1058
 @5467	@4544	@32	auras3.player.buff.filter.includeDispellable		@1106	@4545	@5473:lane%2Ebuff%2Efilters%2Eincludedispellable	@13	@4290	@4346	@952,4546,254,909,28,937,13,2567,725,30,28,937,4547,4284,69,32,15,69,28,1444,4547|@723
 @5467	@4548	@32	auras3.player.debuff.filter.includeDispellable		@1109	@1054	@5473:lane%2Edebuff%2Efilters%2Eincludedispellable	@13	@4290	@4349	@952,254,909,43,937,13,2567,725,30,43,937,4547,4284,69,32,15,69,43,1444,4547|@724
 @5467	@4549	@32			@1109	@4550	@5473:lane%2Edebuff%2Efilters%2Eraid	@13	@4290	@4349	@952,254,957,43,937,13,2567,725,30,43,937,916,4284,69,32|@725
 @5467	@1055	@18			@4469	@451	@5470:reminder%2Eenabled	@13	@4290	@4412	@451,271,1014,4472,13,271,1014,4472,235,4284,69,18|@726
-@5467	@4553	@18	player.portraitDragonLayer		@4351	@4554	@5478:portraitdragonlayer	@1621	@4353	@5528	@4356,4556,609,2567,1621,2567,1621,4557,4284,69,18,69,4557|@728
-@5467	@4558	@3	player.portraitDragonX		@4351	@4559	@5478:portraitdragonx	@1621	@4353	@5529	@4356,1918,4561,2567,1621,2567,1621,4562,4284,69,3,69,4562|@729
-@5467	@4563	@3	player.portraitDragonLevel		@4351	@4564	@5478:portraitdragonlevel	@1621	@4353	@5530	@4356,240,2187,1621,2567,1621,2567,1621,4566,4284,69,3,69,4566|@13
-@5467	@4567	@3	player.portraitDragonScale		@4351	@4568	@5478:portraitdragonscale	@1621	@4353	@5531	@4356,57,2567,1621,2567,1621,4570,4284,69,3,69,4570|@730
-@5467	@4571	@3	player.portraitDragonY		@4351	@4572	@5478:portraitdragony	@1621	@4353	@5532	@4356,2290,4561,2567,1621,2567,1621,4574,4284,69,3,69,4574|@731
+@5467	@4553	@18	player.portraitDragonLayer		@4351	@4554	@5478:portraitdragonlayer	@1621	@4353	@5529	@4356,4556,609,2567,1621,2567,1621,4557,4284,69,18,69,4557|@728
+@5467	@4558	@3	player.portraitDragonX		@4351	@4559	@5478:portraitdragonx	@1621	@4353	@5530	@4356,1918,4561,2567,1621,2567,1621,4562,4284,69,3,69,4562|@729
+@5467	@4563	@3	player.portraitDragonLevel		@4351	@4564	@5478:portraitdragonlevel	@1621	@4353	@5531	@4356,240,2187,1621,2567,1621,2567,1621,4566,4284,69,3,69,4566|@13
+@5467	@4567	@3	player.portraitDragonScale		@4351	@4568	@5478:portraitdragonscale	@1621	@4353	@5532	@4356,57,2567,1621,2567,1621,4570,4284,69,3,69,4570|@730
+@5467	@4571	@3	player.portraitDragonY		@4351	@4572	@5478:portraitdragony	@1621	@4353	@5533	@4356,2290,4561,2567,1621,2567,1621,4574,4284,69,3,69,4574|@731
 @5467	@4575	@32			@4423	@4576	@5470:appearance%2Eduration-bar	@4425	@4290	@4426	@414,302,271,1014,10,13,271,1014,10,414,302,4284,69,32|@710
 @5467	@1433	@1043			@4279	@1434	@5468:indicator%2Estatusconsumptiontext	@4280	@4281	@5212	@1436,1437,162,1348,922,2567,1348,922,1438,4284,69,1043|@935
-@5467	@4577	@3	player.texLayerEdgeSoftness		@4316	@4578	@5474:edgesoftness	@4318	@4319	@5533	@1316,2069,2567,190,239,2567,190,239,4580,4284,69,3,69,4581|@703
+@5467	@4577	@3	player.texLayerEdgeSoftness		@4316	@4578	@5474:edgesoftness	@4318	@4319	@5534	@1316,2069,2567,190,239,2567,190,239,4580,4284,69,3,69,4581|@703
 @5467	@4582	@520			@1013	@1063	@5473:tool-selector	@13	@4290	@4358	@1063,13,13,2567,725,1065,696,4284,69,520|@145
 @5467	@1067	@18			@4482	@557	@5470:effect%2Etype	@4483	@4290	@4426	@557,271,1014,557,13,271,1014,557,255,4284,69,18|@732
-@5467	@1067	@18	auras3.player.buff.frameEffectType		@4480	@557	@5480:lane%2Ebuff%2Efull-frame%2Etype	@5515	@4290	@4363	@557,28,403,38,13,12,30,28,403,38,255,4284,69,18,15,69,28,4583|@733
-@5467	@1067	@18	auras3.player.debuff.frameEffectType		@4484	@557	@5480:lane%2Edebuff%2Efull-frame%2Etype	@5516	@4290	@4367	@557,43,403,38,13,12,30,43,403,38,255,4284,69,18,15,69,43,4583|@733
-@5467	@1069	@3	player.unitDispelSymbolLayer		@4539	@1070	@5526:symbol%2Eunitdispelsymbollayer	@4540			@557,239,691,1071,951,357,2567,951,357,4584,4284,69,3,69,4584|@13
-@5467	@4585	@32	player.portraitBlizzardElite		@4351	@4586	@5478:portraitblizzardelite	@1621	@4353	@5534	@4588,956,4589,4356,2567,1621,2567,1621,4590,4284,69,32,69,4590|@734
+@5467	@1067	@18	auras3.player.buff.frameEffectType		@4480	@557	@5480:lane%2Ebuff%2Efull-frame%2Etype	@5516	@4290	@4363	@557,28,403,38,13,12,30,28,403,38,255,4284,69,18,15,69,28,4583|@733
+@5467	@1067	@18	auras3.player.debuff.frameEffectType		@4484	@557	@5480:lane%2Edebuff%2Efull-frame%2Etype	@5517	@4290	@4367	@557,43,403,38,13,12,30,43,403,38,255,4284,69,18,15,69,43,4583|@733
+@5467	@1069	@3	player.unitDispelSymbolLayer		@4539	@1070	@5527:symbol%2Eunitdispelsymbollayer	@4540			@557,239,691,1071,951,357,2567,951,357,4584,4284,69,3,69,4584|@13
+@5467	@4585	@32	player.portraitBlizzardElite		@4351	@4586	@5478:portraitblizzardelite	@1621	@4353	@5535	@4588,956,4589,4356,2567,1621,2567,1621,4590,4284,69,32,69,4590|@734
 @5467	@1735	@32	player.embedPowerBarIntoHealth		@4450	@1736	@5487:embedpowerbarintohealth	@4451			@1737,1738,301,2567,128,2567,128,1739,4284,69,32,69,1739|@20
-@5467	@1740	@96	player.enabled		@4461	@842	@5512:enable_now	@4462			@842,2567,1638,2567,1638,842,2268,4284,69,96,69,235|@700
-@5467	@1740	@32	general.castbarPlayerShowIcon		@4591	@842	@5475:feature%2Emsuf2_castbar_icon	@2528	@1369	@4448	@842,2528,4592,2567,2528,4592,4330,2528,11,4284,69,32,148,5535|@1059
-@5467	@1740	@32	general.castbarPlayerShowSpellName		@4591	@842	@5475:feature%2Emsuf2_castbar_text	@2528	@1369	@4340	@842,2528,4592,2567,2528,4592,4330,2528,162,4284,69,32,148,5536|@1060
-@5467	@1740	@32	general.castbarPlayerShowTargetName		@4595	@842	@5475:show_target_name	@2528	@1369	@4340	@842,2567,2528,2567,2528,65,87,720,4284,69,32,148,5537|@51
-@5467	@1740	@32	general.showPlayerCastTime		@4591	@842	@5475:feature%2Emsuf2_castbar_time	@2528	@1369	@4597	@842,2528,4592,2567,2528,4592,4330,2528,419,4284,69,32,148,5538|@1061
-@5467	@1740	@32	player.enabled		@4461	@842	@5512:enabled	@4462			@842,2567,1638,2567,1638,235,4284,69,32,69,235|@735
+@5467	@1740	@96	player.enabled		@4461	@842	@5513:enable_now	@4462			@842,2567,1638,2567,1638,842,2268,4284,69,96,69,235|@700
+@5467	@1740	@32	general.castbarPlayerShowIcon		@4591	@842	@5475:feature%2Emsuf2_castbar_icon	@2528	@1369	@4448	@842,2528,4592,2567,2528,4592,4330,2528,11,4284,69,32,148,5536|@1059
+@5467	@1740	@32	general.castbarPlayerShowSpellName		@4591	@842	@5475:feature%2Emsuf2_castbar_text	@2528	@1369	@4340	@842,2528,4592,2567,2528,4592,4330,2528,162,4284,69,32,148,5537|@1060
+@5467	@1740	@32	general.castbarPlayerShowTargetName		@4595	@842	@5475:show_target_name	@2528	@1369	@4340	@842,2567,2528,2567,2528,65,87,720,4284,69,32,148,5538|@51
+@5467	@1740	@32	general.showPlayerCastTime		@4591	@842	@5475:feature%2Emsuf2_castbar_time	@2528	@1369	@4597	@842,2528,4592,2567,2528,4592,4330,2528,419,4284,69,32,148,5539|@1061
+@5467	@1740	@32	player.enabled		@4461	@842	@5513:enabled	@4462			@842,2567,1638,2567,1638,235,4284,69,32,69,235|@735
 @5467	@4599	@32			@4595	@4600	@5475:enabled	@2528			@842,2528,2567,2528,2567,2528,235,4284,69,32|@738
-@5467	@4603	@32	player.texLayerEnabled		@4316	@4604	@5474:enabled	@4318	@4319	@5539	@842,190,239,2567,190,239,2567,190,239,235,4284,69,32,69,4606|@703
+@5467	@4603	@32	player.texLayerEnabled		@4316	@4604	@5474:enabled	@4318	@4319	@5540	@842,190,239,2567,190,239,2567,190,239,235,4284,69,32,69,4606|@703
 @5467	@4607	@32			@4391	@4608	@5470:filters%2Eenabled	@13	@4290	@4393	@842,937,271,1014,937,13,271,1014,937,235,4284,69,32|@13
 @5467	@4607	@32	auras3.player.buff.filtersEnabled		@1106	@4608	@5473:lane%2Ebuff%2Efilters%2Eenabled	@13	@4290	@4346	@842,937,28,937,13,2567,725,30,28,937,235,4284,69,32,15,69,28,4609|@739
 @5467	@4607	@32	auras3.player.debuff.filtersEnabled		@1109	@4608	@5473:lane%2Edebuff%2Efilters%2Eenabled	@13	@4290	@4349	@842,937,43,937,13,2567,725,30,43,937,235,4284,69,32,15,69,43,4609|@739
 @5467	@1440	@32			@5494	@235	@5470:player-defensives%2Eenabled	@13	@4290	@4416	@235,271,1014,69,92,13,271,1014,69,92,235,4284,69,32|@1062
 @5467	@1440	@32			@4410	@235	@5470:setup%2Eenabled	@13	@4290	@4412	@235,271,1014,569,13,271,1014,569,235,4284,69,32|@13
-@5467	@5540	@3			@4469	@5541	@5470:reminder%2Eenchant-duration	@5500	@4290	@4298	@5502,414,5542,271,1014,4472,13,271,1014,4472,5502,414,4284,69,3|@1063
+@5467	@5541	@3			@4469	@5542	@5470:reminder%2Eenchant-duration	@5500	@4290	@4298	@5502,414,5543,271,1014,4472,13,271,1014,4472,5502,414,4284,69,3|@1063
 @5467	@1075	@713			@903	@1076	@5473:lane%2Ebuff%2Eblacklist%2Emanual-input	@13	@4290	@4310	@820,28,716,717,718,719,720,28,908,13,2567,725,30,28,908,277,1077,4284,69,713|@741
 @5467	@4612	@32			@4391	@1079	@5470:filters%2Eexternaldefensive	@13	@4290	@4393	@1080,999,271,1014,937,13,271,1014,937,1081,4284,69,32|@13
 @5467	@4612	@32	auras3.player.buff.filter.externalDefensive		@1106	@1079	@5473:lane%2Ebuff%2Efilters%2Eexternaldefensive	@13	@4290	@4346	@1080,999,28,937,13,2567,725,30,28,937,1081,4284,69,32,15,69,28,1444,1081|@742
@@ -12583,41 +12585,41 @@ Search.StaticIndexBlob = [==[
 @5467	@1085	@18			@963	@1086	@5473:lane%2Edebuff%2Ebars%2Efill-color-mode	@13	@4290	@4406	@306,227,602,43,109,13,2567,725,30,43,109,306,227,602,4284,69,18|@151
 @5467	@1087	@18			@960	@1088	@5473:lane%2Ebuff%2Elayout%2Eaura-bar-fill	@13	@4290	@4405	@306,748,28,109,13,2567,725,30,28,109,39,302,306,4284,69,18|@152
 @5467	@1087	@18			@963	@1088	@5473:lane%2Edebuff%2Elayout%2Eaura-bar-fill	@13	@4290	@4406	@306,748,43,109,13,2567,725,30,43,109,39,302,306,4284,69,18|@152
-@5467	@1087	@18	player.verticalFillBars		@4461	@1088	@5512:fill_direction	@4462			@306,748,2567,1638,2567,1638,306,748,4284,69,18,69,4629|@746
+@5467	@1087	@18	player.verticalFillBars		@4461	@1088	@5513:fill_direction	@4462			@306,748,2567,1638,2567,1638,306,748,4284,69,18,69,4629|@746
 @5467	@1089	@18			@25	@1090	@5480:lane%2Ebuff%2Eauras3-duration-bar-direction	@5491	@4290	@4363	@306,602,12,28,13,12,30,28,15,414,302,748,4284,69,18|@1064
 @5467	@1089	@18			@76	@1090	@5480:lane%2Edebuff%2Eauras3-duration-bar-direction	@5492	@4290	@4367	@306,602,12,43,13,12,30,43,15,414,302,748,4284,69,18|@1064
 @5467	@1778	@32	player.portraitFillBorder		@4351	@1779	@5478:portraitfillborder	@1621	@1369	@1640	@306,8,1738,38,332,2567,1621,2567,1621,1780,4284,69,32,69,1780|@13
-@5467	@4630	@32	player.portraitDragonFlip		@4351	@4631	@5478:portraitdragonflip	@1621	@4353	@5543	@4633,4356,308,126,307,2567,1621,2567,1621,4634,4284,69,32,69,4634|@13
-@5467	@4635	@32	player.portraitFlip		@4351	@4636	@5478:portraitflip	@1621	@4353	@5544	@4633,1621,308,126,307,2567,1621,2567,1621,4638,4284,69,32,69,4638|@13
+@5467	@4630	@32	player.portraitDragonFlip		@4351	@4631	@5478:portraitdragonflip	@1621	@4353	@5544	@4633,4356,308,126,307,2567,1621,2567,1621,4634,4284,69,32,69,4634|@13
+@5467	@4635	@32	player.portraitFlip		@4351	@4636	@5478:portraitflip	@1621	@4353	@5545	@4633,1621,308,126,307,2567,1621,2567,1621,4638,4284,69,32,69,4638|@13
 @5467	@4639	@32	general.anchorToCooldown		@4377	@4640	@5485:cooldown_manager	@4378			@3457,37,846,137,4641,2567,113,2567,4378,138,1637,4284,69,32,148,4642|@748
-@5467	@4643	@32	player.texLayerFollowFrameAlpha		@4316	@4644	@5474:followframealpha	@4318	@4319	@5545	@3457,38,1626,2567,190,239,2567,190,239,4646,4284,69,32,69,4647|@749
-@5467	@4648	@32	player.useBlizzardFrame		@4461	@4649	@5512:force_blizzard_frame	@4462			@4650,37,38,68,2567,1638,2567,1638,4650,37,38,4284,69,32,69,4651|@750
+@5467	@4643	@32	player.texLayerFollowFrameAlpha		@4316	@4644	@5474:followframealpha	@4318	@4319	@5546	@3457,38,1626,2567,190,239,2567,190,239,4646,4284,69,32,69,4647|@749
+@5467	@4648	@32	player.useBlizzardFrame		@4461	@4649	@5513:force_blizzard_frame	@4462			@4650,37,38,68,2567,1638,2567,1638,4650,37,38,4284,69,32,69,4651|@750
 @5467	@1791	@3	player.hpBarAlpha		@4417	@324	@5496:hpbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,1792,4284,69,3,69,1792|@751
 @5467	@1791	@3	player.powerBarAlpha		@4417	@324	@5496:powerbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,4652,4284,69,3,69,4652|@752
-@5467	@4653	@18	general.castbarPlayerTimeFormat		@4339	@3167	@5475:detail%2Emsuf2_castbar_time_format	@2528	@1369	@4597	@3167,2528,4342,2567,2528,4342,4330,2528,419,3167,4284,69,18,148,5546|@1065
+@5467	@4653	@18	general.castbarPlayerTimeFormat		@4339	@3167	@5475:detail%2Emsuf2_castbar_time_format	@2528	@1369	@4597	@3167,2528,4342,2567,2528,4342,4330,2528,419,3167,4284,69,18,148,5547|@1065
 @5467	@331	@3			@939	@332	@5473:lane%2Ebuff%2Elayout%2Espacing	@13	@4290	@4358	@332,28,118,13,2567,725,30,28,118,992,4284,69,3|@13
 @5467	@331	@3			@4359	@332	@5470:layout%2Espacing	@13	@4290	@4360	@332,271,1014,118,13,271,1014,118,992,4284,69,3|@13
 @5467	@331	@3			@941	@332	@5473:lane%2Edebuff%2Elayout%2Espacing	@13	@4290	@4361	@332,43,118,13,2567,725,30,43,118,992,4284,69,3|@13
 @5467	@1449	@1043			@4279	@1450	@5468:indicator%2Estatusghosttext	@4280	@4281	@4655	@1452,162,1348,922,2567,1348,922,1453,4284,69,1043|@657
 @5467	@1092	@96			@1013	@1093	@5473:open-aura-style	@13	@4290	@4358	@761,39,10,13,13,2567,725,1039,39,12,4284,69,96|@754
-@5467	@4656	@32	player.portraitBlizzardCorner		@4351	@4657	@5478:portraitblizzardcorner	@1621	@4353	@5547	@4659,1364,4660,2567,1621,2567,1621,4661,4284,69,32,69,4661|@734
-@5467	@4662	@32	player.texLayerGradientEnabled		@4316	@2726	@5474:gradientenabled	@4318	@4319	@5548	@2726,2567,190,239,2567,190,239,4664,4284,69,32,69,4665|@755
+@5467	@4656	@32	player.portraitBlizzardCorner		@4351	@4657	@5478:portraitblizzardcorner	@1621	@4353	@5548	@4659,1364,4660,2567,1621,2567,1621,4661,4284,69,32,69,4661|@734
+@5467	@4662	@32	player.texLayerGradientEnabled		@4316	@2726	@5474:gradientenabled	@4318	@4319	@5549	@2726,2567,190,239,2567,190,239,4664,4284,69,32,69,4665|@755
 @5467	@2723	@96			@4666	@2725	@5474:gradient_direction%2Eup	@4318	@4319	@4320	@2726,748,190,239,2726,748,2567,190,239,2726,748,1866,4284,69,96|@13
 @5467	@4667	@32			@4469	@4668	@5470:reminder%2Edesaturate	@4471	@4290	@4412	@4196,368,4669,271,1014,4472,13,271,1014,4472,4670,4284,69,32|@756
-@5467	@1289	@18	player.unitDispelSymbolGrowth		@4539	@1290	@5526:symbol%2Eunitdispelsymbolgrowth	@4540			@1290,951,357,2567,951,357,4671,4284,69,18,69,4671|@757
+@5467	@1289	@18	player.unitDispelSymbolGrowth		@4539	@1290	@5527:symbol%2Eunitdispelsymbolgrowth	@4540			@1290,951,357,2567,951,357,4671,4284,69,18,69,4671|@757
 @5467	@1094	@18			@939	@1095	@5473:lane%2Ebuff%2Elayout%2Egrowth	@13	@4290	@4358	@1095,28,118,13,2567,725,30,28,118,1095,4284,69,18|@156
 @5467	@1094	@18			@4359	@1095	@5470:layout%2Egrowth	@13	@4290	@4360	@1095,271,1014,118,13,271,1014,118,1095,4284,69,18|@156
 @5467	@1094	@18			@941	@1095	@5473:lane%2Edebuff%2Elayout%2Egrowth	@13	@4290	@4361	@1095,43,118,13,2567,725,30,43,118,1095,4284,69,18|@156
 @5467	@1096	@18			@960	@1097	@5473:lane%2Ebuff%2Ebars%2Ebar-growth	@13	@4290	@4405	@1095,748,28,109,13,2567,725,30,28,109,302,1095,4284,69,18|@158
 @5467	@1096	@18			@963	@1097	@5473:lane%2Edebuff%2Ebars%2Ebar-growth	@13	@4290	@4406	@1095,748,43,109,13,2567,725,30,43,109,302,1095,4284,69,18|@159
 @5467	@1867	@3	player.hpTextLayer		@4672	@1868	@5469:advanced%2Ehptextlayer	@162	@1369	@1474	@117,239,162,108,2567,162,108,4673,4284,69,3,69,4673|@758
-@5467	@4674	@3	player.texLayerHealthThreshold		@4316	@4675	@5474:healththreshold	@4318	@4319	@5549	@117,229,2567,190,239,2567,190,239,4677,4284,69,3,69,4678|@759
+@5467	@4674	@3	player.texLayerHealthThreshold		@4316	@4675	@5474:healththreshold	@4318	@4319	@5550	@117,229,2567,190,239,2567,190,239,4677,4284,69,3,69,4678|@759
 @5467	@1870	@18			@1588	@1871	@5469:hp%2Eslot%2Emode	@162	@1369	@1590	@117,606,117,219,2567,162,117,219,602,4284,69,18|@760
-@5467	@4679	@18	player.healthColorMode		@4461	@4680	@5512:health_color_mode	@4462			@301,227,4681,2567,1638,2567,1638,301,227,602,4284,69,18,69,3504|@761
+@5467	@4679	@18	player.healthColorMode		@4461	@4680	@5513:health_color_mode	@4462			@301,227,4681,2567,1638,2567,1638,301,227,602,4284,69,18,69,3504|@761
 @5467	@346	@3			@25	@347	@5480:lane%2Ebuff%2Edurationbarheight	@5491	@4290	@4363	@347,12,28,13,12,30,28,1101,4284,69,3|@1066
 @5467	@346	@3			@76	@347	@5480:lane%2Edebuff%2Edurationbarheight	@5492	@4290	@4367	@347,12,43,13,12,30,43,1101,4284,69,3|@1066
-@5467	@346	@3	general.castbarPlayerBarHeight		@4595	@347	@5475:height	@2528	@1369	@1681	@347,2567,2528,2567,2528,347,4284,69,3,148,5550|@1067
-@5467	@4683	@3	player.texLayerHeight		@4316	@4684	@5474:height	@4318	@4319	@5551	@347,691,985,2567,190,239,2567,190,239,347,4284,69,3,69,4686|@703
+@5467	@346	@3	general.castbarPlayerBarHeight		@4595	@347	@5475:height	@2528	@1369	@1681	@347,2567,2528,2567,2528,347,4284,69,3,148,5551|@1067
+@5467	@4683	@3	player.texLayerHeight		@4316	@4684	@5474:height	@4318	@4319	@5552	@347,691,985,2567,190,239,2567,190,239,347,4284,69,3,69,4686|@703
 @5467	@1882	@3	player.portraitHeight		@4351	@1883	@5478:portraitheight	@1621	@1369	@1884	@347,1885,2567,1621,2567,1621,1886,4284,69,3,69,1886|@13
 @5467	@1887	@32			@1588	@1888	@5469:hp%2Eslot%2Ehide_percent	@162	@1369	@1590	@36,354,117,219,2567,162,117,219,36,355,4284,69,32|@763
 @5467	@1887	@32			@1889	@1888	@5469:power%2Eslot%2Ehide_percent	@162	@1369	@1709	@36,354,128,219,2567,162,128,219,36,355,4284,69,32|@763
@@ -12625,44 +12627,44 @@ Search.StaticIndexBlob = [==[
 @5467	@1105	@32	auras3.player.buff.blacklist.hidePermanent		@1106	@1107	@5473:lane%2Ebuff%2Efilters%2Ehide-permanent	@13	@4290	@4346	@36,1108,28,937,13,2567,725,30,28,937,36,1108,4284,69,32,15,69,28,908,4687|@765
 @5467	@1105	@32	auras3.player.debuff.blacklist.hidePermanent		@1109	@1107	@5473:lane%2Edebuff%2Efilters%2Ehide-permanent	@13	@4290	@4349	@36,1108,43,937,13,2567,725,30,43,937,36,1108,4284,69,32,15,69,43,908,4687|@765
 @5467	@4688	@32	player.powerHideMissingResource		@4450	@4689	@5487:powerhidemissingresource	@4451			@36,396,104,2519,1838,2567,128,2567,128,4690,4284,69,32,69,4690|@20
-@5467	@4691	@32	player.loadCondHideInHousing		@4692	@1905	@5552:loadcondhideinhousing	@4693			@1905,2567,2443,4138,2567,2443,4138,4695,4284,69,32,69,4695|@766
+@5467	@4691	@32	player.loadCondHideInHousing		@4692	@1905	@5553:loadcondhideinhousing	@4693			@1905,2567,2443,4138,2567,2443,4138,4695,4284,69,32,69,4695|@766
 @5467	@1117	@3			@4423	@1118	@5470:appearance%2Eicon-zoom	@4696	@4290	@4426	@11,1119,271,1014,10,13,271,1014,10,11,1119,4284,69,3|@767
-@5467	@1117	@3			@25	@1118	@5480:lane%2Ebuff%2Eiconzoom	@5553	@4290	@4363	@11,1119,12,28,13,12,30,28,1121,4284,69,3|@1068
-@5467	@1117	@3			@76	@1118	@5480:lane%2Edebuff%2Eiconzoom	@5527	@4290	@4367	@11,1119,12,43,13,12,30,43,1121,4284,69,3|@1068
-@5467	@1117	@3	general.castbarPlayerIconZoom		@4339	@1118	@5475:detail%2Emsuf2_castbar_icon_zoom	@2528	@1369	@4448	@11,1119,2528,4342,2567,2528,4342,4330,2528,11,1119,4284,69,3,148,5554|@51
+@5467	@1117	@3			@25	@1118	@5480:lane%2Ebuff%2Eiconzoom	@5554	@4290	@4363	@11,1119,12,28,13,12,30,28,1121,4284,69,3|@1068
+@5467	@1117	@3			@76	@1118	@5480:lane%2Edebuff%2Eiconzoom	@5528	@4290	@4367	@11,1119,12,43,13,12,30,43,1121,4284,69,3|@1068
+@5467	@1117	@3	general.castbarPlayerIconZoom		@4339	@1118	@5475:detail%2Emsuf2_castbar_icon_zoom	@2528	@1369	@4448	@11,1119,2528,4342,2567,2528,4342,4330,2528,11,1119,4284,69,3,148,5555|@51
 @5467	@4699	@3			@939	@4700	@5473:lane%2Ebuff%2Elayout%2Eicon-height	@13	@4290	@4358	@11,347,355,28,118,13,2567,725,30,28,118,11,347,4284,69,3|@13
 @5467	@4699	@3			@941	@4700	@5473:lane%2Edebuff%2Elayout%2Eicon-height	@13	@4290	@4361	@11,347,355,43,118,13,2567,725,30,43,118,11,347,4284,69,3|@13
 @5467	@4701	@32			@4391	@4702	@5470:filters%2Eonlyimportant	@13	@4290	@4393	@4702,271,1014,937,13,271,1014,937,4703,4284,69,32|@13
 @5467	@4701	@32	auras3.player.buff.filter.onlyImportant		@1106	@4702	@5473:lane%2Ebuff%2Efilters%2Eonlyimportant	@13	@4290	@4346	@4702,28,937,13,2567,725,30,28,937,4703,4284,69,32,15,69,28,1444,4703|@769
 @5467	@4701	@32	auras3.player.debuff.filter.onlyImportant		@1109	@4702	@5473:lane%2Edebuff%2Efilters%2Eonlyimportant	@13	@4290	@4349	@4702,43,937,13,2567,725,30,43,937,4703,4284,69,32,15,69,43,1444,4703|@770
-@5467	@4704	@32	player.loadCondHideInCombat		@4692	@4705	@5552:loadcondhideincombat	@4693			@840,370,2567,2443,4138,2567,2443,4138,4706,4284,69,32,69,4706|@771
-@5467	@4707	@32	player.loadCondHideInGroup		@4692	@4708	@5552:loadcondhideingroup	@4693			@840,909,2567,2443,4138,2567,2443,4138,4709,4284,69,32,69,4709|@771
-@5467	@4710	@32	player.loadCondHideInInstance		@4692	@4711	@5552:loadcondhideininstance	@4693			@840,4712,2567,2443,4138,2567,2443,4138,4713,4284,69,32,69,4713|@771
-@5467	@4714	@32	player.loadCondHideInVehicle		@4692	@4715	@5552:loadcondhideinvehicle	@4693			@840,4716,2567,2443,4138,2567,2443,4138,4717,4284,69,32,69,4717|@771
-@5467	@5555	@1043			@4279	@5556	@5468:indicator%2Estatusincomingres	@4280	@4281	@5557	@5558,5559,1348,922,2567,1348,922,5560,4284,69,1043|@657
-@5467	@4718	@3	player.portraitInnerShadow		@4351	@4719	@5478:portraitinnershadow	@1621	@4353	@5561	@4721,50,2560,2567,1621,2567,1621,4722,4284,69,3,69,4722|@772
+@5467	@4704	@32	player.loadCondHideInCombat		@4692	@4705	@5553:loadcondhideincombat	@4693			@840,370,2567,2443,4138,2567,2443,4138,4706,4284,69,32,69,4706|@771
+@5467	@4707	@32	player.loadCondHideInGroup		@4692	@4708	@5553:loadcondhideingroup	@4693			@840,909,2567,2443,4138,2567,2443,4138,4709,4284,69,32,69,4709|@771
+@5467	@4710	@32	player.loadCondHideInInstance		@4692	@4711	@5553:loadcondhideininstance	@4693			@840,4712,2567,2443,4138,2567,2443,4138,4713,4284,69,32,69,4713|@771
+@5467	@4714	@32	player.loadCondHideInVehicle		@4692	@4715	@5553:loadcondhideinvehicle	@4693			@840,4716,2567,2443,4138,2567,2443,4138,4717,4284,69,32,69,4717|@771
+@5467	@5556	@1043			@4279	@5557	@5468:indicator%2Estatusincomingres	@4280	@4281	@5558	@5559,5560,1348,922,2567,1348,922,5561,4284,69,1043|@657
+@5467	@4718	@3	player.portraitInnerShadow		@4351	@4719	@5478:portraitinnershadow	@1621	@4353	@5562	@4721,50,2560,2567,1621,2567,1621,4722,4284,69,3,69,4722|@772
 @5467	@1948	@32	player.alphaExcludePredictionBars		@4417	@1949	@5496:alpha_exclude_prediction_bars	@1626	@4418	@4419	@1950,1951,676,1267,2567,1626,2567,1626,9,1761,676,109,4284,69,32,69,1952|@13
-@5467	@4723	@32	player.portraitDragonInInstances		@4351	@4724	@5478:portraitdragonininstances	@1621	@4353	@5562	@1950,3095,4726,840,4727,2567,1621,2567,1621,4728,4284,69,32,69,4728|@773
+@5467	@4723	@32	player.portraitDragonInInstances		@4351	@4724	@5478:portraitdragonininstances	@1621	@4353	@5563	@1950,3095,4726,840,4727,2567,1621,2567,1621,4728,4284,69,32,69,4728|@773
 @5467	@1958	@32	player.alphaExcludeTextPortrait		@4417	@1959	@5496:alpha_exclude_text_portrait	@1626	@4418	@4419	@1950,162,1621,1267,2567,1626,2567,1626,9,1761,162,1621,4284,69,32,69,1960|@13
 @5467	@4729	@3			@4423	@4730	@5470:appearance%2Estyle-padding	@4696	@4290	@4426	@30,1495,271,1014,10,13,271,1014,10,12,1495,4284,69,3|@774
-@5467	@4729	@3			@25	@4730	@5480:lane%2Ebuff%2Estylepadding	@5553	@4290	@4363	@30,1495,12,28,13,12,30,28,4731,4284,69,3|@1068
-@5467	@4729	@3			@76	@4730	@5480:lane%2Edebuff%2Estylepadding	@5527	@4290	@4367	@30,1495,12,43,13,12,30,43,4731,4284,69,3|@1068
-@5467	@1123	@3			@4480	@1124	@5480:lane%2Ebuff%2Efull-frame%2Elayer	@5515	@4290	@4363	@239,691,1071,28,403,38,13,12,30,28,403,38,239,4284,69,3|@1053
+@5467	@4729	@3			@25	@4730	@5480:lane%2Ebuff%2Estylepadding	@5554	@4290	@4363	@30,1495,12,28,13,12,30,28,4731,4284,69,3|@1068
+@5467	@4729	@3			@76	@4730	@5480:lane%2Edebuff%2Estylepadding	@5528	@4290	@4367	@30,1495,12,43,13,12,30,43,4731,4284,69,3|@1068
+@5467	@1123	@3			@4480	@1124	@5480:lane%2Ebuff%2Efull-frame%2Elayer	@5516	@4290	@4363	@239,691,1071,28,403,38,13,12,30,28,403,38,239,4284,69,3|@1053
 @5467	@1123	@3			@939	@1124	@5473:lane%2Ebuff%2Elayout%2Elayer	@13	@4290	@4358	@239,691,1071,28,118,13,2567,725,30,28,118,239,4284,69,3|@13
 @5467	@1123	@3			@4482	@1124	@5470:effect%2Elayer	@4483	@4290	@4426	@239,691,1071,271,1014,557,13,271,1014,557,239,4284,69,3|@705
 @5467	@1123	@3			@4359	@1124	@5470:layout%2Elayer	@13	@4290	@4360	@239,691,1071,271,1014,118,13,271,1014,118,239,4284,69,3|@13
-@5467	@1123	@3			@4484	@1124	@5480:lane%2Edebuff%2Efull-frame%2Elayer	@5516	@4290	@4367	@239,691,1071,43,403,38,13,12,30,43,403,38,239,4284,69,3|@1053
+@5467	@1123	@3			@4484	@1124	@5480:lane%2Edebuff%2Efull-frame%2Elayer	@5517	@4290	@4367	@239,691,1071,43,403,38,13,12,30,43,403,38,239,4284,69,3|@1053
 @5467	@1123	@3			@941	@1124	@5473:lane%2Edebuff%2Elayout%2Elayer	@13	@4290	@4361	@239,691,1071,43,118,13,2567,725,30,43,118,239,4284,69,3|@13
-@5467	@1123	@3	general.castbarPlayerFrameLevelOffset		@4595	@1124	@5475:frame_layer	@2528	@1369	@1474	@239,691,1071,2567,2528,2567,2528,38,239,4284,69,3,148,5563|@1069
-@5467	@1123	@3	general.castbarPlayerIconFrameLevelOffset		@4339	@1124	@5475:detail%2Emsuf2_castbar_icon_layer	@2528	@1369	@1474	@239,691,1071,2528,4342,2567,2528,4342,4330,2528,11,239,4284,69,3,148,5564|@1070
-@5467	@1123	@3	player.texLayerLevel		@4316	@1124	@5474:level	@4318	@4319	@5565	@239,691,1071,2567,190,239,2567,190,239,240,4284,69,3,69,4734|@703
+@5467	@1123	@3	general.castbarPlayerFrameLevelOffset		@4595	@1124	@5475:frame_layer	@2528	@1369	@1474	@239,691,1071,2567,2528,2567,2528,38,239,4284,69,3,148,5564|@1069
+@5467	@1123	@3	general.castbarPlayerIconFrameLevelOffset		@4339	@1124	@5475:detail%2Emsuf2_castbar_icon_layer	@2528	@1369	@1474	@239,691,1071,2528,4342,2567,2528,4342,4330,2528,11,239,4284,69,3,148,5565|@1070
+@5467	@1123	@3	player.texLayerLevel		@4316	@1124	@5474:level	@4318	@4319	@5566	@239,691,1071,2567,190,239,2567,190,239,240,4284,69,3,69,4734|@703
 @5467	@1962	@3	player.portraitLevelOffset		@4351	@1963	@5478:portraitleveloffset	@1621	@1369	@1622	@239,486,2567,1621,2567,1621,1964,4284,69,3,69,1964|@316
-@5467	@5566	@1043			@4279	@5567	@5468:indicator%2Eleader	@4280	@4281	@5568	@1483,11,1348,922,2567,1348,922,1483,4284,69,1043|@1071
+@5467	@5567	@1043			@4279	@5568	@5468:indicator%2Eleader	@4280	@4281	@5569	@1483,11,1348,922,2567,1348,922,1483,4284,69,1043|@1071
 @5467	@4737	@32	player.levelIndicatorDifficultyColor		@4738	@4739	@5468:level%2Edifficulty_color	@4280	@1369	@1370	@240,1398,263,1348,240,2567,1348,240,1398,227,4284,69,32,69,4740|@947
 @5467	@1488	@1043			@4279	@1489	@5468:indicator%2Elevel	@4280	@4281	@4741	@240,162,1348,922,2567,1348,922,240,4284,69,1043|@657
 @5467	@439	@18	player.playerPowerSource		@4450	@441	@5487:resource_source	@4451			@273,442,443,104,2567,128,2567,128,104,444,4284,69,18,69,445|@1072
-@5467	@4742	@3	general.castbarPlayerSpellNameMaxWidth		@4595	@4743	@5475:spell_text_manual_width	@2528	@1369	@1474	@277,162,272,2567,2528,2567,2528,716,162,277,272,4284,69,3,148,5569|@1073
-@5467	@4745	@3	general.castbarPlayerBarWidth		@4595	@4746	@5475:manual_width	@2528	@1369	@1681	@277,272,2567,2528,2567,2528,277,272,4284,69,3,148,5570|@1067
+@5467	@4742	@3	general.castbarPlayerSpellNameMaxWidth		@4595	@4743	@5475:spell_text_manual_width	@2528	@1369	@1474	@277,162,272,2567,2528,2567,2528,716,162,277,272,4284,69,3,148,5570|@1073
+@5467	@4745	@3	general.castbarPlayerBarWidth		@4595	@4746	@5475:manual_width	@2528	@1369	@1681	@277,272,2567,2528,2567,2528,277,272,4284,69,3,148,5571|@1067
 @5467	@1130	@3			@939	@1131	@5473:lane%2Ebuff%2Elayout%2Emax-icons	@13	@4290	@4358	@1131,28,118,13,2567,725,30,28,118,1131,1181,4284,69,3|@13
 @5467	@1130	@3			@4359	@1131	@5470:layout%2Emax	@13	@4290	@4360	@1131,271,1014,118,13,271,1014,118,1131,4284,69,3|@13
 @5467	@1130	@3			@941	@1131	@5473:lane%2Edebuff%2Elayout%2Emax-icons	@13	@4290	@4361	@1131,43,118,13,2567,725,30,43,118,1131,1181,4284,69,3|@13
@@ -12670,16 +12672,16 @@ Search.StaticIndexBlob = [==[
 @5467	@1132	@3			@1106	@1133	@5473:lane%2Ebuff%2Efilters%2Emax-duration	@13	@4290	@4346	@1134,414,28,937,13,2567,725,30,28,937,1131,414,4284,69,3|@168
 @5467	@1132	@3			@4391	@1133	@5470:filters%2Emax-duration	@13	@4290	@4393	@1134,414,271,1014,937,13,271,1014,937,1131,414,4284,69,3|@168
 @5467	@1132	@3			@1109	@1133	@5473:lane%2Edebuff%2Efilters%2Emax-duration	@13	@4290	@4349	@1134,414,43,937,13,2567,725,30,43,937,1131,414,4284,69,3|@168
-@5467	@4753	@32	player.texLayerMirrorH		@4316	@4754	@5474:mirrorh	@4318	@4319	@5571	@4444,4756,2567,190,239,2567,190,239,4757,4284,69,32,69,4758|@782
-@5467	@4759	@32	player.texLayerMirrorV		@4316	@4760	@5474:mirrorv	@4318	@4319	@5572	@4444,4762,2567,190,239,2567,190,239,4763,4284,69,32,69,4764|@783
-@5467	@4765	@32	player.loadCondHideMounted		@4692	@4766	@5552:loadcondhidemounted	@4693			@4766,2567,2443,4138,2567,2443,4138,4767,4284,69,32,69,4767|@771
+@5467	@4753	@32	player.texLayerMirrorH		@4316	@4754	@5474:mirrorh	@4318	@4319	@5572	@4444,4756,2567,190,239,2567,190,239,4757,4284,69,32,69,4758|@782
+@5467	@4759	@32	player.texLayerMirrorV		@4316	@4760	@5474:mirrorv	@4318	@4319	@5573	@4444,4762,2567,190,239,2567,190,239,4763,4284,69,32,69,4764|@783
+@5467	@4765	@32	player.loadCondHideMounted		@4692	@4766	@5553:loadcondhidemounted	@4693			@4766,2567,2443,4138,2567,2443,4138,4767,4284,69,32,69,4767|@771
 @5467	@1990	@3	player.nameTextLayer		@4672	@1991	@5469:advanced%2Enametextlayer	@162	@1369	@1474	@720,239,162,108,2567,162,108,1992,4284,69,3,69,1992|@784
 @5467	@4768	@32			@4391	@4769	@5470:filters%2Eincludenameplateonly	@13	@4290	@4393	@4347,1141,271,1014,937,13,271,1014,937,4348,4284,69,32|@13
-@5467	@4770	@32	player.loadCondHideNoTarget		@4692	@4771	@5552:loadcondhidenotarget	@4693			@3835,87,2567,2443,4138,2567,2443,4138,4772,4284,69,32,69,4772|@771
+@5467	@4770	@32	player.loadCondHideNoTarget		@4692	@4771	@5553:loadcondhidenotarget	@4693			@3835,87,2567,2443,4138,2567,2443,4138,4772,4284,69,32,69,4772|@771
 @5467	@4773	@32	auras3.player.debuff.filter.nonPlayer		@1109	@1136	@5473:lane%2Edebuff%2Efilters%2Enonplayer	@13	@4290	@4349	@1137,69,13,43,937,13,2567,725,30,43,937,1138,4284,69,32,15,69,43,1444,1138|@785
 @5467	@4774	@32			@4391	@4775	@5470:filters%2Enotcancelable	@13	@4290	@4393	@2465,4455,271,1014,937,13,271,1014,937,4776,4284,69,32|@13
 @5467	@4774	@32	auras3.player.buff.filter.notCancelable		@1106	@4775	@5473:lane%2Ebuff%2Efilters%2Enotcancelable	@13	@4290	@4346	@2465,4455,28,937,13,2567,725,30,28,937,4776,4284,69,32,15,69,28,1444,4776|@786
-@5467	@5573	@713			@4469	@5574	@5470:reminder%2Eenchant-item	@5500	@4290	@4298	@5575,719,5576,4299,718,719,717,271,1014,4472,13,271,1014,4472,5502,4299,4284,69,713|@1075
+@5467	@5574	@713			@4469	@5575	@5470:reminder%2Eenchant-item	@5500	@4290	@4298	@5576,719,5577,4299,718,719,717,271,1014,4472,13,271,1014,4472,5502,4299,4284,69,713|@1075
 @5467	@1998	@32			@4391	@1999	@5470:filters%2Eonlymine	@13	@4290	@4393	@1141,1144,271,1014,937,13,271,1014,937,4780,4284,69,32|@13
 @5467	@1998	@32	auras3.player.buff.filter.onlyMine		@1106	@1999	@5473:lane%2Ebuff%2Efilters%2Eonlymine	@13	@4290	@4346	@1141,1144,28,937,13,2567,725,30,28,937,4780,4284,69,32,15,69,28,1444,4780|@788
 @5467	@1998	@32	auras3.player.debuff.filter.onlyMine		@1109	@1999	@5473:lane%2Edebuff%2Efilters%2Eonlymine	@13	@4290	@4349	@1141,1144,43,937,13,2567,725,30,43,937,4780,4284,69,32,15,69,43,1444,4780|@789
@@ -12687,22 +12689,22 @@ Search.StaticIndexBlob = [==[
 @5467	@4781	@32	player.nameTextMouseover		@4369	@4782	@5469:name%2Emouseover	@162	@1369	@1605	@1141,65,68,2767,162,720,2567,162,720,2767,4284,69,32,69,4784|@790
 @5467	@4781	@32	player.powerTextMouseover		@1989	@4782	@5469:power%2Emouseover	@162	@1369	@1709	@1141,65,68,2767,162,128,2567,162,128,2767,4284,69,32,69,4785|@790
 @5467	@4786	@32			@4469	@4787	@5470:reminder%2Eonly-castable	@4471	@4290	@4412	@1141,65,2518,4788,4789,2420,4790,271,1014,4472,13,271,1014,4472,1141,4791,4284,69,32|@791
-@5467	@1145	@3			@4480	@179	@5480:lane%2Ebuff%2Efull-frame%2Ealpha	@5515	@4290	@4363	@179,28,403,38,13,12,30,28,403,38,9,4284,69,3|@1053
+@5467	@1145	@3			@4480	@179	@5480:lane%2Ebuff%2Efull-frame%2Ealpha	@5516	@4290	@4363	@179,28,403,38,13,12,30,28,403,38,9,4284,69,3|@1053
 @5467	@1145	@3			@4423	@179	@5470:appearance%2Eopacity	@4696	@4290	@4426	@179,271,1014,10,13,271,1014,10,179,4284,69,3|@767
 @5467	@1145	@3			@4482	@179	@5470:effect%2Eopacity	@4483	@4290	@4426	@179,271,1014,557,13,271,1014,557,179,4284,69,3|@705
-@5467	@1145	@3			@4484	@179	@5480:lane%2Edebuff%2Efull-frame%2Ealpha	@5516	@4290	@4367	@179,43,403,38,13,12,30,43,403,38,9,4284,69,3|@1053
-@5467	@1145	@3	player.texLayerAlpha		@4316	@179	@5474:alpha	@4318	@4319	@5577	@179,2567,190,239,2567,190,239,9,4284,69,3,69,4793|@703
-@5467	@4794	@3	player.texLayerHealthLowAlpha		@4316	@4795	@5474:healthlowalpha	@4318	@4319	@5578	@179,1047,229,2567,190,239,2567,190,239,4797,4284,69,3,69,4798|@792
+@5467	@1145	@3			@4484	@179	@5480:lane%2Edebuff%2Efull-frame%2Ealpha	@5517	@4290	@4367	@179,43,403,38,13,12,30,43,403,38,9,4284,69,3|@1053
+@5467	@1145	@3	player.texLayerAlpha		@4316	@179	@5474:alpha	@4318	@4319	@5578	@179,2567,190,239,2567,190,239,9,4284,69,3,69,4793|@703
+@5467	@4794	@3	player.texLayerHealthLowAlpha		@4316	@4795	@5474:healthlowalpha	@4318	@4319	@5579	@179,1047,229,2567,190,239,2567,190,239,4797,4284,69,3,69,4798|@792
 @5467	@495	@3	player.detachedPowerOrbSize		@4450	@497	@5487:detachedpowerorbsize	@4451			@498,57,2567,128,2567,128,500,4284,69,3,69,500|@1046
 @5467	@1146	@18			@1147	@609	@5480:lane%2Ebuff%2Eauras3-sort-direction	@13	@4290	@4799	@609,28,1149,13,2567,725,30,28,1149,1150,748,4284,69,18|@170
 @5467	@1146	@18			@4800	@609	@5470:custom1%2Eordering%2Esort-direction	@13	@4290	@4801	@609,4303,1149,13,271,1014,4303,1149,1150,748,4284,69,18|@170
 @5467	@1146	@18			@4802	@609	@5470:custom2%2Eordering%2Esort-direction	@13	@4290	@4803	@609,4306,1149,13,271,1014,4306,1149,1150,748,4284,69,18|@170
 @5467	@1146	@18			@4804	@609	@5470:custom3%2Eordering%2Esort-direction	@13	@4290	@4805	@609,4309,1149,13,271,1014,4309,1149,1150,748,4284,69,18|@170
 @5467	@1146	@18			@1151	@609	@5480:lane%2Edebuff%2Eauras3-sort-direction	@13	@4290	@4806	@609,43,1149,13,2567,725,30,43,1149,1150,748,4284,69,18|@170
-@5467	@1146	@18			@5579	@609	@5470:custom4%2Eordering%2Esort-direction	@13	@4290	@4808	@609,999,16,1149,13,271,1014,999,16,1149,1150,748,4284,69,18|@170
+@5467	@1146	@18			@5580	@609	@5470:custom4%2Eordering%2Esort-direction	@13	@4290	@4808	@609,999,16,1149,13,271,1014,999,16,1149,1150,748,4284,69,18|@170
 @5467	@2008	@3	player.oocFadeAlpha		@4417	@2009	@5496:ooc_fade_alpha	@1626	@4418	@4613	@368,369,370,179,2567,1626,2567,1626,387,1767,9,4284,69,3,69,2010|@13
-@5467	@4809	@32	player.loadCondHideOutOfCombat		@4692	@4810	@5552:loadcondhideoutofcombat	@4693			@368,369,370,2567,2443,4138,2567,2443,4138,4811,4284,69,32,69,4811|@771
-@5467	@4812	@32	player.loadCondHideOutOfCombatNoTarget		@4692	@4813	@5552:loadcondhideoutofcombatnotarget	@4693			@368,369,370,956,3835,87,2567,2443,4138,2567,2443,4138,4814,4284,69,32,69,4814|@771
+@5467	@4809	@32	player.loadCondHideOutOfCombat		@4692	@4810	@5553:loadcondhideoutofcombat	@4693			@368,369,370,2567,2443,4138,2567,2443,4138,4811,4284,69,32,69,4811|@771
+@5467	@4812	@32	player.loadCondHideOutOfCombatNoTarget		@4692	@4813	@5553:loadcondhideoutofcombatnotarget	@4693			@368,369,370,956,3835,87,2567,2443,4138,2567,2443,4138,4814,4284,69,32,69,4814|@771
 @5467	@1155	@227			@960	@1156	@5473:lane%2Ebuff%2Ebars%2Eoutline-color	@13	@4290	@4405	@503,227,28,109,13,2567,725,30,28,109,503,227,4284,69,227|@13
 @5467	@1155	@227			@963	@1156	@5473:lane%2Edebuff%2Ebars%2Eoutline-color	@13	@4290	@4406	@503,227,43,109,13,2567,725,30,43,109,503,227,4284,69,227|@13
 @5467	@1157	@18			@960	@1158	@5473:lane%2Ebuff%2Ebars%2Eoutline-color-mode	@13	@4290	@4405	@503,227,602,28,109,13,2567,725,30,28,109,503,227,602,4284,69,18|@171
@@ -12712,9 +12714,9 @@ Search.StaticIndexBlob = [==[
 @5467	@1161	@18			@960	@1162	@5473:lane%2Ebuff%2Ebars%2Eoutline-style	@13	@4290	@4405	@503,12,28,109,13,2567,725,30,28,109,503,12,4284,69,18|@173
 @5467	@1161	@18			@963	@1162	@5473:lane%2Edebuff%2Ebars%2Eoutline-style	@13	@4290	@4406	@503,12,43,109,13,2567,725,30,43,109,503,12,4284,69,18|@173
 @5467	@2014	@18	player.portraitOverlayAlign		@4351	@2015	@5478:portraitoverlayalign	@1621	@1369	@1622	@1281,622,2567,1621,2567,1621,2016,4284,69,18,69,2016|@317
-@5467	@1292	@18	player.unitDispelOverlayTrigger		@4535	@1293	@5526:overlay%2Eunitdispeloverlaytrigger	@4536			@1281,1294,951,1281,2567,951,1281,4815,4284,69,18,69,4815|@793
-@5467	@1296	@3	player.unitDispelOverlayAlpha		@4535	@1297	@5526:overlay%2Eunitdispeloverlayalpha	@4536			@1281,179,951,1281,2567,951,1281,4816,4284,69,3,69,4816|@323
-@5467	@1299	@18	player.unitDispelOverlayStyle		@4535	@1300	@5526:overlay%2Eunitdispeloverlaystyle	@4536			@1281,12,951,1281,2567,951,1281,4817,4284,69,18,69,4817|@794
+@5467	@1292	@18	player.unitDispelOverlayTrigger		@4535	@1293	@5527:overlay%2Eunitdispeloverlaytrigger	@4536			@1281,1294,951,1281,2567,951,1281,4815,4284,69,18,69,4815|@793
+@5467	@1296	@3	player.unitDispelOverlayAlpha		@4535	@1297	@5527:overlay%2Eunitdispeloverlayalpha	@4536			@1281,179,951,1281,2567,951,1281,4816,4284,69,3,69,4816|@323
+@5467	@1299	@18	player.unitDispelOverlayStyle		@4535	@1300	@5527:overlay%2Eunitdispeloverlaystyle	@4536			@1281,12,951,1281,2567,951,1281,4817,4284,69,18,69,4817|@794
 @5467	@1163	@3			@939	@1164	@5473:lane%2Ebuff%2Elayout%2Eper-row	@13	@4290	@4358	@684,1165,28,118,13,2567,725,30,28,118,684,1165,4284,69,3|@13
 @5467	@1163	@3			@4359	@1164	@5470:layout%2Eperrow	@13	@4290	@4360	@684,1165,271,1014,118,13,271,1014,118,1166,4284,69,3|@13
 @5467	@1163	@3			@941	@1164	@5473:lane%2Edebuff%2Elayout%2Eper-row	@13	@4290	@4361	@684,1165,43,118,13,2567,725,30,43,118,684,1165,4284,69,3|@13
@@ -12725,25 +12727,25 @@ Search.StaticIndexBlob = [==[
 @5467	@2055	@32			@4351	@1621	@5478:enabled	@1621			@1621,2567,1621,2567,1621,235,4284,69,32|@798
 @5467	@2061	@18	player.portraitDetachedPoint		@4351	@2062	@5478:portraitdetachedpoint	@1621	@1369	@1622	@1621,113,262,2567,1621,2567,1621,2063,4284,69,18,69,2063|@278
 @5467	@2064	@32	player.portraitBgEnabled		@4351	@2065	@5478:portraitbgenabled	@1621	@1369	@1474	@1621,189,2567,1621,2567,1621,2066,4284,69,32,69,2066|@322
-@5467	@2067	@3	player.portraitEdgeSoftness		@4351	@2068	@5478:portraitedgesoftness	@1621	@4353	@5580	@1621,1316,2069,2567,1621,2567,1621,2070,4284,69,3,69,2070|@13
+@5467	@2067	@3	player.portraitEdgeSoftness		@4351	@2068	@5478:portraitedgesoftness	@1621	@4353	@5581	@1621,1316,2069,2567,1621,2567,1621,2070,4284,69,3,69,2070|@13
 @5467	@2071	@3	player.portraitAlpha		@4351	@2072	@5478:portraitalpha	@1621	@1369	@1622	@1621,179,2567,1621,2567,1621,2073,4284,69,3,69,2073|@323
 @5467	@2074	@3	player.portraitZoom		@4351	@2075	@5478:portraitzoom	@1621	@1369	@1884	@1621,1119,2567,1621,2567,1621,2076,4284,69,3,69,2076|@13
 @5467	@1167	@18			@25	@868	@5480:lane%2Ebuff%2Eauras3-duration-bar-position	@5491	@4290	@4363	@868,12,28,13,12,30,28,15,414,302,868,4284,69,18|@1076
 @5467	@1167	@18			@76	@868	@5480:lane%2Edebuff%2Eauras3-duration-bar-position	@5492	@4290	@4367	@868,12,43,13,12,30,43,15,414,302,868,4284,69,18|@1076
-@5467	@1167	@18	general.castbarPlayerIconPosition		@4339	@868	@5475:detail%2Emsuf2_castbar_icon_position	@2528	@1369	@4448	@868,2528,4342,2567,2528,4342,4330,2528,11,868,4284,69,18,148,5581|@1077
+@5467	@1167	@18	general.castbarPlayerIconPosition		@4339	@868	@5475:detail%2Emsuf2_castbar_icon_position	@2528	@1369	@4448	@868,2528,4342,2567,2528,4342,4330,2528,11,868,4284,69,18,148,5582|@1077
 @5467	@1167	@520	player.portraitMode		@4351	@868	@5478:position	@1621	@1369	@1681	@868,2567,1621,2567,1621,868,4284,69,520,69,2056|@324
-@5467	@4826	@18	general.castbarPlayerSpellNamePosition		@4339	@4827	@5475:detail%2Emsuf2_castbar_spell_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,716,868,4284,69,18,148,5582|@1078
-@5467	@4826	@18	general.castbarPlayerTargetNamePosition		@4339	@4827	@5475:detail%2Emsuf2_castbar_target_name_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,87,720,868,4284,69,18,148,5583|@1079
-@5467	@4826	@18	general.castbarPlayerTimePosition		@4339	@4827	@5475:detail%2Emsuf2_castbar_time_position	@2528	@1369	@4597	@868,538,2528,4342,2567,2528,4342,4330,2528,419,868,4284,69,18,148,5584|@1079
+@5467	@4826	@18	general.castbarPlayerSpellNamePosition		@4339	@4827	@5475:detail%2Emsuf2_castbar_spell_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,716,868,4284,69,18,148,5583|@1078
+@5467	@4826	@18	general.castbarPlayerTargetNamePosition		@4339	@4827	@5475:detail%2Emsuf2_castbar_target_name_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,87,720,868,4284,69,18,148,5584|@1079
+@5467	@4826	@18	general.castbarPlayerTimePosition		@4339	@4827	@5475:detail%2Emsuf2_castbar_time_position	@2528	@1369	@4597	@868,538,2528,4342,2567,2528,4342,4330,2528,419,868,4284,69,18,148,5585|@1079
 @5467	@2082	@32	player.powerBarBorderEnabled		@4450	@2083	@5487:powerbarborderenabled	@4451			@128,302,8,2567,128,2567,128,2084,4284,69,32,69,2084|@41
 @5467	@4831	@3	player.powerBarHeight		@4450	@4832	@5487:powerbarheight	@4451			@128,302,347,2567,128,2567,128,4833,4284,69,3,69,4833|@13
 @5467	@4834	@3	player.powerTextLayer		@4672	@4835	@5469:advanced%2Epowertextlayer	@162	@1369	@1474	@128,162,239,162,108,2567,162,108,518,4284,69,3,69,518|@803
 @5467	@2088	@18			@1889	@2089	@5469:power%2Eslot%2Emode	@162	@1369	@1709	@128,606,128,219,2567,162,128,219,602,4284,69,18|@804
 @5467	@1169	@18			@903	@538	@5473:lane%2Ebuff%2Eblacklist%2Epreset-selection	@13	@4290	@4310	@538,28,908,13,2567,725,30,28,908,538,1170,4284,69,18|@176
 @5467	@1169	@18			@927	@538	@5473:lane%2Edebuff%2Eblacklist%2Epreset-selection	@13	@4290	@4314	@538,43,908,13,2567,725,30,43,908,538,1170,4284,69,18|@177
-@5467	@1171	@3			@4480	@1172	@5480:lane%2Ebuff%2Efull-frame%2Epriority	@5515	@4290	@4363	@1172,28,403,38,13,12,30,28,403,38,1172,4284,69,3|@1053
+@5467	@1171	@3			@4480	@1172	@5480:lane%2Ebuff%2Efull-frame%2Epriority	@5516	@4290	@4363	@1172,28,403,38,13,12,30,28,403,38,1172,4284,69,3|@1053
 @5467	@1171	@3			@4482	@1172	@5470:effect%2Epriority	@4483	@4290	@4426	@1172,271,1014,557,13,271,1014,557,1172,4284,69,3|@705
-@5467	@1171	@3			@4484	@1172	@5480:lane%2Edebuff%2Efull-frame%2Epriority	@5516	@4290	@4367	@1172,43,403,38,13,12,30,43,403,38,1172,4284,69,3|@1053
+@5467	@1171	@3			@4484	@1172	@5480:lane%2Edebuff%2Efull-frame%2Epriority	@5517	@4290	@4367	@1172,43,403,38,13,12,30,43,403,38,1172,4284,69,3|@1053
 @5467	@1503	@1043			@4279	@1504	@5468:indicator%2Estatuspvp	@4280	@4281	@5255	@1506,1507,1508,602,1506,1348,922,2567,1348,922,5256,4284,69,1043|@657
 @5467	@4836	@1043			@4279	@4837	@5468:indicator%2Eracetext	@4280	@4281	@4838	@4839,162,1348,922,2567,1348,922,4840,4284,69,1043|@657
 @5467	@1173	@32			@4391	@916	@5470:filters%2Eraid	@13	@4290	@4393	@916,271,1014,937,13,271,1014,937,916,4284,69,32|@13
@@ -12760,10 +12762,10 @@ Search.StaticIndexBlob = [==[
 @5467	@2808	@96		reset_aura_custom_container	@4853	@874	@5470:custom3%2Esetup%2Ereset	@13	@4290	@4854	@874,4309,569,13,271,1014,4309,569,874,4284,69,96,874,39,271,1014|@13
 @5467	@2808	@96		reset_aura_custom_container	@4855	@874	@5470:custom4%2Esetup%2Ereset	@13	@4290	@4416	@874,4293,569,13,271,1014,4293,569,874,4284,69,96,874,39,271,1014|@13
 @5467	@4856	@96		reset_unit_status_indicator	@1368	@4857	@5468:selected%2Ereset	@4280	@1369	@1370	@874,981,1348,922,1348,981,2567,1348,981,874,4284,69,96,874,2567,1348,922|@955
-@5467	@5585	@1043			@4279	@5586	@5468:indicator%2Estatusresting	@4280	@4281	@5587	@5588,69,1141,1348,922,2567,1348,922,5589,4284,69,1043|@1080
-@5467	@4858	@32	player.loadCondHideResting		@4692	@4859	@5552:loadcondhideresting	@4693			@4859,2567,2443,4138,2567,2443,4138,4860,4284,69,32,69,4860|@771
+@5467	@5586	@1043			@4279	@5587	@5468:indicator%2Estatusresting	@4280	@4281	@5588	@5589,69,1141,1348,922,2567,1348,922,5590,4284,69,1043|@1080
+@5467	@4858	@32	player.loadCondHideResting		@4692	@4859	@5553:loadcondhideresting	@4693			@4859,2567,2443,4138,2567,2443,4138,4860,4284,69,32,69,4860|@771
 @5467	@607	@32	player.hpTextReverse		@1984	@608	@5469:hp%2Ereverse	@162	@1369	@1590	@309,609,162,117,2567,162,117,309,4284,69,32,69,2107|@809
-@5467	@4864	@32	player.levelIndicatorForeverBadge		@4738	@4865	@5468:level%2Eforever_badge	@4280	@4866	@5590	@4868,240,4869,1348,240,2567,1348,240,4870,4869,4284,69,32,69,4871|@956
+@5467	@4864	@32	player.levelIndicatorForeverBadge		@4738	@4865	@5468:level%2Eforever_badge	@4280	@4866	@5591	@4868,240,4869,1348,240,2567,1348,240,4870,4869,4284,69,32,69,4871|@956
 @5467	@1186	@713			@903	@1187	@5473:lane%2Ebuff%2Eblacklist%2Esearch	@13	@4290	@4310	@1187,28,908,13,2567,725,30,28,908,1187,4284,69,713|@13
 @5467	@1186	@713			@5494	@1187	@5470:player-defensives%2Esearch	@13	@4290	@5472	@1187,271,1014,69,92,13,271,1014,69,92,1187,4284,69,713|@13
 @5467	@1186	@713			@4296	@1187	@5470:whitelist%2Esearch	@13	@4290	@4298	@1187,271,1014,4294,13,271,1014,4294,1187,4284,69,713|@13
@@ -12773,48 +12775,48 @@ Search.StaticIndexBlob = [==[
 @5467	@2144	@18	player.portraitShape		@4351	@29	@5478:portraitshape	@1621	@1369	@1640	@29,2567,1621,2567,1621,2145,4284,69,18,69,2145|@812
 @5467	@2146	@32	player.hpFullValueShort		@1984	@2147	@5469:hp%2Efull_value_short	@162	@1369	@1590	@2148,2149,162,117,2567,162,117,403,606,2148,4284,69,32,69,2150|@813
 @5467	@2146	@32	player.powerFullValueShort		@1989	@2147	@5469:power%2Efull_value_short	@162	@1369	@1709	@2148,2149,162,128,2567,162,128,403,606,2148,4284,69,32,69,4872|@13
-@5467	@1308	@18	player.unitDispelSymbolMode		@4539	@65	@5526:symbol%2Eunitdispelsymbolmode	@4540			@65,951,357,2567,951,357,4873,4284,69,18,69,4873|@814
-@5467	@1190	@32			@25	@1191	@5480:lane%2Ebuff%2Eshowcooldownswipe	@5553	@4290	@4363	@65,138,1192,12,28,13,12,30,28,1193,4284,69,32|@1068
-@5467	@1190	@32			@76	@1191	@5480:lane%2Edebuff%2Eshowcooldownswipe	@5527	@4290	@4367	@65,138,1192,12,43,13,12,30,43,1193,4284,69,32|@1068
-@5467	@1194	@32			@25	@1195	@5480:lane%2Ebuff%2Eshowcooldowntext	@5553	@4290	@4363	@65,138,162,12,28,13,12,30,28,1197,4284,69,32|@1068
-@5467	@1194	@32			@76	@1195	@5480:lane%2Edebuff%2Eshowcooldowntext	@5527	@4290	@4367	@65,138,162,12,43,13,12,30,43,1197,4284,69,32|@1068
+@5467	@1308	@18	player.unitDispelSymbolMode		@4539	@65	@5527:symbol%2Eunitdispelsymbolmode	@4540			@65,951,357,2567,951,357,4873,4284,69,18,69,4873|@814
+@5467	@1190	@32			@25	@1191	@5480:lane%2Ebuff%2Eshowcooldownswipe	@5554	@4290	@4363	@65,138,1192,12,28,13,12,30,28,1193,4284,69,32|@1068
+@5467	@1190	@32			@76	@1191	@5480:lane%2Edebuff%2Eshowcooldownswipe	@5528	@4290	@4367	@65,138,1192,12,43,13,12,30,43,1193,4284,69,32|@1068
+@5467	@1194	@32			@25	@1195	@5480:lane%2Ebuff%2Eshowcooldowntext	@5554	@4290	@4363	@65,138,162,12,28,13,12,30,28,1197,4284,69,32|@1068
+@5467	@1194	@32			@76	@1195	@5480:lane%2Edebuff%2Eshowcooldowntext	@5528	@4290	@4367	@65,138,162,12,43,13,12,30,43,1197,4284,69,32|@1068
 @5467	@2151	@32	player.showHP		@1984	@631	@5469:hp%2Eshow	@162	@1369	@1590	@65,117,162,162,117,2567,162,117,65,4284,69,32,69,4876|@816
 @5467	@2158	@32	player.showName		@4369	@2159	@5469:name%2Eshow	@162	@1369	@1605	@65,720,162,720,2567,162,720,65,4284,69,32,69,2160|@817
 @5467	@4879	@96		show_player_power_or_open_class_resources	@4450	@4880	@5487:enable_now	@4451			@65,128,2567,128,2567,128,842,2268,4284,69,96,65,69,128,719,1039,127,191|@20
 @5467	@2168	@32	player.showPowerText		@1989	@2169	@5469:power%2Eshow	@162	@1369	@1709	@65,128,162,162,128,2567,162,128,65,4284,69,32,69,4882|@819
-@5467	@5591	@32	player.pvpIndicatorCountdownEnabled		@5221	@5592	@5468:pvp%2Ecountdown	@4280	@4866	@5593	@65,1506,2905,1348,1506,2567,1348,1506,2905,4284,69,32,69,5594|@1081
+@5467	@5592	@32	player.pvpIndicatorCountdownEnabled		@5221	@5593	@5468:pvp%2Ecountdown	@4280	@4866	@5594	@65,1506,2905,1348,1506,2567,1348,1506,2905,4284,69,32,69,5595|@1081
 @5467	@1201	@32			@25	@1202	@5480:lane%2Ebuff%2Eshowstackcount	@5481	@4290	@4363	@65,1204,1205,12,28,13,12,30,28,4886,4284,69,32|@1053
 @5467	@1201	@32			@76	@1202	@5480:lane%2Edebuff%2Eshowstackcount	@5483	@4290	@4367	@65,1204,1205,12,43,13,12,30,43,4886,4284,69,32|@1053
 @5467	@1212	@32			@25	@1213	@5480:lane%2Ebuff%2Eshowdurationbar	@5491	@4290	@4363	@65,157,68,11,12,28,13,12,30,28,1200,4284,69,32|@1066
 @5467	@1212	@32			@76	@1213	@5480:lane%2Edebuff%2Eshowdurationbar	@5492	@4290	@4367	@65,157,68,11,12,43,13,12,30,43,1200,4284,69,32|@1066
-@5467	@1214	@32			@25	@1215	@5480:lane%2Ebuff%2Eshowtooltip	@5553	@4290	@4363	@65,1216,12,28,13,12,30,28,1217,4284,69,32|@1082
-@5467	@1214	@32			@76	@1215	@5480:lane%2Edebuff%2Eshowtooltip	@5527	@4290	@4367	@65,1216,12,43,13,12,30,43,1217,4284,69,32|@1082
+@5467	@1214	@32			@25	@1215	@5480:lane%2Ebuff%2Eshowtooltip	@5554	@4290	@4363	@65,1216,12,28,13,12,30,28,1217,4284,69,32|@1082
+@5467	@1214	@32			@76	@1215	@5480:lane%2Edebuff%2Eshowtooltip	@5528	@4290	@4367	@65,1216,12,43,13,12,30,43,1217,4284,69,32|@1082
 @5467	@1218	@32			@960	@1219	@5473:lane%2Ebuff%2Elayout%2Eshow-as-bars	@13	@4290	@4405	@65,1060,109,28,109,13,2567,725,30,28,109,65,1060,109,4284,69,32|@13
 @5467	@1218	@32			@963	@1219	@5473:lane%2Edebuff%2Elayout%2Eshow-as-bars	@13	@4290	@4406	@65,1060,109,43,109,13,2567,725,30,43,109,65,1060,109,4284,69,32|@13
-@5467	@5595	@32			@5494	@5596	@5470:player-defensives%2Eportrait-icon	@13	@4290	@4416	@65,16,228,1621,868,271,1014,69,92,13,271,1014,69,92,1621,11,4284,69,32|@1083
-@5467	@4887	@18	player.texLayerHealthCondition		@4316	@4888	@5474:healthcondition	@4318	@4319	@5597	@65,254,301,2567,190,239,2567,190,239,4890,4284,69,18,69,4891|@822
+@5467	@5596	@32			@5494	@5597	@5470:player-defensives%2Eportrait-icon	@13	@4290	@4416	@65,16,228,1621,868,271,1014,69,92,13,271,1014,69,92,1621,11,4284,69,32|@1083
+@5467	@4887	@18	player.texLayerHealthCondition		@4316	@4888	@5474:healthcondition	@4318	@4319	@5598	@65,254,301,2567,190,239,2567,190,239,4890,4284,69,18,69,4891|@822
 @5467	@2175	@32			@4595	@2176	@5475:portrait_cast_icon	@2528	@1369	@4448	@65,641,716,11,840,1621,2567,2528,2567,2528,1621,641,11,4284,69,32|@13
 @5467	@2175	@32	player.portraitCastSpellIcon		@4351	@2176	@5478:portraitcastspellicon	@1621	@1369	@1474	@65,641,716,11,840,1621,2567,1621,2567,1621,2177,4284,69,32,69,2177|@13
 @5467	@4892	@32			@5494	@4893	@5470:player-defensives%2Eportrait-cooldown-text	@13	@4290	@4416	@65,138,162,68,1621,271,1014,69,92,13,271,1014,69,92,1621,138,162,4284,69,32|@1084
 @5467	@4894	@32	player.showInterrupt		@4595	@4895	@5475:show_interrupt	@2528	@1369	@1681	@65,2870,2567,2528,2567,2528,65,2870,4284,69,32,69,4896|@13
-@5467	@4897	@32	player.showInterruptSource		@4595	@4898	@5475:show_interrupt_source	@2528	@4899	@5598	@65,4901,720,2567,2528,2567,2528,65,2870,444,4284,69,32,69,4902|@13
-@5467	@1310	@32	player.unitDispelOverlayOnHealth		@4535	@1311	@5526:overlay%2Eunitdispeloverlayonhealth	@4536			@65,68,1312,301,1141,951,1281,2567,951,1281,4903,4284,69,32,69,4903|@13
-@5467	@4904	@32	player.loadCondShowWhenInjured		@4692	@4905	@5552:loadcondshowwheninjured	@4693			@65,1141,1047,4906,301,2567,2443,4138,2567,2443,4138,4907,4284,69,32,69,4907|@824
+@5467	@4897	@32	player.showInterruptSource		@4595	@4898	@5475:show_interrupt_source	@2528	@4899	@5599	@65,4901,720,2567,2528,2567,2528,65,2870,444,4284,69,32,69,4902|@13
+@5467	@1310	@32	player.unitDispelOverlayOnHealth		@4535	@1311	@5527:overlay%2Eunitdispeloverlayonhealth	@4536			@65,68,1312,301,1141,951,1281,2567,951,1281,4903,4284,69,32,69,4903|@13
+@5467	@4904	@32	player.loadCondShowWhenInjured		@4692	@4905	@5553:loadcondshowwheninjured	@4693			@65,1141,1047,4906,301,2567,2443,4138,2567,2443,4138,4907,4284,69,32,69,4907|@824
 @5467	@4908	@32	player.showPowerBar		@4450	@2166	@5487:show	@4451			@65,128,302,2567,128,2567,128,65,4284,69,32,69,4881|@825
-@5467	@5599	@32	general.castbarPlayerShowSpellRank		@4595	@5600	@5475:show_spell_rank	@2528	@1369	@4340	@65,716,5601,2567,2528,2567,2528,65,716,5601,4284,69,32,148,5602|@51
+@5467	@5600	@32	general.castbarPlayerShowSpellRank		@4595	@5601	@5475:show_spell_rank	@2528	@1369	@4340	@65,716,5602,2567,2528,2567,2528,65,716,5602,4284,69,32,148,5603|@51
 @5467	@1226	@3			@939	@57	@5473:lane%2Ebuff%2Elayout%2Eicon-size	@13	@4290	@4358	@57,28,118,13,2567,725,30,28,118,11,57,4284,69,3|@13
 @5467	@1226	@3			@4359	@57	@5470:layout%2Esize	@13	@4290	@4360	@57,271,1014,118,13,271,1014,118,57,4284,69,3|@13
 @5467	@1226	@3			@941	@57	@5473:lane%2Edebuff%2Elayout%2Eicon-size	@13	@4290	@4361	@57,43,118,13,2567,725,30,43,118,11,57,4284,69,3|@13
-@5467	@1226	@3	general.castbarPlayerIconSize		@4339	@57	@5475:detail%2Emsuf2_castbar_icon_size	@2528	@1369	@4448	@57,2528,4342,2567,2528,4342,4330,2528,11,57,4284,69,3,148,5603|@51
-@5467	@1226	@3	general.castbarPlayerSpellNameFontSize		@4339	@57	@5475:detail%2Emsuf2_castbar_spell_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,716,57,4284,69,3,148,5604|@1085
-@5467	@1226	@3	general.castbarPlayerTargetNameFontSize		@4339	@57	@5475:detail%2Emsuf2_castbar_target_name_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,87,720,57,4284,69,3,148,5605|@1086
-@5467	@1226	@3	general.castbarPlayerTimeFontSize		@4339	@57	@5475:detail%2Emsuf2_castbar_time_size	@2528	@1369	@4597	@57,2528,4342,2567,2528,4342,4330,2528,419,57,4284,69,3,148,5606|@1086
+@5467	@1226	@3	general.castbarPlayerIconSize		@4339	@57	@5475:detail%2Emsuf2_castbar_icon_size	@2528	@1369	@4448	@57,2528,4342,2567,2528,4342,4330,2528,11,57,4284,69,3,148,5604|@51
+@5467	@1226	@3	general.castbarPlayerSpellNameFontSize		@4339	@57	@5475:detail%2Emsuf2_castbar_spell_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,716,57,4284,69,3,148,5605|@1085
+@5467	@1226	@3	general.castbarPlayerTargetNameFontSize		@4339	@57	@5475:detail%2Emsuf2_castbar_target_name_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,87,720,57,4284,69,3,148,5606|@1086
+@5467	@1226	@3	general.castbarPlayerTimeFontSize		@4339	@57	@5475:detail%2Emsuf2_castbar_time_size	@2528	@1369	@4597	@57,2528,4342,2567,2528,4342,4330,2528,419,57,4284,69,3,148,5607|@1086
 @5467	@1226	@3	player.nameFontSize		@4369	@57	@5469:name%2Esize	@162	@1369	@1605	@57,162,720,2567,162,720,57,4284,69,3,69,2195|@826
-@5467	@2196	@520	player.portraitSizeMode		@4351	@2197	@5478:portraitsizemode	@1621	@4353	@5607	@57,602,2567,1621,2567,1621,2198,4284,69,520,69,2198|@334
+@5467	@2196	@520	player.portraitSizeMode		@4351	@2197	@5478:portraitsizemode	@1621	@4353	@5608	@57,602,2567,1621,2567,1621,2198,4284,69,520,69,2198|@334
 @5467	@2199	@3	player.portraitSizeOverride		@4351	@2200	@5478:portraitsizeoverride	@1621	@1369	@1884	@57,1885,2567,1621,2567,1621,2201,4284,69,3,69,2201|@13
 @5467	@702	@32	player.powerSmoothFill		@4450	@704	@5487:powersmoothfill	@4451			@706,306,2567,128,2567,128,711,4284,69,32,69,711|@20
-@5467	@702	@32	player.smoothFill		@4461	@704	@5512:smooth_fill	@4462			@706,306,2567,1638,2567,1638,706,306,4284,69,32,69,2204|@700
-@5467	@4915	@32	player.loadCondHideSolo		@4692	@1657	@5552:loadcondhidesolo	@4693			@1657,2567,2443,4138,2567,2443,4138,4916,4284,69,32,69,4916|@771
+@5467	@702	@32	player.smoothFill		@4461	@704	@5513:smooth_fill	@4462			@706,306,2567,1638,2567,1638,706,306,4284,69,32,69,2204|@700
+@5467	@4915	@32	player.loadCondHideSolo		@4692	@1657	@5553:loadcondhidesolo	@4693			@1657,2567,2443,4138,2567,2443,4138,4916,4284,69,32,69,4916|@771
 @5467	@1228	@18			@1147	@1229	@5480:lane%2Ebuff%2Eauras3-sort-method	@13	@4290	@4799	@1150,254,28,1149,13,2567,725,30,28,1149,1150,1230,4284,69,18|@829
 @5467	@1228	@18			@4800	@1229	@5470:custom1%2Eordering%2Ebuff-sort-method	@13	@4290	@4801	@1150,254,4303,1149,13,271,1014,4303,1149,28,1150,1230,4284,69,18|@830
 @5467	@1228	@18			@4800	@1229	@5470:custom1%2Eordering%2Edebuff-sort-method	@13	@4290	@4801	@1150,254,4303,1149,13,271,1014,4303,1149,43,1150,1230,4284,69,18|@830
@@ -12823,9 +12825,9 @@ Search.StaticIndexBlob = [==[
 @5467	@1228	@18			@4804	@1229	@5470:custom3%2Eordering%2Ebuff-sort-method	@13	@4290	@4805	@1150,254,4309,1149,13,271,1014,4309,1149,28,1150,1230,4284,69,18|@830
 @5467	@1228	@18			@4804	@1229	@5470:custom3%2Eordering%2Edebuff-sort-method	@13	@4290	@4805	@1150,254,4309,1149,13,271,1014,4309,1149,43,1150,1230,4284,69,18|@830
 @5467	@1228	@18			@1151	@1229	@5480:lane%2Edebuff%2Eauras3-sort-method	@13	@4290	@4806	@1150,254,43,1149,13,2567,725,30,43,1149,1150,1230,4284,69,18|@831
-@5467	@1228	@18			@5579	@1229	@5470:custom4%2Eordering%2Ebuff-sort-method	@13	@4290	@4808	@1150,254,999,16,1149,13,271,1014,999,16,1149,28,1150,1230,4284,69,18|@829
-@5467	@4917	@18	player.texLayerColorTreatment		@4316	@4918	@5474:colortreatment	@4318	@4319	@5608	@444,227,2567,190,239,2567,190,239,4920,4284,69,18,69,4921|@832
-@5467	@2216	@3	general.castbarPlayerIconSpacing		@4339	@992	@5475:detail%2Emsuf2_castbar_icon_spacing	@2528	@1369	@4448	@992,2528,4342,2567,2528,4342,4330,2528,11,992,4284,69,3,148,5609|@51
+@5467	@1228	@18			@5580	@1229	@5470:custom4%2Eordering%2Ebuff-sort-method	@13	@4290	@4808	@1150,254,999,16,1149,13,271,1014,999,16,1149,28,1150,1230,4284,69,18|@829
+@5467	@4917	@18	player.texLayerColorTreatment		@4316	@4918	@5474:colortreatment	@4318	@4319	@5609	@444,227,2567,190,239,2567,190,239,4920,4284,69,18,69,4921|@832
+@5467	@2216	@3	general.castbarPlayerIconSpacing		@4339	@992	@5475:detail%2Emsuf2_castbar_icon_spacing	@2528	@1369	@4448	@992,2528,4342,2567,2528,4342,4330,2528,11,992,4284,69,3,148,5610|@51
 @5467	@4923	@18			@1368	@4924	@5468:selected%2Ecustomicon	@4280	@1369	@1370	@3118,11,1885,1348,981,2567,1348,981,1415,4284,69,18|@1087
 @5467	@1232	@18			@903	@716	@5473:lane%2Ebuff%2Eblacklist%2Espell-selection	@13	@4290	@4310	@716,28,908,13,2567,725,30,28,908,716,1170,4284,69,18|@188
 @5467	@1232	@18			@927	@716	@5473:lane%2Edebuff%2Eblacklist%2Espell-selection	@13	@4290	@4314	@716,43,908,13,2567,725,30,43,908,716,1170,4284,69,18|@834
@@ -12834,53 +12836,53 @@ Search.StaticIndexBlob = [==[
 @5467	@4926	@18			@4423	@1234	@5470:appearance%2Estack-anchor	@4925	@4290	@4426	@1204,113,271,1014,10,13,271,1014,10,1204,113,4284,69,18|@711
 @5467	@4927	@32			@4423	@4928	@5470:appearance%2Estack-count	@4925	@4290	@4426	@1204,1205,271,1014,10,13,271,1014,10,1204,1205,4284,69,32|@710
 @5467	@4929	@3			@4423	@4930	@5470:appearance%2Estacksize	@4925	@4290	@4426	@1204,57,271,1014,10,13,271,1014,10,1238,4284,69,3|@710
-@5467	@5610	@1043			@4279	@5611	@5468:indicator%2Estance	@4280	@4281	@5612	@5611,1348,922,2567,1348,922,5611,4284,69,1043|@657
+@5467	@5611	@1043			@4279	@5612	@5468:indicator%2Estance	@4280	@4281	@5613	@5612,1348,922,2567,1348,922,5612,4284,69,1043|@657
 @5467	@4931	@1551			@4932	@1553	@5468:section	@4280	@1369	@1370	@1348,1181,2567,1348,2567,1348,1551,4284,69,1551|@13
 @5467	@4933	@18			@1368	@4934	@5468:selected%2Eanchor	@4280	@1369	@1370	@1348,922,113,1348,981,2567,1348,981,113,4284,69,18|@1088
-@5467	@4935	@32			@1368	@4936	@5468:selected%2Eenabled	@4280	@4866	@5613	@1348,922,235,1348,981,2567,1348,981,235,4284,69,32|@962
+@5467	@4935	@32			@1368	@4936	@5468:selected%2Eenabled	@4280	@4866	@5614	@1348,922,235,1348,981,2567,1348,981,235,4284,69,32|@962
 @5467	@4938	@3			@4328	@4939	@5468:placement%2Emsuf2_status_layer	@4280	@1369	@1370	@1348,922,239,1348,2050,2567,1348,2050,4330,1348,239,4284,69,3|@963
 @5467	@4940	@18			@4932	@4941	@5468:selector	@4280	@1369	@1370	@1348,922,696,2567,1348,2567,1348,696,4284,69,18|@1089
-@5467	@4942	@3			@1368	@4943	@5468:selected%2Esize	@4280	@4866	@5614	@1348,922,57,1348,981,2567,1348,981,57,4284,69,3|@965
+@5467	@4942	@3			@1368	@4943	@5468:selected%2Esize	@4280	@4866	@5615	@1348,922,57,1348,981,2567,1348,981,57,4284,69,3|@965
 @5467	@4945	@32	general.statusIconsUseMidnightStyle		@4932	@4946	@5468:midnight_style	@4280	@1369	@1370	@1348,922,12,2567,1348,2567,1348,4947,12,4284,69,32,148,4948|@966
 @5467	@4949	@18			@1368	@4950	@5468:selected%2Esymbol	@4280	@1369	@1370	@1348,922,357,1348,981,2567,1348,981,357,4284,69,18|@967
 @5467	@4951	@32			@4333	@4952	@5468:preview%2Emsuf2_status_test	@4280	@1369	@1370	@1348,922,2832,602,1348,146,2567,1348,146,4330,1348,2832,4284,69,32|@968
 @5467	@4953	@96			@1368	@4954	@5468:selected%2Etext_settings	@4280	@1369	@1370	@1348,162,2471,1348,981,2567,1348,981,162,2471,4284,69,96|@969
-@5467	@4957	@32	player.loadCondHideStealthed		@4692	@4958	@5552:loadcondhidestealthed	@4693			@4958,2567,2443,4138,2567,2443,4138,4959,4284,69,32,69,4959|@771
+@5467	@4957	@32	player.loadCondHideStealthed		@4692	@4958	@5553:loadcondhidestealthed	@4693			@4958,2567,2443,4138,2567,2443,4138,4959,4284,69,32,69,4959|@771
 @5467	@4960	@18			@4423	@1192	@5470:appearance%2Eswipe-direction	@4504	@4290	@4426	@1192,271,1014,10,13,271,1014,10,1192,748,4284,69,18|@846
 @5467	@1245	@18			@25	@1246	@5480:lane%2Ebuff%2Eauras3-cooldown-swipe-direction	@5479	@4290	@4363	@1192,748,12,28,13,12,30,28,15,138,1192,748,4284,69,18|@1090
 @5467	@1245	@18			@76	@1246	@5480:lane%2Edebuff%2Eauras3-cooldown-swipe-direction	@5482	@4290	@4367	@1192,748,12,43,13,12,30,43,15,138,1192,748,4284,69,18|@1090
-@5467	@1321	@18	player.unitDispelSymbolAnchor		@4539	@1322	@5526:symbol%2Eunitdispelsymbolanchor	@4540			@357,113,951,357,2567,951,357,4961,4284,69,18,69,4961|@671
-@5467	@1324	@18	player.unitDispelSymbolTrigger		@4539	@1325	@5526:symbol%2Eunitdispelsymboltrigger	@4540			@357,1294,951,357,2567,951,357,4962,4284,69,18,69,4962|@793
-@5467	@1327	@3	player.unitDispelSymbolAlpha		@4539	@1328	@5526:symbol%2Eunitdispelsymbolalpha	@4540			@357,179,951,357,2567,951,357,4963,4284,69,3,69,4963|@323
-@5467	@1330	@18	player.unitDispelSymbolStyle		@4539	@1331	@5526:symbol%2Eunitdispelsymbolstyle	@4540			@357,926,951,357,2567,951,357,4964,4284,69,18,69,4964|@848
-@5467	@1333	@3	player.unitDispelSymbolSize		@4539	@1334	@5526:symbol%2Eunitdispelsymbolsize	@4540			@357,57,951,357,2567,951,357,4965,4284,69,3,69,4965|@13
-@5467	@1336	@3	player.unitDispelSymbolSpacing		@4539	@1337	@5526:symbol%2Eunitdispelsymbolspacing	@4540			@357,992,951,357,2567,951,357,4966,4284,69,3,69,4966|@13
-@5467	@4967	@18	player.unitDispelSymbolStrata		@4539	@4968	@5526:symbol%2Eunitdispelsymbolstrata	@4540			@357,4969,951,357,2567,951,357,4970,4284,69,18,69,4970|@849
+@5467	@1321	@18	player.unitDispelSymbolAnchor		@4539	@1322	@5527:symbol%2Eunitdispelsymbolanchor	@4540			@357,113,951,357,2567,951,357,4961,4284,69,18,69,4961|@671
+@5467	@1324	@18	player.unitDispelSymbolTrigger		@4539	@1325	@5527:symbol%2Eunitdispelsymboltrigger	@4540			@357,1294,951,357,2567,951,357,4962,4284,69,18,69,4962|@793
+@5467	@1327	@3	player.unitDispelSymbolAlpha		@4539	@1328	@5527:symbol%2Eunitdispelsymbolalpha	@4540			@357,179,951,357,2567,951,357,4963,4284,69,3,69,4963|@323
+@5467	@1330	@18	player.unitDispelSymbolStyle		@4539	@1331	@5527:symbol%2Eunitdispelsymbolstyle	@4540			@357,926,951,357,2567,951,357,4964,4284,69,18,69,4964|@848
+@5467	@1333	@3	player.unitDispelSymbolSize		@4539	@1334	@5527:symbol%2Eunitdispelsymbolsize	@4540			@357,57,951,357,2567,951,357,4965,4284,69,3,69,4965|@13
+@5467	@1336	@3	player.unitDispelSymbolSpacing		@4539	@1337	@5527:symbol%2Eunitdispelsymbolspacing	@4540			@357,992,951,357,2567,951,357,4966,4284,69,3,69,4966|@13
+@5467	@4967	@18	player.unitDispelSymbolStrata		@4539	@4968	@5527:symbol%2Eunitdispelsymbolstrata	@4540			@357,4969,951,357,2567,951,357,4970,4284,69,18,69,4970|@849
 @5467	@727	@32	player.detachedPowerBarSyncClassPower		@4450	@728	@5487:detachedpowerbarsyncclasspower	@4451			@386,272,126,127,104,2567,128,2567,128,729,4284,69,32,69,729|@1046
 @5467	@4971	@3			@25	@744	@5480:lane%2Ebuff%2Ecooldowntextsize	@5479	@4290	@4363	@162,57,12,28,13,12,30,28,4972,4284,69,3|@1091
 @5467	@4971	@3			@25	@744	@5480:lane%2Ebuff%2Estacktextsize	@5481	@4290	@4363	@162,57,12,28,13,12,30,28,4973,4284,69,3|@1092
 @5467	@4971	@3			@76	@744	@5480:lane%2Edebuff%2Ecooldowntextsize	@5482	@4290	@4367	@162,57,12,43,13,12,30,43,4972,4284,69,3|@1091
 @5467	@4971	@3			@76	@744	@5480:lane%2Edebuff%2Estacktextsize	@5483	@4290	@4367	@162,57,12,43,13,12,30,43,4973,4284,69,3|@1092
 @5467	@2230	@32	player.detachedPowerBarTextOnBar		@4450	@2231	@5487:detachedpowerbartextonbar	@4451			@162,68,129,302,2567,128,2567,128,542,4284,69,32,69,542|@13
-@5467	@4974	@18	player.texLayerTexture		@4316	@4975	@5474:texture	@4318	@4319	@5615	@190,2672,2567,190,239,2567,190,239,190,4284,69,18,69,4977|@852
-@5467	@4978	@18	player.texLayerCropMode		@4316	@4979	@5474:cropmode	@4318	@4319	@5616	@190,4981,2567,190,239,2567,190,239,4982,4284,69,18,69,4983|@853
-@5467	@4984	@3			@4480	@22	@5480:lane%2Ebuff%2Efull-frame%2Ethickness	@5515	@4290	@4363	@22,28,403,38,13,12,30,28,403,38,22,4284,69,3|@1053
+@5467	@4974	@18	player.texLayerTexture		@4316	@4975	@5474:texture	@4318	@4319	@5616	@190,2672,2567,190,239,2567,190,239,190,4284,69,18,69,4977|@852
+@5467	@4978	@18	player.texLayerCropMode		@4316	@4979	@5474:cropmode	@4318	@4319	@5617	@190,4981,2567,190,239,2567,190,239,4982,4284,69,18,69,4983|@853
+@5467	@4984	@3			@4480	@22	@5480:lane%2Ebuff%2Efull-frame%2Ethickness	@5516	@4290	@4363	@22,28,403,38,13,12,30,28,403,38,22,4284,69,3|@1053
 @5467	@4984	@3			@4482	@22	@5470:effect%2Ethickness	@4483	@4290	@4426	@22,271,1014,557,13,271,1014,557,22,4284,69,3|@705
-@5467	@4984	@3			@4484	@22	@5480:lane%2Edebuff%2Efull-frame%2Ethickness	@5516	@4290	@4367	@22,43,403,38,13,12,30,43,403,38,22,4284,69,3|@1053
+@5467	@4984	@3			@4484	@22	@5480:lane%2Edebuff%2Efull-frame%2Ethickness	@5517	@4290	@4367	@22,43,403,38,13,12,30,43,403,38,22,4284,69,3|@1053
 @5467	@4988	@32			@4423	@1216	@5470:appearance%2Etooltip	@4696	@4290	@4426	@1216,271,1014,10,13,271,1014,10,1216,4284,69,32|@854
-@5467	@5617	@713			@5494	@5618	@5470:player-defensives%2Ecustom-id	@13	@4290	@5472	@1263,2006,28,716,717,718,719,720,271,1014,69,92,13,271,1014,69,92,271,717,4284,69,713|@1093
-@5467	@5619	@32			@4469	@5620	@5470:reminder%2Eenchant-main-hand	@5500	@4290	@4298	@1263,689,4150,4208,5502,271,1014,4472,13,271,1014,4472,5502,4150,4208,4284,69,32|@1094
-@5467	@5621	@32			@4469	@5622	@5470:reminder%2Eenchant-off-hand	@5500	@4290	@4298	@1263,689,2468,4208,5502,271,1014,4472,13,271,1014,4472,5502,2468,4208,4284,69,32|@1095
-@5467	@5623	@713	player.unitDispelSymbolX		@2032	@5624	@5625:selection%2Edispel_symbol_offset_x				@3658,951,357,486,487,146,1170,2567,146,1170,951,357,486,487,4284,69,713,69,5626|@13
-@5467	@5627	@713	player.unitDispelSymbolY		@2032	@5628	@5625:selection%2Edispel_symbol_offset_y				@3658,951,357,486,492,146,1170,2567,146,1170,951,357,486,492,4284,69,713,69,5629|@13
-@5467	@2264	@96	general.enablePlayerCastbar		@4595	@2266	@5475:use_msuf	@2528	@1369	@1681	@752,1127,2567,2528,2567,2528,752,1127,4284,69,96,148,5630|@1096
+@5467	@5618	@713			@5494	@5619	@5470:player-defensives%2Ecustom-id	@13	@4290	@5472	@1263,2006,28,716,717,718,719,720,271,1014,69,92,13,271,1014,69,92,271,717,4284,69,713|@1093
+@5467	@5620	@32			@4469	@5621	@5470:reminder%2Eenchant-main-hand	@5500	@4290	@4298	@1263,689,4150,4208,5502,271,1014,4472,13,271,1014,4472,5502,4150,4208,4284,69,32|@1094
+@5467	@5622	@32			@4469	@5623	@5470:reminder%2Eenchant-off-hand	@5500	@4290	@4298	@1263,689,2468,4208,5502,271,1014,4472,13,271,1014,4472,5502,2468,4208,4284,69,32|@1095
+@5467	@5624	@713	player.unitDispelSymbolX		@2032	@5625	@5626:selection%2Edispel_symbol_offset_x				@3658,951,357,486,487,146,1170,2567,146,1170,951,357,486,487,4284,69,713,69,5627|@13
+@5467	@5628	@713	player.unitDispelSymbolY		@2032	@5629	@5626:selection%2Edispel_symbol_offset_y				@3658,951,357,486,492,146,1170,2567,146,1170,951,357,486,492,4284,69,713,69,5630|@13
+@5467	@2264	@96	general.enablePlayerCastbar		@4595	@2266	@5475:use_msuf	@2528	@1369	@1681	@752,1127,2567,2528,2567,2528,752,1127,4284,69,96,148,5631|@1096
 @5467	@4993	@32			@5494	@4994	@5470:player-defensives%2Eportrait-position-when-disabled	@13	@4290	@4416	@752,1621,868,1656,1621,2519,2468,271,1014,69,92,13,271,1014,69,92,1621,868,396,4995,4284,69,32|@1097
 @5467	@1266	@32	auras3.player.buff.visible		@939	@1267	@5473:lane%2Ebuff%2Elayout%2Evisible	@13	@4290	@4358	@1267,28,118,13,2567,725,30,28,118,1267,4284,69,32,15,69,28,1267|@13
 @5467	@1266	@32	auras3.player.debuff.visible		@941	@1267	@5473:lane%2Edebuff%2Elayout%2Evisible	@13	@4290	@4361	@1267,43,118,13,2567,725,30,43,118,1267,4284,69,32,15,69,43,1267|@13
 @5467	@4996	@18			@1368	@4997	@5468:selected%2Eiconstyle	@4280	@1369	@1370	@4998,12,1182,1225,922,1348,981,2567,1348,981,1470,4284,69,18|@977
-@5467	@764	@3	player.texLayerWidth		@4316	@272	@5474:width	@4318	@4319	@5631	@272,2567,190,239,2567,190,239,272,4284,69,3,69,5000|@703
-@5467	@5001	@18	general.castbarPlayerSpellNameTruncate		@4595	@5002	@5475:spell_text_width_mode	@2528	@1369	@1474	@272,139,2567,2528,2567,2528,716,162,272,602,4284,69,18,148,5632|@1098
-@5467	@766	@18	general.castbarPlayerMatchWidth		@4595	@768	@5475:width_mode	@2528	@1369	@1681	@272,602,2567,2528,2567,2528,272,602,4284,69,18,148,5633|@1099
+@5467	@764	@3	player.texLayerWidth		@4316	@272	@5474:width	@4318	@4319	@5632	@272,2567,190,239,2567,190,239,272,4284,69,3,69,5000|@703
+@5467	@5001	@18	general.castbarPlayerSpellNameTruncate		@4595	@5002	@5475:spell_text_width_mode	@2528	@1369	@1474	@272,139,2567,2528,2567,2528,716,162,272,602,4284,69,18,148,5633|@1098
+@5467	@766	@18	general.castbarPlayerMatchWidth		@4595	@768	@5475:width_mode	@2528	@1369	@1681	@272,602,2567,2528,2567,2528,272,602,4284,69,18,148,5634|@1099
 @5467	@2323	@3	player.portraitWidth		@4351	@2324	@5478:portraitwidth	@1621	@1369	@1884	@272,1885,2567,1621,2567,1621,2325,4284,69,3,69,2325|@13
 @5467	@5005	@3			@25	@487	@5480:lane%2Ebuff%2Ecooldowntextoffsetx	@5479	@4290	@4363	@487,12,28,13,12,30,28,5006,4284,69,3|@1091
 @5467	@5005	@3			@25	@487	@5480:lane%2Ebuff%2Estacktextoffsetx	@5481	@4290	@4363	@487,12,28,13,12,30,28,5007,4284,69,3|@1092
@@ -12892,674 +12894,674 @@ Search.StaticIndexBlob = [==[
 @5467	@5009	@3			@76	@492	@5480:lane%2Edebuff%2Estacktextoffsety	@5483	@4290	@4367	@492,12,43,13,12,30,43,5011,4284,69,3|@1092
 @5467	@2326	@3	player.portraitPanX		@4351	@2327	@5478:portraitpanx	@1621	@1369	@1884	@1119,218,487,2567,1621,2567,1621,2328,4284,69,3,69,2328|@340
 @5467	@2329	@3	player.portraitPanY		@4351	@2330	@5478:portraitpany	@1621	@1369	@1884	@1119,218,492,2567,1621,2567,1621,2331,4284,69,3,69,2331|@340
-@5634	@1340	@1043			@4279	@1342	@5635:indicator%2Estatusafktext	@4280	@4281	@4282	@1347,162,1348,922,2567,1348,922,1349,4284,87,1043|@657
-@5634	@1354	@1043			@4279	@1355	@5635:indicator%2Estatusafktimer	@4280	@4281	@4285	@1347,157,1348,922,2567,1348,922,1357,4284,87,1043|@657
-@5634	@1587	@520			@1588	@1589	@5636:hp%2Eslot%2Eabsorb	@162	@1369	@1590	@1589,117,219,2567,162,117,219,1589,4284,87,520|@271
-@5634	@4287	@96		aura_custom_whitelist_add_spell	@4288	@4289	@5637:custom4%2Edots%2Ecustom-id%2Eadd	@13	@4290	@4291	@103,271,717,86,271,717,13,271,1014,4293,86,271,717,103,4284,87,96,39,271,4294,103,716|@13
-@5634	@4295	@713			@4296	@4297	@5637:whitelist%2Einput	@13	@4290	@4298	@103,2006,28,716,717,716,718,719,4299,718,271,1014,4294,13,271,1014,4294,1077,4284,87,713|@658
-@5634	@4300	@96		aura_custom_whitelist_add_spell	@4301	@4302	@5637:custom1%2Ewhitelist%2Eadd	@13	@4290	@4298	@103,28,4303,4294,13,271,1014,4303,4294,103,4284,87,96,39,271,4294,103,716|@659
-@5634	@4300	@96		aura_custom_whitelist_add_spell	@4304	@4302	@5637:custom2%2Ewhitelist%2Eadd	@13	@4290	@4305	@103,28,4306,4294,13,271,1014,4306,4294,103,4284,87,96,39,271,4294,103,716|@659
-@5634	@4300	@96		aura_custom_whitelist_add_spell	@4307	@4302	@5637:custom3%2Ewhitelist%2Eadd	@13	@4290	@4308	@103,28,4309,4294,13,271,1014,4309,4294,103,4284,87,96,39,271,4294,103,716|@659
-@5634	@902	@96		aura_blacklist_add_spell	@903	@904	@5638:lane%2Ebuff%2Eblacklist%2Eadd-manual	@13	@4290	@4310	@103,271,28,28,908,13,2567,725,30,28,908,103,277,4284,87,96,39,908,103,716|@660
-@5634	@4312	@96		aura_blacklist_add_spell	@927	@4313	@5638:lane%2Edebuff%2Eblacklist%2Eadd-manual	@13	@4290	@4314	@103,3095,43,43,908,13,2567,725,30,43,908,103,277,4284,87,96,39,908,103,716|@661
-@5634	@923	@96		aura_blacklist_add_preset	@903	@924	@5638:lane%2Ebuff%2Eblacklist%2Eadd-preset-set	@13	@4290	@4310	@103,925,926,28,908,13,2567,725,30,28,908,103,538,926,4284,87,96,39,908,103,538|@117
-@5634	@923	@96		aura_blacklist_add_preset	@927	@924	@5638:lane%2Edebuff%2Eblacklist%2Eadd-preset-set	@13	@4290	@4314	@103,925,926,43,908,13,2567,725,30,43,908,103,538,926,4284,87,96,39,908,103,538|@117
-@5634	@931	@96		aura_blacklist_add_spell	@903	@932	@5638:lane%2Ebuff%2Eblacklist%2Eadd-preset-spell	@13	@4290	@4310	@103,716,28,908,13,2567,725,30,28,908,103,538,716,4284,87,96,39,908,103,716|@118
-@5634	@931	@96		aura_blacklist_add_spell	@927	@932	@5638:lane%2Edebuff%2Eblacklist%2Eadd-preset-spell	@13	@4290	@4314	@103,716,43,908,13,2567,725,30,43,908,103,538,716,4284,87,96,39,908,103,716|@118
-@5634	@4315	@32	target.texLayerBlendMode		@4316	@4317	@5639:blendmode	@4318	@4319	@4320	@4322,472,2567,190,239,2567,190,239,4323,4284,87,32,87,4324|@662
-@5634	@4325	@96		reset_unit_status_indicator	@1527	@4326	@5635:advanced%2Ereset	@4280	@1369	@1474	@108,874,981,1348,922,1348,108,2567,1348,108,874,4284,87,96,874,2567,1348,922|@923
-@5634	@4327	@3			@4328	@4329	@5635:placement%2Emsuf2_status_adv_layer	@4280	@1369	@1474	@108,1348,922,239,1348,2050,2567,1348,2050,4330,1348,4331,239,4284,87,3|@924
-@5634	@4332	@32			@4333	@4334	@5635:preview%2Emsuf2_status_adv_test	@4280	@1369	@1474	@108,1348,922,2832,602,1348,146,2567,1348,146,4330,1348,4331,2832,4284,87,32|@925
-@5634	@1592	@520	target.rangeFadeLayerMode		@4335	@1594	@5640:layer_mode	@4336			@1594,2567,838,1767,2567,838,1767,239,602,4284,87,520,87,1596|@666
-@5634	@4338	@18	general.castbarTargetTargetNameAlign		@4339	@622	@5641:detail%2Emsuf2_castbar_target_name_align	@2528	@1369	@4340	@622,2528,4342,2567,2528,4342,4330,2528,87,720,4275,4284,87,18,148,5642|@87
-@5634	@4344	@32	auras3.target.buff.filter.includeNameplateOnly		@1106	@4345	@5638:lane%2Ebuff%2Efilters%2Eincludenameplateonly	@13	@4290	@4346	@3238,1944,4347,1141,28,937,13,2567,725,30,28,937,4348,4284,87,32,15,87,28,1444,4348|@668
-@5634	@4344	@32	auras3.target.debuff.filter.includeNameplateOnly		@1109	@4345	@5638:lane%2Edebuff%2Efilters%2Eincludenameplateonly	@13	@4290	@4349	@3238,1944,4347,1141,43,937,13,2567,725,30,43,937,4348,4284,87,32,15,87,43,1444,4348|@669
-@5634	@4350	@32	target.portraitDragonArtwork		@4351	@4352	@5644:portraitdragonartwork	@1621	@4353	@5643	@692,65,4356,2880,2567,1621,2567,1621,4357,4284,87,32,87,4357|@670
-@5634	@111	@18			@939	@113	@5638:lane%2Ebuff%2Elayout%2Eanchor	@13	@4290	@4358	@113,28,118,13,2567,725,30,28,118,113,4284,87,18|@671
-@5634	@111	@18			@4359	@113	@5637:layout%2Eanchor	@13	@4290	@4360	@113,271,1014,118,13,271,1014,118,113,4284,87,18|@671
-@5634	@111	@18			@941	@113	@5638:lane%2Edebuff%2Elayout%2Eanchor	@13	@4290	@4361	@113,43,118,13,2567,725,30,43,118,113,4284,87,18|@671
-@5634	@111	@18			@25	@113	@5646:lane%2Ebuff%2Eauras3-cooldown-anchor	@5645	@4290	@4363	@113,12,28,13,12,30,28,15,138,113,4284,87,18|@1100
-@5634	@111	@18			@25	@113	@5646:lane%2Ebuff%2Estack-anchor	@5647	@4290	@4363	@113,12,28,13,12,30,28,1204,113,4284,87,18|@1101
-@5634	@111	@18			@76	@113	@5646:lane%2Edebuff%2Eauras3-cooldown-anchor	@5648	@4290	@4367	@113,12,43,13,12,30,43,15,138,113,4284,87,18|@1100
-@5634	@111	@18			@76	@113	@5646:lane%2Edebuff%2Estack-anchor	@5649	@4290	@4367	@113,12,43,13,12,30,43,1204,113,4284,87,18|@1101
-@5634	@111	@18	target.nameTextAnchor		@4369	@113	@5636:name%2Eanchor	@162	@1369	@1605	@113,162,720,2567,162,720,113,4284,87,18,87,4370|@674
-@5634	@111	@18	target.texLayerAnchor		@4316	@113	@5639:anchor	@4318	@4319	@5650	@113,2567,190,239,2567,190,239,113,4284,87,18,87,4372|@675
-@5634	@1607	@18	target.point		@4377	@1608	@5651:anchor_point	@4378			@113,262,2567,113,2567,4378,113,262,4284,87,18,87,262|@275
-@5634	@1610	@18	target.anchorToUnitframe		@4377	@1611	@5651:anchor_to	@4378			@113,126,2567,113,2567,4378,113,126,4284,87,18,87,4380|@1102
-@5634	@4381	@18	target.texLayerAnchorTarget		@4316	@1611	@5639:anchortarget	@4318	@4319	@5652	@113,126,2567,190,239,2567,190,239,4383,4284,87,18,87,4384|@1103
-@5634	@4385	@32	auras3.target.buff.filter.dispellableAny		@1106	@4386	@5638:lane%2Ebuff%2Efilters%2Edispellableany	@13	@4290	@4346	@950,951,4387,255,28,937,13,2567,725,30,28,937,4388,4284,87,32,15,87,28,1444,4388|@679
-@5634	@4389	@32	auras3.target.debuff.filter.dispellableAny		@1109	@949	@5638:lane%2Edebuff%2Efilters%2Edispellableany	@13	@4290	@4349	@950,951,255,43,937,13,2567,725,30,43,937,4388,4284,87,32,15,87,43,1444,4388|@680
-@5634	@4390	@32			@4391	@4392	@5637:filters%2Edispellableany	@13	@4290	@4393	@950,4394,255,271,1014,937,13,271,1014,937,4388,4284,87,32|@13
-@5634	@4395	@32	auras3.target.buff.filter.raid		@1106	@4396	@5638:lane%2Ebuff%2Efilters%2Eraid	@13	@4290	@4346	@955,254,957,28,937,13,2567,725,30,28,937,916,4284,87,32,15,87,28,1444,916|@681
-@5634	@5488	@1043			@4279	@5489	@5635:indicator%2Eassist	@4280	@4281	@5490	@1372,11,1348,922,2567,1348,922,1372,4284,87,1043|@657
-@5634	@1618	@18	target.portraitDetachedTo		@4351	@1620	@5644:portraitdetachedto	@1621	@1369	@1622	@1624,126,38,262,2567,1621,2567,1621,1625,4284,87,18,87,1625|@278
-@5634	@959	@227			@960	@961	@5638:lane%2Ebuff%2Ebars%2Efill-color	@13	@4290	@4405	@39,302,306,227,28,109,13,2567,725,30,28,109,306,227,4284,87,227|@13
-@5634	@959	@227			@963	@961	@5638:lane%2Edebuff%2Ebars%2Efill-color	@13	@4290	@4406	@39,302,306,227,43,109,13,2567,725,30,43,109,306,227,4284,87,227|@13
-@5634	@965	@96			@25	@967	@5646:lane%2Ebuff%2Eauras3-duration-bar-display	@5653	@4290	@4363	@39,302,118,12,28,13,12,30,28,15,414,302,451,4284,87,96|@1104
-@5634	@965	@96			@76	@967	@5646:lane%2Edebuff%2Eauras3-duration-bar-display	@5654	@4290	@4367	@39,302,118,12,43,13,12,30,43,15,414,302,451,4284,87,96|@1104
-@5634	@975	@18			@960	@976	@5638:lane%2Ebuff%2Ebars%2Ebar-texture	@13	@4290	@4405	@39,302,190,28,109,13,2567,725,30,28,109,302,190,4284,87,18|@125
-@5634	@975	@18			@963	@976	@5638:lane%2Edebuff%2Ebars%2Ebar-texture	@13	@4290	@4406	@39,302,190,43,109,13,2567,725,30,43,109,302,190,4284,87,18|@125
-@5634	@4409	@18			@4410	@4411	@5637:setup%2Eaura-type	@13	@4290	@4412	@39,255,271,1014,569,13,271,1014,569,39,255,4284,87,18|@684
-@5634	@4413	@32			@4414	@4415	@5637:target-dots%2Eauto-blacklist-debuffs	@13	@4290	@4416	@985,908,690,44,271,1014,87,86,13,271,1014,87,86,985,908,44,4284,87,32|@685
-@5634	@1377	@3	target.hpBgAlpha		@4417	@189	@5655:hpbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,1629,4284,87,3,87,1629|@686
-@5634	@1377	@3	target.powerBarBgAlpha		@4417	@189	@5655:powerbarbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,4421,4284,87,3,87,4421|@687
-@5634	@986	@18			@960	@987	@5638:lane%2Ebuff%2Ebars%2Eicon-position	@13	@4290	@4405	@302,11,868,28,109,13,2567,725,30,28,109,11,868,4284,87,18|@127
-@5634	@986	@18			@963	@987	@5638:lane%2Edebuff%2Ebars%2Eicon-position	@13	@4290	@4406	@302,11,868,43,109,13,2567,725,30,43,109,11,868,4284,87,18|@127
-@5634	@988	@18			@960	@989	@5638:lane%2Ebuff%2Ebars%2Eicon-size	@13	@4290	@4405	@302,11,57,28,109,13,2567,725,30,28,109,11,57,4284,87,18|@128
-@5634	@988	@18			@963	@989	@5638:lane%2Edebuff%2Ebars%2Eicon-size	@13	@4290	@4406	@302,11,57,43,109,13,2567,725,30,43,109,11,57,4284,87,18|@128
-@5634	@990	@18			@960	@991	@5638:lane%2Ebuff%2Ebars%2Eicon-spacing	@13	@4290	@4405	@302,11,992,28,109,13,2567,725,30,28,109,11,992,4284,87,18|@129
-@5634	@990	@18			@963	@991	@5638:lane%2Edebuff%2Ebars%2Eicon-spacing	@13	@4290	@4406	@302,11,992,43,109,13,2567,725,30,43,109,11,992,4284,87,18|@129
-@5634	@4422	@18			@4423	@4424	@5637:appearance%2Eduration-display	@4425	@4290	@4426	@302,451,271,1014,10,13,271,1014,10,414,451,4284,87,18|@688
-@5634	@4427	@18			@4423	@4428	@5637:appearance%2Eduration-direction	@4425	@4290	@4426	@302,306,271,1014,10,13,271,1014,10,414,748,4284,87,18|@689
-@5634	@4429	@3			@4423	@4430	@5637:appearance%2Edurationbarheight	@4425	@4290	@4426	@302,347,271,1014,10,13,271,1014,10,1101,4284,87,3|@690
-@5634	@4431	@18			@4423	@4432	@5637:appearance%2Eduration-position	@4425	@4290	@4426	@302,868,271,1014,10,13,271,1014,10,414,868,4284,87,18|@691
-@5634	@4433	@32			@4391	@997	@5637:filters%2Ebigdefensive	@13	@4290	@4393	@998,999,271,1014,937,13,271,1014,937,1000,4284,87,32|@13
-@5634	@4433	@32	auras3.target.buff.filter.bigDefensive		@1106	@997	@5638:lane%2Ebuff%2Efilters%2Ebigdefensive	@13	@4290	@4346	@998,999,28,937,13,2567,725,30,28,937,1000,4284,87,32,15,87,28,1444,1000|@692
-@5634	@4434	@18			@4435	@4436	@5637:appearance%2Epandemic%2Eblend	@4437	@4290	@4438	@4436,10,4439,13,271,1014,10,4439,4436,4284,87,18|@693
-@5634	@4440	@520	target.portraitBlizzardDirection		@4351	@4441	@5644:portraitblizzarddirection	@1621	@4353	@5656	@37,1621,4443,38,748,4444,1364,1578,1386,308,307,442,2567,1621,2567,1621,4445,4284,87,520,87,4445|@694
-@5634	@1639	@18	target.portraitBorderStyle		@4351	@8	@5644:portraitborderstyle	@1621	@1369	@1640	@8,2567,1621,2567,1621,1641,4284,87,18,87,1641|@282
-@5634	@4446	@3			@4435	@4447	@5637:appearance%2Epandemic%2Eborder-opacity	@4437	@4290	@4438	@8,179,10,4439,13,271,1014,10,4439,8,179,4284,87,3|@695
-@5634	@17	@18	general.castbarTargetIconBorderStyle		@4339	@19	@5641:detail%2Emsuf2_castbar_icon_border_style	@2528	@1369	@4448	@8,12,2528,4342,2567,2528,4342,4330,2528,11,8,12,4284,87,18,148,5657|@1105
-@5634	@1642	@18	target.portraitBorderArt		@4351	@1643	@5644:portraitborderart	@1621	@1369	@1640	@8,1644,2567,1621,2567,1621,1645,4284,87,18,87,1645|@283
-@5634	@1646	@18	target.portraitBorderDirection		@4351	@1647	@5644:portraitborderdirection	@1621	@1369	@1640	@8,748,2567,1621,2567,1621,1648,4284,87,18,87,1648|@284
-@5634	@1649	@3	general.castbarTargetIconBorderThickness		@4339	@21	@5641:detail%2Emsuf2_castbar_icon_border_thickness	@2528	@1369	@4448	@8,22,2528,4342,2567,2528,4342,4330,2528,11,8,22,4284,87,3,148,5658|@1104
-@5634	@1649	@3	target.portraitBorderThickness		@4351	@21	@5644:portraitborderthickness	@1621	@1369	@1640	@8,22,2567,1621,2567,1621,1651,4284,87,3,87,1651|@13
-@5634	@1649	@3	target.powerBarBorderThickness		@4450	@21	@5659:powerbarborderthickness	@4451			@8,22,2567,128,2567,128,1650,4284,87,3,87,1650|@20
-@5634	@4454	@32			@4391	@4455	@5637:filters%2Ecancelable	@13	@4290	@4393	@4455,271,1014,937,13,271,1014,937,4455,4284,87,32|@13
-@5634	@4454	@32	auras3.target.buff.filter.cancelable		@1106	@4455	@5638:lane%2Ebuff%2Efilters%2Ecancelable	@13	@4290	@4346	@4455,28,937,13,2567,725,30,28,937,4455,4284,87,32,15,87,28,1444,4455|@698
-@5634	@4456	@32	target.texLayerHealthLowAlphaEnabled		@4316	@4457	@5639:healthlowalphaenabled	@4318	@4319	@5660	@226,179,1047,229,2567,190,239,2567,190,239,4459,4284,87,32,87,4460|@699
-@5634	@1659	@32	target.chunkedFill		@4461	@1660	@5661:chunked_fill	@4462			@1661,301,1662,2567,1638,2567,1638,1661,306,4284,87,32,87,1663|@700
-@5634	@1664	@32	target.powerChunkedFill		@4450	@1665	@5659:powerchunkedfill	@4451			@1661,128,1662,2567,128,2567,128,1666,4284,87,32,87,1666|@701
-@5634	@4464	@1043			@4279	@4465	@5635:indicator%2Eclasstext	@4280	@4281	@4466	@127,162,1348,922,2567,1348,922,4467,4284,87,1043|@657
-@5634	@1667	@18	target.portraitClassStyle		@4351	@1668	@5644:portraitclassstyle	@1621	@1369	@1474	@127,1621,12,2567,1621,2567,1621,1669,4284,87,18,87,1669|@288
-@5634	@1670	@96		clear_unit_custom_anchor	@1671	@1672	@5651:custom%2Eclear	@4378			@1672,113,271,2567,4378,271,1672,4284,87,96,1672,2567,271,113|@13
-@5634	@4468	@32			@4469	@4470	@5637:reminder%2Eclick-cast	@4471	@4290	@4412	@805,689,11,126,641,689,716,271,1014,4472,13,271,1014,4472,805,641,4284,87,32|@702
-@5634	@1679	@32	target.portraitClickable		@4351	@1680	@5644:portraitclickable	@1621	@4353	@5662	@1682,1621,2567,1621,2567,1621,1683,4284,87,32,87,1683|@13
-@5634	@4474	@32	target.texLayerRoundedClip		@4316	@4475	@5639:roundedclip	@4318	@4319	@5663	@4477,126,2681,38,2567,190,239,2567,190,239,4478,4284,87,32,87,4479|@703
-@5634	@3343	@227			@4435	@227	@5637:appearance%2Epandemic%2Ecolor	@4437	@4290	@4438	@227,10,4439,13,271,1014,10,4439,227,4284,87,227|@695
-@5634	@3343	@227			@4480	@227	@5646:lane%2Ebuff%2Efull-frame%2Ecolor	@5664	@4290	@4363	@227,28,403,38,13,12,30,28,403,38,227,4284,87,227|@1106
-@5634	@3343	@227			@4482	@227	@5637:effect%2Ecolor	@4483	@4290	@4426	@227,271,1014,557,13,271,1014,557,227,4284,87,227|@705
-@5634	@3343	@227			@4484	@227	@5646:lane%2Edebuff%2Efull-frame%2Ecolor	@5665	@4290	@4367	@227,43,403,38,13,12,30,43,403,38,227,4284,87,227|@1106
-@5634	@4486	@18	target.texLayerHealthAboveMode		@4316	@4487	@5639:healthabovemode	@4318	@4319	@5666	@227,2187,229,2567,190,239,2567,190,239,4489,4284,87,18,87,4490|@706
-@5634	@4491	@18	target.texLayerColorMode		@4316	@4492	@5639:colormode	@4318	@4319	@5667	@227,602,2567,190,239,2567,190,239,4494,4284,87,18,87,4495|@707
-@5634	@5519	@1043			@4279	@370	@5635:indicator%2Estatuscombat	@4280	@4281	@5520	@370,1348,922,2567,1348,922,5521,4284,87,1043|@1054
-@5634	@4496	@18	target.texLayerVisibility		@4316	@4497	@5639:combat_state	@4318	@4319	@4498	@370,296,2567,190,239,2567,190,239,370,296,4284,87,18,87,4499|@708
-@5634	@1009	@32			@960	@1010	@5638:lane%2Ebuff%2Ebars%2Ecombine-debuff-bars	@13	@4290	@4405	@1011,28,956,43,109,28,109,13,2567,725,30,28,109,1011,43,109,4284,87,32|@133
-@5634	@4500	@713			@4410	@4501	@5637:setup%2Ename	@13	@4290	@4412	@1014,720,271,1014,569,13,271,1014,569,720,4284,87,713|@13
-@5634	@4502	@520			@1013	@1014	@5638:container-selector	@13	@4290	@5668	@1014,13,13,2567,725,1014,696,4284,87,520|@709
-@5634	@1028	@3			@4423	@1029	@5637:appearance%2Ecooldownx	@4504	@4290	@4426	@138,487,271,1014,10,13,271,1014,10,1030,4284,87,3|@710
-@5634	@1031	@3			@4423	@1032	@5637:appearance%2Ecooldowny	@4504	@4290	@4426	@138,492,271,1014,10,13,271,1014,10,1033,4284,87,3|@710
-@5634	@4505	@18			@4423	@1016	@5637:appearance%2Ecooldown-anchor	@4504	@4290	@4426	@138,113,271,1014,10,13,271,1014,10,138,113,4284,87,18|@711
-@5634	@4506	@3			@4423	@4507	@5637:appearance%2Ecooldownsize	@4504	@4290	@4426	@138,57,271,1014,10,13,271,1014,10,1027,4284,87,3|@710
-@5634	@4508	@32			@4423	@4509	@5637:appearance%2Ecooldown-swipe	@4504	@4290	@4426	@138,1192,271,1014,10,13,271,1014,10,138,1192,4284,87,32|@710
-@5634	@4510	@32			@4423	@4511	@5637:appearance%2Ecooldown-text	@4504	@4290	@4426	@138,162,271,1014,10,13,271,1014,10,138,162,4284,87,32|@710
-@5634	@4512	@96			@4513	@4514	@5669:open				@1038,126,2471,2567,1038,2567,1038,1039,4284,87,96|@13
-@5634	@4516	@32			@4391	@1041	@5637:filters%2Ecrowdcontrol	@13	@4290	@4393	@1042,1043,271,1014,937,13,271,1014,937,4517,4284,87,32|@13
-@5634	@4516	@32	auras3.target.debuff.filter.crowdControl		@1109	@1041	@5638:lane%2Edebuff%2Efilters%2Ecrowdcontrol	@13	@4290	@4349	@1042,1043,43,937,13,2567,725,30,43,937,4517,4284,87,32,15,87,43,1444,4517|@712
-@5634	@4518	@32	target.texLayerTargetOnly		@4316	@4519	@5639:current_target_only	@4318	@4319	@4498	@1312,87,1141,2567,190,239,2567,190,239,1312,87,1141,4284,87,32,87,4520|@703
-@5634	@1692	@713	target.anchorFrameName		@1671	@1693	@5651:custom%2Evalue	@4378			@271,113,38,113,271,2567,4378,271,606,4284,87,713,87,4521|@713
-@5634	@4522	@713			@4414	@4523	@5637:target-dots%2Ecustom-id	@13	@4290	@4291	@271,716,717,271,1014,87,86,13,271,1014,87,86,271,717,4284,87,713|@714
-@5634	@5670	@713	targettarget.totInlineCustomSeparator		@5671	@5672	@5674:custom_separator	@5673			@271,616,2567,5675,162,2567,5675,162,271,616,4284,87,713,5676,5677|@1107
-@5634	@4524	@713	target.texLayerCustomTexturePath		@4316	@4525	@5639:customtexturepath	@4318	@4319	@4526	@271,190,4527,2567,190,239,2567,190,239,4528,4284,87,713,87,4529|@703
-@5634	@1416	@1043			@4279	@1417	@5635:indicator%2Estatusdndtext	@4280	@4281	@4530	@1419,162,1348,922,2567,1348,922,1420,4284,87,1043|@657
-@5634	@4531	@1043			@4279	@4532	@5635:indicator%2Estatustext	@4280	@4281	@4533	@1429,1775,162,1348,922,2567,1348,922,1430,4284,87,1043|@657
-@5634	@1705	@32	target.healthTextDecimals		@1984	@1706	@5636:hp%2Edecimals	@162	@1369	@1590	@1707,355,162,117,2567,162,117,1046,4284,87,32,87,1708|@715
-@5634	@1044	@3			@4423	@1045	@5637:appearance%2Ecooldowndecimalseconds	@4504	@4290	@4426	@1046,1047,1048,271,1014,10,13,271,1014,10,1049,4284,87,3|@716
-@5634	@1044	@3			@25	@1045	@5646:lane%2Ebuff%2Ecooldowndecimalseconds	@5645	@4290	@4363	@1046,1047,1048,12,28,13,12,30,28,1049,4284,87,3|@1108
-@5634	@1044	@3			@76	@1045	@5646:lane%2Edebuff%2Ecooldowndecimalseconds	@5648	@4290	@4367	@1046,1047,1048,12,43,13,12,30,43,1049,4284,87,3|@1108
-@5634	@279	@18	target.hpTextSeparator		@1984	@280	@5636:hp%2Eseparator	@162	@1369	@1590	@280,162,117,2567,162,117,616,4284,87,18,87,4534|@718
-@5634	@279	@18	target.powerTextSeparator		@1989	@280	@5636:power%2Eseparator	@162	@1369	@1709	@280,162,128,2567,162,128,616,4284,87,18,87,283|@718
-@5634	@1717	@32	target.powerBarDetached		@4450	@1718	@5659:detached	@4451			@1719,690,38,2567,128,2567,128,129,4284,87,32,87,287|@20
-@5634	@1720	@3	target.detachedPowerBarHeight		@4450	@1721	@5659:detachedpowerbarheight	@4451			@129,347,2567,128,2567,128,535,4284,87,3,87,535|@20
-@5634	@1722	@3	target.detachedPowerBarFrameLevelOffset		@4450	@1723	@5659:detachedpowerbarframeleveloffset	@4451			@129,239,2567,128,2567,128,515,4284,87,3,87,515|@719
-@5634	@1724	@3	target.detachedPowerBarWidth		@4450	@1725	@5659:detachedpowerbarwidth	@4451			@129,272,2567,128,2567,128,549,4284,87,3,87,549|@720
-@5634	@1279	@32	target.unitDispelOverlayEnabled		@4535	@1280	@5678:overlay%2Eenabled	@4536			@951,1281,951,1281,2567,951,1281,235,4284,87,32,87,4538|@192
-@5634	@1283	@32	target.unitDispelSymbolEnabled		@4539	@1284	@5678:symbol%2Eenabled	@4540			@951,357,951,357,2567,951,357,235,4284,87,32,87,4541|@193
-@5634	@1050	@18			@4423	@1051	@5637:appearance%2Edispel-type-border	@4542	@4290	@4438	@951,255,8,271,1014,10,13,271,1014,10,951,255,8,4284,87,18|@721
-@5634	@1050	@18			@76	@1051	@5646:lane%2Edebuff%2Eauras3-debuff-type-border-mode	@5679	@4290	@4367	@951,255,8,12,43,13,12,30,43,15,43,255,8,602,4284,87,18|@1109
-@5634	@4544	@32	auras3.target.buff.filter.includeDispellable		@1106	@4545	@5638:lane%2Ebuff%2Efilters%2Eincludedispellable	@13	@4290	@4346	@952,4546,254,909,28,937,13,2567,725,30,28,937,4547,4284,87,32,15,87,28,1444,4547|@723
-@5634	@4548	@32	auras3.target.debuff.filter.includeDispellable		@1109	@1054	@5638:lane%2Edebuff%2Efilters%2Eincludedispellable	@13	@4290	@4349	@952,254,909,43,937,13,2567,725,30,43,937,4547,4284,87,32,15,87,43,1444,4547|@724
-@5634	@4549	@32			@1109	@4550	@5638:lane%2Edebuff%2Efilters%2Eraid	@13	@4290	@4349	@952,254,957,43,937,13,2567,725,30,43,937,916,4284,87,32|@725
-@5634	@1055	@18			@4469	@451	@5637:reminder%2Eenabled	@13	@4290	@4412	@451,271,1014,4472,13,271,1014,4472,235,4284,87,18|@726
-@5634	@4551	@18			@4414	@4552	@5637:target-dots%2Eselection	@13	@4290	@4291	@4552,271,1014,87,86,13,271,1014,87,86,1170,4284,87,18|@874
-@5634	@4553	@18	target.portraitDragonLayer		@4351	@4554	@5644:portraitdragonlayer	@1621	@4353	@5680	@4356,4556,609,2567,1621,2567,1621,4557,4284,87,18,87,4557|@728
-@5634	@4558	@3	target.portraitDragonX		@4351	@4559	@5644:portraitdragonx	@1621	@4353	@5681	@4356,1918,4561,2567,1621,2567,1621,4562,4284,87,3,87,4562|@729
-@5634	@4563	@3	target.portraitDragonLevel		@4351	@4564	@5644:portraitdragonlevel	@1621	@4353	@5682	@4356,240,2187,1621,2567,1621,2567,1621,4566,4284,87,3,87,4566|@13
-@5634	@4567	@3	target.portraitDragonScale		@4351	@4568	@5644:portraitdragonscale	@1621	@4353	@5683	@4356,57,2567,1621,2567,1621,4570,4284,87,3,87,4570|@730
-@5634	@4571	@3	target.portraitDragonY		@4351	@4572	@5644:portraitdragony	@1621	@4353	@5684	@4356,2290,4561,2567,1621,2567,1621,4574,4284,87,3,87,4574|@731
-@5634	@4575	@32			@4423	@4576	@5637:appearance%2Eduration-bar	@4425	@4290	@4426	@414,302,271,1014,10,13,271,1014,10,414,302,4284,87,32|@710
-@5634	@1433	@1043			@4279	@1434	@5635:indicator%2Estatusconsumptiontext	@4280	@4281	@5212	@1436,1437,162,1348,922,2567,1348,922,1438,4284,87,1043|@935
-@5634	@4577	@3	target.texLayerEdgeSoftness		@4316	@4578	@5639:edgesoftness	@4318	@4319	@5685	@1316,2069,2567,190,239,2567,190,239,4580,4284,87,3,87,4581|@703
-@5634	@4582	@520			@1013	@1063	@5638:tool-selector	@13	@4290	@4358	@1063,13,13,2567,725,1065,696,4284,87,520|@145
-@5634	@1067	@18			@4482	@557	@5637:effect%2Etype	@4483	@4290	@4426	@557,271,1014,557,13,271,1014,557,255,4284,87,18|@732
-@5634	@1067	@18	auras3.target.buff.frameEffectType		@4480	@557	@5646:lane%2Ebuff%2Efull-frame%2Etype	@5664	@4290	@4363	@557,28,403,38,13,12,30,28,403,38,255,4284,87,18,15,87,28,4583|@733
-@5634	@1067	@18	auras3.target.debuff.frameEffectType		@4484	@557	@5646:lane%2Edebuff%2Efull-frame%2Etype	@5665	@4290	@4367	@557,43,403,38,13,12,30,43,403,38,255,4284,87,18,15,87,43,4583|@733
-@5634	@1069	@3	target.unitDispelSymbolLayer		@4539	@1070	@5678:symbol%2Eunitdispelsymbollayer	@4540			@557,239,691,1071,951,357,2567,951,357,4584,4284,87,3,87,4584|@13
-@5634	@5075	@1043			@4279	@5076	@5635:indicator%2Eeliteicon	@4280	@4281	@5077	@4588,4589,1348,922,2567,1348,922,5078,4284,87,1043|@657
-@5634	@4585	@32	target.portraitBlizzardElite		@4351	@4586	@5644:portraitblizzardelite	@1621	@4353	@5686	@4588,956,4589,4356,2567,1621,2567,1621,4590,4284,87,32,87,4590|@734
-@5634	@1735	@32	target.embedPowerBarIntoHealth		@4450	@1736	@5659:embedpowerbarintohealth	@4451			@1737,1738,301,2567,128,2567,128,1739,4284,87,32,87,1739|@20
-@5634	@1740	@96	target.enabled		@4461	@842	@5661:enable_now	@4462			@842,2567,1638,2567,1638,842,2268,4284,87,96,87,235|@700
-@5634	@1740	@32	general.castbarTargetShowIcon		@4591	@842	@5641:feature%2Emsuf2_castbar_icon	@2528	@1369	@4448	@842,2528,4592,2567,2528,4592,4330,2528,11,4284,87,32,148,5687|@1110
-@5634	@1740	@32	general.castbarTargetShowSpellName		@4591	@842	@5641:feature%2Emsuf2_castbar_text	@2528	@1369	@4340	@842,2528,4592,2567,2528,4592,4330,2528,162,4284,87,32,148,5688|@1111
-@5634	@1740	@32	general.castbarTargetShowTargetName		@4595	@842	@5641:show_target_name	@2528	@1369	@4340	@842,2567,2528,2567,2528,65,87,720,4284,87,32,148,5689|@13
-@5634	@1740	@32	general.showTargetCastTime		@4591	@842	@5641:feature%2Emsuf2_castbar_time	@2528	@1369	@4597	@842,2528,4592,2567,2528,4592,4330,2528,419,4284,87,32,148,5690|@1112
-@5634	@1740	@32	target.enabled		@4461	@842	@5661:enabled	@4462			@842,2567,1638,2567,1638,235,4284,87,32,87,235|@735
-@5634	@4599	@32			@4595	@4600	@5641:enabled	@2528			@842,2528,2567,2528,2567,2528,235,4284,87,32|@738
-@5634	@4601	@32	target.rangeFadeEnabled		@4335	@4602	@5640:enabled	@4336			@842,838,1767,2567,838,1767,2567,838,1767,235,4284,87,32,87,2100|@13
-@5634	@4603	@32	target.texLayerEnabled		@4316	@4604	@5639:enabled	@4318	@4319	@5691	@842,190,239,2567,190,239,2567,190,239,235,4284,87,32,87,4606|@703
-@5634	@4607	@32			@4391	@4608	@5637:filters%2Eenabled	@13	@4290	@4393	@842,937,271,1014,937,13,271,1014,937,235,4284,87,32|@13
-@5634	@4607	@32	auras3.target.buff.filtersEnabled		@1106	@4608	@5638:lane%2Ebuff%2Efilters%2Eenabled	@13	@4290	@4346	@842,937,28,937,13,2567,725,30,28,937,235,4284,87,32,15,87,28,4609|@739
-@5634	@4607	@32	auras3.target.debuff.filtersEnabled		@1109	@4608	@5638:lane%2Edebuff%2Efilters%2Eenabled	@13	@4290	@4349	@842,937,43,937,13,2567,725,30,43,937,235,4284,87,32,15,87,43,4609|@739
-@5634	@1440	@32			@4410	@235	@5637:setup%2Eenabled	@13	@4290	@4412	@235,271,1014,569,13,271,1014,569,235,4284,87,32|@13
-@5634	@1440	@32			@4414	@235	@5637:target-dots%2Eenabled	@13	@4290	@4416	@235,271,1014,87,86,13,271,1014,87,86,235,4284,87,32|@740
-@5634	@4610	@713			@927	@4611	@5638:lane%2Edebuff%2Eblacklist%2Emanual-input	@13	@4290	@4314	@3095,43,716,717,718,719,720,43,908,13,2567,725,30,43,908,277,1077,4284,87,713|@741
-@5634	@1075	@713			@903	@1076	@5638:lane%2Ebuff%2Eblacklist%2Emanual-input	@13	@4290	@4310	@820,28,716,717,718,719,720,28,908,13,2567,725,30,28,908,277,1077,4284,87,713|@741
-@5634	@4612	@32			@4391	@1079	@5637:filters%2Eexternaldefensive	@13	@4290	@4393	@1080,999,271,1014,937,13,271,1014,937,1081,4284,87,32|@13
-@5634	@4612	@32	auras3.target.buff.filter.externalDefensive		@1106	@1079	@5638:lane%2Ebuff%2Efilters%2Eexternaldefensive	@13	@4290	@4346	@1080,999,28,937,13,2567,725,30,28,937,1081,4284,87,32,15,87,28,1444,1081|@742
-@5634	@5220	@32	target.pvpIndicatorShowOpenWorldFaction		@5221	@5222	@5635:pvp%2Eopen_world_faction	@4280	@4866	@5692	@5224,357,3838,1506,1507,1348,1506,2567,1348,1506,1039,5225,5224,4284,87,32,87,5226|@939
-@5634	@1764	@32	target.oocFadeEnabled		@4417	@1765	@5655:ooc_fade_enabled	@1626	@4418	@4613	@1767,38,368,369,370,2567,1626,2567,1626,387,1767,235,4284,87,32,87,1768|@13
-@5634	@4614	@3	target.hpTextMouseoverFadeIn		@4615	@4616	@5636:hp%2Emouseover%2Efadein	@162	@1369	@1590	@1767,840,168,117,2767,2567,162,117,2767,4617,4284,87,3,87,4618|@743
-@5634	@4614	@3	target.nameTextMouseoverFadeIn		@4619	@4616	@5636:name%2Emouseover%2Efadein	@162	@1369	@1605	@1767,840,168,720,2767,2567,162,720,2767,4617,4284,87,3,87,4620|@743
-@5634	@4614	@3	target.powerTextMouseoverFadeIn		@4621	@4616	@5636:power%2Emouseover%2Efadein	@162	@1369	@1709	@1767,840,168,128,2767,2567,162,128,2767,4617,4284,87,3,87,4622|@743
-@5634	@1769	@32	target.fadeInOnShow		@4417	@1770	@5655:fade_in_on_show	@1626	@4418	@4419	@1767,840,396,1771,2567,1626,2567,1626,1767,840,68,65,4284,87,32,87,1772|@744
-@5634	@4623	@3	target.hpTextMouseoverFadeOut		@4615	@4624	@5636:hp%2Emouseover%2Efadeout	@162	@1369	@1590	@1767,368,168,117,2767,2567,162,117,2767,4625,4284,87,3,87,4626|@745
-@5634	@4623	@3	target.nameTextMouseoverFadeOut		@4619	@4624	@5636:name%2Emouseover%2Efadeout	@162	@1369	@1605	@1767,368,168,720,2767,2567,162,720,2767,4625,4284,87,3,87,4627|@745
-@5634	@4623	@3	target.powerTextMouseoverFadeOut		@4621	@4624	@5636:power%2Emouseover%2Efadeout	@162	@1369	@1709	@1767,368,168,128,2767,2567,162,128,2767,4625,4284,87,3,87,4628|@745
-@5634	@1085	@18			@960	@1086	@5638:lane%2Ebuff%2Ebars%2Efill-color-mode	@13	@4290	@4405	@306,227,602,28,109,13,2567,725,30,28,109,306,227,602,4284,87,18|@151
-@5634	@1085	@18			@963	@1086	@5638:lane%2Edebuff%2Ebars%2Efill-color-mode	@13	@4290	@4406	@306,227,602,43,109,13,2567,725,30,43,109,306,227,602,4284,87,18|@151
-@5634	@1087	@18			@960	@1088	@5638:lane%2Ebuff%2Elayout%2Eaura-bar-fill	@13	@4290	@4405	@306,748,28,109,13,2567,725,30,28,109,39,302,306,4284,87,18|@152
-@5634	@1087	@18			@963	@1088	@5638:lane%2Edebuff%2Elayout%2Eaura-bar-fill	@13	@4290	@4406	@306,748,43,109,13,2567,725,30,43,109,39,302,306,4284,87,18|@152
-@5634	@1087	@18	target.verticalFillBars		@4461	@1088	@5661:fill_direction	@4462			@306,748,2567,1638,2567,1638,306,748,4284,87,18,87,4629|@746
-@5634	@1089	@18			@25	@1090	@5646:lane%2Ebuff%2Eauras3-duration-bar-direction	@5653	@4290	@4363	@306,602,12,28,13,12,30,28,15,414,302,748,4284,87,18|@1113
-@5634	@1089	@18			@76	@1090	@5646:lane%2Edebuff%2Eauras3-duration-bar-direction	@5654	@4290	@4367	@306,602,12,43,13,12,30,43,15,414,302,748,4284,87,18|@1113
-@5634	@1778	@32	target.portraitFillBorder		@4351	@1779	@5644:portraitfillborder	@1621	@1369	@1640	@306,8,1738,38,332,2567,1621,2567,1621,1780,4284,87,32,87,1780|@13
-@5634	@4630	@32	target.portraitDragonFlip		@4351	@4631	@5644:portraitdragonflip	@1621	@4353	@5693	@4633,4356,308,126,307,2567,1621,2567,1621,4634,4284,87,32,87,4634|@13
-@5634	@4635	@32	target.portraitFlip		@4351	@4636	@5644:portraitflip	@1621	@4353	@5694	@4633,1621,308,126,307,2567,1621,2567,1621,4638,4284,87,32,87,4638|@13
-@5634	@4639	@32	general.anchorToCooldown		@4377	@4640	@5651:cooldown_manager	@4378			@3457,37,846,137,4641,2567,113,2567,4378,138,1637,4284,87,32,148,4642|@748
-@5634	@4643	@32	target.texLayerFollowFrameAlpha		@4316	@4644	@5639:followframealpha	@4318	@4319	@5695	@3457,38,1626,2567,190,239,2567,190,239,4646,4284,87,32,87,4647|@749
-@5634	@4648	@32	target.useBlizzardFrame		@4461	@4649	@5661:force_blizzard_frame	@4462			@4650,37,38,68,2567,1638,2567,1638,4650,37,38,4284,87,32,87,4651|@750
-@5634	@1791	@3	target.hpBarAlpha		@4417	@324	@5655:hpbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,1792,4284,87,3,87,1792|@751
-@5634	@1791	@3	target.powerBarAlpha		@4417	@324	@5655:powerbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,4652,4284,87,3,87,4652|@752
-@5634	@4653	@18	general.castbarTargetTimeFormat		@4339	@3167	@5641:detail%2Emsuf2_castbar_time_format	@2528	@1369	@4597	@3167,2528,4342,2567,2528,4342,4330,2528,419,3167,4284,87,18,148,5696|@1114
-@5634	@331	@3			@939	@332	@5638:lane%2Ebuff%2Elayout%2Espacing	@13	@4290	@4358	@332,28,118,13,2567,725,30,28,118,992,4284,87,3|@13
-@5634	@331	@3			@4359	@332	@5637:layout%2Espacing	@13	@4290	@4360	@332,271,1014,118,13,271,1014,118,992,4284,87,3|@13
-@5634	@331	@3			@941	@332	@5638:lane%2Edebuff%2Elayout%2Espacing	@13	@4290	@4361	@332,43,118,13,2567,725,30,43,118,992,4284,87,3|@13
-@5634	@1449	@1043			@4279	@1450	@5635:indicator%2Estatusghosttext	@4280	@4281	@4655	@1452,162,1348,922,2567,1348,922,1453,4284,87,1043|@657
-@5634	@1092	@96			@1013	@1093	@5638:open-aura-style	@13	@4290	@4358	@761,39,10,13,13,2567,725,1039,39,12,4284,87,96|@754
-@5634	@4656	@32	target.portraitBlizzardCorner		@4351	@4657	@5644:portraitblizzardcorner	@1621	@4353	@5697	@4659,1364,4660,2567,1621,2567,1621,4661,4284,87,32,87,4661|@734
-@5634	@4662	@32	target.texLayerGradientEnabled		@4316	@2726	@5639:gradientenabled	@4318	@4319	@5698	@2726,2567,190,239,2567,190,239,4664,4284,87,32,87,4665|@755
-@5634	@2723	@96			@4666	@2725	@5639:gradient_direction%2Eup	@4318	@4319	@4320	@2726,748,190,239,2726,748,2567,190,239,2726,748,1866,4284,87,96|@13
-@5634	@4667	@32			@4469	@4668	@5637:reminder%2Edesaturate	@4471	@4290	@4412	@4196,368,4669,271,1014,4472,13,271,1014,4472,4670,4284,87,32|@756
-@5634	@1289	@18	target.unitDispelSymbolGrowth		@4539	@1290	@5678:symbol%2Eunitdispelsymbolgrowth	@4540			@1290,951,357,2567,951,357,4671,4284,87,18,87,4671|@757
-@5634	@1094	@18			@939	@1095	@5638:lane%2Ebuff%2Elayout%2Egrowth	@13	@4290	@4358	@1095,28,118,13,2567,725,30,28,118,1095,4284,87,18|@156
-@5634	@1094	@18			@4359	@1095	@5637:layout%2Egrowth	@13	@4290	@4360	@1095,271,1014,118,13,271,1014,118,1095,4284,87,18|@156
-@5634	@1094	@18			@941	@1095	@5638:lane%2Edebuff%2Elayout%2Egrowth	@13	@4290	@4361	@1095,43,118,13,2567,725,30,43,118,1095,4284,87,18|@156
-@5634	@1096	@18			@960	@1097	@5638:lane%2Ebuff%2Ebars%2Ebar-growth	@13	@4290	@4405	@1095,748,28,109,13,2567,725,30,28,109,302,1095,4284,87,18|@158
-@5634	@1096	@18			@963	@1097	@5638:lane%2Edebuff%2Ebars%2Ebar-growth	@13	@4290	@4406	@1095,748,43,109,13,2567,725,30,43,109,302,1095,4284,87,18|@159
-@5634	@1867	@3	target.hpTextLayer		@4672	@1868	@5636:advanced%2Ehptextlayer	@162	@1369	@1474	@117,239,162,108,2567,162,108,4673,4284,87,3,87,4673|@758
-@5634	@4674	@3	target.texLayerHealthThreshold		@4316	@4675	@5639:healththreshold	@4318	@4319	@5699	@117,229,2567,190,239,2567,190,239,4677,4284,87,3,87,4678|@759
-@5634	@1870	@18			@1588	@1871	@5636:hp%2Eslot%2Emode	@162	@1369	@1590	@117,606,117,219,2567,162,117,219,602,4284,87,18|@760
-@5634	@4679	@18	target.healthColorMode		@4461	@4680	@5661:health_color_mode	@4462			@301,227,4681,2567,1638,2567,1638,301,227,602,4284,87,18,87,3504|@761
-@5634	@346	@3			@25	@347	@5646:lane%2Ebuff%2Edurationbarheight	@5653	@4290	@4363	@347,12,28,13,12,30,28,1101,4284,87,3|@1115
-@5634	@346	@3			@76	@347	@5646:lane%2Edebuff%2Edurationbarheight	@5654	@4290	@4367	@347,12,43,13,12,30,43,1101,4284,87,3|@1115
-@5634	@346	@3	general.castbarTargetBarHeight		@4595	@347	@5641:height	@2528	@1369	@1681	@347,2567,2528,2567,2528,347,4284,87,3,148,5700|@1116
-@5634	@4683	@3	target.texLayerHeight		@4316	@4684	@5639:height	@4318	@4319	@5701	@347,691,985,2567,190,239,2567,190,239,347,4284,87,3,87,4686|@703
-@5634	@1882	@3	target.portraitHeight		@4351	@1883	@5644:portraitheight	@1621	@1369	@1884	@347,1885,2567,1621,2567,1621,1886,4284,87,3,87,1886|@13
-@5634	@1887	@32			@1588	@1888	@5636:hp%2Eslot%2Ehide_percent	@162	@1369	@1590	@36,354,117,219,2567,162,117,219,36,355,4284,87,32|@763
-@5634	@1887	@32			@1889	@1888	@5636:power%2Eslot%2Ehide_percent	@162	@1369	@1709	@36,354,128,219,2567,162,128,219,36,355,4284,87,32|@763
-@5634	@1105	@32			@4391	@1107	@5637:filters%2Ehide-permanent	@13	@4290	@4393	@36,1108,271,1014,937,13,271,1014,937,36,1108,4284,87,32|@764
-@5634	@1105	@32	auras3.target.buff.blacklist.hidePermanent		@1106	@1107	@5638:lane%2Ebuff%2Efilters%2Ehide-permanent	@13	@4290	@4346	@36,1108,28,937,13,2567,725,30,28,937,36,1108,4284,87,32,15,87,28,908,4687|@765
-@5634	@1105	@32	auras3.target.debuff.blacklist.hidePermanent		@1109	@1107	@5638:lane%2Edebuff%2Efilters%2Ehide-permanent	@13	@4290	@4349	@36,1108,43,937,13,2567,725,30,43,937,36,1108,4284,87,32,15,87,43,908,4687|@765
-@5634	@4688	@32	target.powerHideMissingResource		@4450	@4689	@5659:powerhidemissingresource	@4451			@36,396,104,2519,1838,2567,128,2567,128,4690,4284,87,32,87,4690|@20
-@5634	@4691	@32	target.loadCondHideInHousing		@4692	@1905	@5702:loadcondhideinhousing	@4693			@1905,2567,2443,4138,2567,2443,4138,4695,4284,87,32,87,4695|@766
-@5634	@1117	@3			@4423	@1118	@5637:appearance%2Eicon-zoom	@4696	@4290	@4426	@11,1119,271,1014,10,13,271,1014,10,11,1119,4284,87,3|@767
-@5634	@1117	@3			@25	@1118	@5646:lane%2Ebuff%2Eiconzoom	@5703	@4290	@4363	@11,1119,12,28,13,12,30,28,1121,4284,87,3|@1117
-@5634	@1117	@3			@76	@1118	@5646:lane%2Edebuff%2Eiconzoom	@5679	@4290	@4367	@11,1119,12,43,13,12,30,43,1121,4284,87,3|@1117
-@5634	@1117	@3	general.castbarTargetIconZoom		@4339	@1118	@5641:detail%2Emsuf2_castbar_icon_zoom	@2528	@1369	@4448	@11,1119,2528,4342,2567,2528,4342,4330,2528,11,1119,4284,87,3,148,5704|@1104
-@5634	@4699	@3			@939	@4700	@5638:lane%2Ebuff%2Elayout%2Eicon-height	@13	@4290	@4358	@11,347,355,28,118,13,2567,725,30,28,118,11,347,4284,87,3|@13
-@5634	@4699	@3			@941	@4700	@5638:lane%2Edebuff%2Elayout%2Eicon-height	@13	@4290	@4361	@11,347,355,43,118,13,2567,725,30,43,118,11,347,4284,87,3|@13
-@5634	@4701	@32			@4391	@4702	@5637:filters%2Eonlyimportant	@13	@4290	@4393	@4702,271,1014,937,13,271,1014,937,4703,4284,87,32|@13
-@5634	@4701	@32	auras3.target.buff.filter.onlyImportant		@1106	@4702	@5638:lane%2Ebuff%2Efilters%2Eonlyimportant	@13	@4290	@4346	@4702,28,937,13,2567,725,30,28,937,4703,4284,87,32,15,87,28,1444,4703|@769
-@5634	@4701	@32	auras3.target.debuff.filter.onlyImportant		@1109	@4702	@5638:lane%2Edebuff%2Efilters%2Eonlyimportant	@13	@4290	@4349	@4702,43,937,13,2567,725,30,43,937,4703,4284,87,32,15,87,43,1444,4703|@770
-@5634	@4704	@32	target.loadCondHideInCombat		@4692	@4705	@5702:loadcondhideincombat	@4693			@840,370,2567,2443,4138,2567,2443,4138,4706,4284,87,32,87,4706|@771
-@5634	@4707	@32	target.loadCondHideInGroup		@4692	@4708	@5702:loadcondhideingroup	@4693			@840,909,2567,2443,4138,2567,2443,4138,4709,4284,87,32,87,4709|@771
-@5634	@4710	@32	target.loadCondHideInInstance		@4692	@4711	@5702:loadcondhideininstance	@4693			@840,4712,2567,2443,4138,2567,2443,4138,4713,4284,87,32,87,4713|@771
-@5634	@4714	@32	target.loadCondHideInVehicle		@4692	@4715	@5702:loadcondhideinvehicle	@4693			@840,4716,2567,2443,4138,2567,2443,4138,4717,4284,87,32,87,4717|@771
-@5634	@5555	@1043			@4279	@5556	@5635:indicator%2Estatusincomingres	@4280	@4281	@5557	@5558,5559,1348,922,2567,1348,922,5560,4284,87,1043|@657
-@5634	@5705	@18	targettarget.totInlineColorMode		@5671	@5706	@5674:color	@5673			@5675,227,2567,5675,162,2567,5675,162,227,4284,87,18,5676,5707|@1118
-@5634	@5708	@18	targettarget.totInlineSeparator		@5671	@5709	@5674:separator	@5673			@5675,616,2567,5675,162,2567,5675,162,616,4284,87,18,5676,5710|@1119
-@5634	@4718	@3	target.portraitInnerShadow		@4351	@4719	@5644:portraitinnershadow	@1621	@4353	@5711	@4721,50,2560,2567,1621,2567,1621,4722,4284,87,3,87,4722|@772
-@5634	@1948	@32	target.alphaExcludePredictionBars		@4417	@1949	@5655:alpha_exclude_prediction_bars	@1626	@4418	@4419	@1950,1951,676,1267,2567,1626,2567,1626,9,1761,676,109,4284,87,32,87,1952|@13
-@5634	@4723	@32	target.portraitDragonInInstances		@4351	@4724	@5644:portraitdragonininstances	@1621	@4353	@5712	@1950,3095,4726,840,4727,2567,1621,2567,1621,4728,4284,87,32,87,4728|@773
-@5634	@1958	@32	target.alphaExcludeTextPortrait		@4417	@1959	@5655:alpha_exclude_text_portrait	@1626	@4418	@4419	@1950,162,1621,1267,2567,1626,2567,1626,9,1761,162,1621,4284,87,32,87,1960|@13
-@5634	@4729	@3			@4423	@4730	@5637:appearance%2Estyle-padding	@4696	@4290	@4426	@30,1495,271,1014,10,13,271,1014,10,12,1495,4284,87,3|@774
-@5634	@4729	@3			@25	@4730	@5646:lane%2Ebuff%2Estylepadding	@5703	@4290	@4363	@30,1495,12,28,13,12,30,28,4731,4284,87,3|@1117
-@5634	@4729	@3			@76	@4730	@5646:lane%2Edebuff%2Estylepadding	@5679	@4290	@4367	@30,1495,12,43,13,12,30,43,4731,4284,87,3|@1117
-@5634	@1123	@3			@4480	@1124	@5646:lane%2Ebuff%2Efull-frame%2Elayer	@5664	@4290	@4363	@239,691,1071,28,403,38,13,12,30,28,403,38,239,4284,87,3|@1106
-@5634	@1123	@3			@939	@1124	@5638:lane%2Ebuff%2Elayout%2Elayer	@13	@4290	@4358	@239,691,1071,28,118,13,2567,725,30,28,118,239,4284,87,3|@13
-@5634	@1123	@3			@4482	@1124	@5637:effect%2Elayer	@4483	@4290	@4426	@239,691,1071,271,1014,557,13,271,1014,557,239,4284,87,3|@705
-@5634	@1123	@3			@4359	@1124	@5637:layout%2Elayer	@13	@4290	@4360	@239,691,1071,271,1014,118,13,271,1014,118,239,4284,87,3|@13
-@5634	@1123	@3			@4484	@1124	@5646:lane%2Edebuff%2Efull-frame%2Elayer	@5665	@4290	@4367	@239,691,1071,43,403,38,13,12,30,43,403,38,239,4284,87,3|@1106
-@5634	@1123	@3			@941	@1124	@5638:lane%2Edebuff%2Elayout%2Elayer	@13	@4290	@4361	@239,691,1071,43,118,13,2567,725,30,43,118,239,4284,87,3|@13
-@5634	@1123	@3	general.castbarTargetFrameLevelOffset		@4595	@1124	@5641:frame_layer	@2528	@1369	@1474	@239,691,1071,2567,2528,2567,2528,38,239,4284,87,3,148,5713|@1120
-@5634	@1123	@3	general.castbarTargetIconFrameLevelOffset		@4339	@1124	@5641:detail%2Emsuf2_castbar_icon_layer	@2528	@1369	@1474	@239,691,1071,2528,4342,2567,2528,4342,4330,2528,11,239,4284,87,3,148,5714|@1121
-@5634	@1123	@3	target.texLayerLevel		@4316	@1124	@5639:level	@4318	@4319	@5715	@239,691,1071,2567,190,239,2567,190,239,240,4284,87,3,87,4734|@703
-@5634	@1962	@3	target.portraitLevelOffset		@4351	@1963	@5644:portraitleveloffset	@1621	@1369	@1622	@239,486,2567,1621,2567,1621,1964,4284,87,3,87,1964|@316
-@5634	@5566	@1043			@4279	@5567	@5635:indicator%2Eleader	@4280	@4281	@5568	@1483,11,1348,922,2567,1348,922,1483,4284,87,1043|@1071
-@5634	@4737	@32	target.levelIndicatorDifficultyColor		@4738	@4739	@5635:level%2Edifficulty_color	@4280	@1369	@1370	@240,1398,263,1348,240,2567,1348,240,1398,227,4284,87,32,87,4740|@947
-@5634	@1488	@1043			@4279	@1489	@5635:indicator%2Elevel	@4280	@4281	@4741	@240,162,1348,922,2567,1348,922,240,4284,87,1043|@657
-@5634	@4742	@3	general.castbarTargetSpellNameMaxWidth		@4595	@4743	@5641:spell_text_manual_width	@2528	@1369	@1474	@277,162,272,2567,2528,2567,2528,716,162,277,272,4284,87,3,148,5716|@1122
-@5634	@4745	@3	general.castbarTargetBarWidth		@4595	@4746	@5641:manual_width	@2528	@1369	@1681	@277,272,2567,2528,2567,2528,277,272,4284,87,3,148,5717|@1116
-@5634	@4748	@32			@25	@4749	@5646:lane%2Ebuff%2Eshowstealable	@5703	@4290	@4363	@105,4546,16,12,28,13,12,30,28,4750,4284,87,32|@1123
-@5634	@1130	@3			@939	@1131	@5638:lane%2Ebuff%2Elayout%2Emax-icons	@13	@4290	@4358	@1131,28,118,13,2567,725,30,28,118,1131,1181,4284,87,3|@13
-@5634	@1130	@3			@4359	@1131	@5637:layout%2Emax	@13	@4290	@4360	@1131,271,1014,118,13,271,1014,118,1131,4284,87,3|@13
-@5634	@1130	@3			@941	@1131	@5638:lane%2Edebuff%2Elayout%2Emax-icons	@13	@4290	@4361	@1131,43,118,13,2567,725,30,43,118,1131,1181,4284,87,3|@13
-@5634	@4751	@3			@4414	@4752	@5637:target-dots%2Eportrait-max-icons	@13	@4290	@4416	@1131,1621,1181,271,1014,87,86,13,271,1014,87,86,1621,1131,1181,4284,87,3|@781
-@5634	@1132	@3			@1106	@1133	@5638:lane%2Ebuff%2Efilters%2Emax-duration	@13	@4290	@4346	@1134,414,28,937,13,2567,725,30,28,937,1131,414,4284,87,3|@168
-@5634	@1132	@3			@4391	@1133	@5637:filters%2Emax-duration	@13	@4290	@4393	@1134,414,271,1014,937,13,271,1014,937,1131,414,4284,87,3|@168
-@5634	@1132	@3			@1109	@1133	@5638:lane%2Edebuff%2Efilters%2Emax-duration	@13	@4290	@4349	@1134,414,43,937,13,2567,725,30,43,937,1131,414,4284,87,3|@168
-@5634	@4753	@32	target.texLayerMirrorH		@4316	@4754	@5639:mirrorh	@4318	@4319	@5718	@4444,4756,2567,190,239,2567,190,239,4757,4284,87,32,87,4758|@782
-@5634	@4759	@32	target.texLayerMirrorV		@4316	@4760	@5639:mirrorv	@4318	@4319	@5719	@4444,4762,2567,190,239,2567,190,239,4763,4284,87,32,87,4764|@783
-@5634	@4765	@32	target.loadCondHideMounted		@4692	@4766	@5702:loadcondhidemounted	@4693			@4766,2567,2443,4138,2567,2443,4138,4767,4284,87,32,87,4767|@771
-@5634	@1990	@3	target.nameTextLayer		@4672	@1991	@5636:advanced%2Enametextlayer	@162	@1369	@1474	@720,239,162,108,2567,162,108,1992,4284,87,3,87,1992|@784
-@5634	@4768	@32			@4391	@4769	@5637:filters%2Eincludenameplateonly	@13	@4290	@4393	@4347,1141,271,1014,937,13,271,1014,937,4348,4284,87,32|@13
-@5634	@4770	@32	target.loadCondHideNoTarget		@4692	@4771	@5702:loadcondhidenotarget	@4693			@3835,87,2567,2443,4138,2567,2443,4138,4772,4284,87,32,87,4772|@771
-@5634	@4773	@32	auras3.target.debuff.filter.nonPlayer		@1109	@1136	@5638:lane%2Edebuff%2Efilters%2Enonplayer	@13	@4290	@4349	@1137,69,13,43,937,13,2567,725,30,43,937,1138,4284,87,32,15,87,43,1444,1138|@785
-@5634	@4774	@32			@4391	@4775	@5637:filters%2Enotcancelable	@13	@4290	@4393	@2465,4455,271,1014,937,13,271,1014,937,4776,4284,87,32|@13
-@5634	@4774	@32	auras3.target.buff.filter.notCancelable		@1106	@4775	@5638:lane%2Ebuff%2Efilters%2Enotcancelable	@13	@4290	@4346	@2465,4455,28,937,13,2567,725,30,28,937,4776,4284,87,32,15,87,28,1444,4776|@786
-@5634	@4777	@32			@4482	@4778	@5637:effect%2Eonly-during-pandemic-window	@4779	@4290	@4438	@1141,759,4439,156,271,1014,557,13,271,1014,557,1141,759,4439,156,4284,87,32|@787
-@5634	@1998	@32			@4391	@1999	@5637:filters%2Eonlymine	@13	@4290	@4393	@1141,1144,271,1014,937,13,271,1014,937,4780,4284,87,32|@13
-@5634	@1998	@32	auras3.target.buff.filter.onlyMine		@1106	@1999	@5638:lane%2Ebuff%2Efilters%2Eonlymine	@13	@4290	@4346	@1141,1144,28,937,13,2567,725,30,28,937,4780,4284,87,32,15,87,28,1444,4780|@788
-@5634	@1998	@32	auras3.target.debuff.filter.onlyMine		@1109	@1999	@5638:lane%2Edebuff%2Efilters%2Eonlymine	@13	@4290	@4349	@1141,1144,43,937,13,2567,725,30,43,937,4780,4284,87,32,15,87,43,1444,4780|@789
-@5634	@4781	@32	target.hpTextMouseover		@1984	@4782	@5636:hp%2Emouseover	@162	@1369	@1590	@1141,65,68,2767,162,117,2567,162,117,2767,4284,87,32,87,4783|@790
-@5634	@4781	@32	target.nameTextMouseover		@4369	@4782	@5636:name%2Emouseover	@162	@1369	@1605	@1141,65,68,2767,162,720,2567,162,720,2767,4284,87,32,87,4784|@790
-@5634	@4781	@32	target.powerTextMouseover		@1989	@4782	@5636:power%2Emouseover	@162	@1369	@1709	@1141,65,68,2767,162,128,2567,162,128,2767,4284,87,32,87,4785|@790
-@5634	@4786	@32			@4469	@4787	@5637:reminder%2Eonly-castable	@4471	@4290	@4412	@1141,65,2518,4788,4789,2420,4790,271,1014,4472,13,271,1014,4472,1141,4791,4284,87,32|@791
-@5634	@1145	@3			@4480	@179	@5646:lane%2Ebuff%2Efull-frame%2Ealpha	@5664	@4290	@4363	@179,28,403,38,13,12,30,28,403,38,9,4284,87,3|@1106
-@5634	@1145	@3			@4423	@179	@5637:appearance%2Eopacity	@4696	@4290	@4426	@179,271,1014,10,13,271,1014,10,179,4284,87,3|@767
-@5634	@1145	@3			@4482	@179	@5637:effect%2Eopacity	@4483	@4290	@4426	@179,271,1014,557,13,271,1014,557,179,4284,87,3|@705
-@5634	@1145	@3			@4484	@179	@5646:lane%2Edebuff%2Efull-frame%2Ealpha	@5665	@4290	@4367	@179,43,403,38,13,12,30,43,403,38,9,4284,87,3|@1106
-@5634	@1145	@3	target.texLayerAlpha		@4316	@179	@5639:alpha	@4318	@4319	@5720	@179,2567,190,239,2567,190,239,9,4284,87,3,87,4793|@703
-@5634	@4794	@3	target.texLayerHealthLowAlpha		@4316	@4795	@5639:healthlowalpha	@4318	@4319	@5721	@179,1047,229,2567,190,239,2567,190,239,4797,4284,87,3,87,4798|@792
-@5634	@1146	@18			@1147	@609	@5646:lane%2Ebuff%2Eauras3-sort-direction	@13	@4290	@4799	@609,28,1149,13,2567,725,30,28,1149,1150,748,4284,87,18|@170
-@5634	@1146	@18			@4800	@609	@5637:custom1%2Eordering%2Esort-direction	@13	@4290	@4801	@609,4303,1149,13,271,1014,4303,1149,1150,748,4284,87,18|@170
-@5634	@1146	@18			@4802	@609	@5637:custom2%2Eordering%2Esort-direction	@13	@4290	@4803	@609,4306,1149,13,271,1014,4306,1149,1150,748,4284,87,18|@170
-@5634	@1146	@18			@4804	@609	@5637:custom3%2Eordering%2Esort-direction	@13	@4290	@4805	@609,4309,1149,13,271,1014,4309,1149,1150,748,4284,87,18|@170
-@5634	@1146	@18			@1151	@609	@5646:lane%2Edebuff%2Eauras3-sort-direction	@13	@4290	@4806	@609,43,1149,13,2567,725,30,43,1149,1150,748,4284,87,18|@170
-@5634	@1146	@18			@4807	@609	@5637:custom4%2Eordering%2Esort-direction	@13	@4290	@4808	@609,86,68,87,1149,13,271,1014,86,68,87,1149,1150,748,4284,87,18|@170
-@5634	@2008	@3	target.oocFadeAlpha		@4417	@2009	@5655:ooc_fade_alpha	@1626	@4418	@4613	@368,369,370,179,2567,1626,2567,1626,387,1767,9,4284,87,3,87,2010|@13
-@5634	@4809	@32	target.loadCondHideOutOfCombat		@4692	@4810	@5702:loadcondhideoutofcombat	@4693			@368,369,370,2567,2443,4138,2567,2443,4138,4811,4284,87,32,87,4811|@771
-@5634	@4812	@32	target.loadCondHideOutOfCombatNoTarget		@4692	@4813	@5702:loadcondhideoutofcombatnotarget	@4693			@368,369,370,956,3835,87,2567,2443,4138,2567,2443,4138,4814,4284,87,32,87,4814|@771
-@5634	@2011	@3	target.rangeFadeAlpha		@4335	@2012	@5640:alpha	@4336			@368,369,838,2567,838,1767,2567,838,1767,9,4284,87,3,87,2013|@13
-@5634	@1155	@227			@960	@1156	@5638:lane%2Ebuff%2Ebars%2Eoutline-color	@13	@4290	@4405	@503,227,28,109,13,2567,725,30,28,109,503,227,4284,87,227|@13
-@5634	@1155	@227			@963	@1156	@5638:lane%2Edebuff%2Ebars%2Eoutline-color	@13	@4290	@4406	@503,227,43,109,13,2567,725,30,43,109,503,227,4284,87,227|@13
-@5634	@1157	@18			@960	@1158	@5638:lane%2Ebuff%2Ebars%2Eoutline-color-mode	@13	@4290	@4405	@503,227,602,28,109,13,2567,725,30,28,109,503,227,602,4284,87,18|@171
-@5634	@1157	@18			@963	@1158	@5638:lane%2Edebuff%2Ebars%2Eoutline-color-mode	@13	@4290	@4406	@503,227,602,43,109,13,2567,725,30,43,109,503,227,602,4284,87,18|@171
-@5634	@1159	@18			@960	@1160	@5638:lane%2Ebuff%2Ebars%2Eoutline-thickness	@13	@4290	@4405	@503,22,28,109,13,2567,725,30,28,109,503,22,4284,87,18|@172
-@5634	@1159	@18			@963	@1160	@5638:lane%2Edebuff%2Ebars%2Eoutline-thickness	@13	@4290	@4406	@503,22,43,109,13,2567,725,30,43,109,503,22,4284,87,18|@172
-@5634	@1161	@18			@960	@1162	@5638:lane%2Ebuff%2Ebars%2Eoutline-style	@13	@4290	@4405	@503,12,28,109,13,2567,725,30,28,109,503,12,4284,87,18|@173
-@5634	@1161	@18			@963	@1162	@5638:lane%2Edebuff%2Ebars%2Eoutline-style	@13	@4290	@4406	@503,12,43,109,13,2567,725,30,43,109,503,12,4284,87,18|@173
-@5634	@2014	@18	target.portraitOverlayAlign		@4351	@2015	@5644:portraitoverlayalign	@1621	@1369	@1622	@1281,622,2567,1621,2567,1621,2016,4284,87,18,87,2016|@317
-@5634	@1292	@18	target.unitDispelOverlayTrigger		@4535	@1293	@5678:overlay%2Eunitdispeloverlaytrigger	@4536			@1281,1294,951,1281,2567,951,1281,4815,4284,87,18,87,4815|@793
-@5634	@1296	@3	target.unitDispelOverlayAlpha		@4535	@1297	@5678:overlay%2Eunitdispeloverlayalpha	@4536			@1281,179,951,1281,2567,951,1281,4816,4284,87,3,87,4816|@323
-@5634	@1299	@18	target.unitDispelOverlayStyle		@4535	@1300	@5678:overlay%2Eunitdispeloverlaystyle	@4536			@1281,12,951,1281,2567,951,1281,4817,4284,87,18,87,4817|@794
-@5634	@1494	@3			@4423	@1495	@5637:appearance%2Epandemicpadding	@4437	@4290	@4438	@1495,271,1014,10,13,271,1014,10,4818,4284,87,3|@795
-@5634	@1163	@3			@939	@1164	@5638:lane%2Ebuff%2Elayout%2Eper-row	@13	@4290	@4358	@684,1165,28,118,13,2567,725,30,28,118,684,1165,4284,87,3|@13
-@5634	@1163	@3			@4359	@1164	@5637:layout%2Eperrow	@13	@4290	@4360	@684,1165,271,1014,118,13,271,1014,118,1166,4284,87,3|@13
-@5634	@1163	@3			@941	@1164	@5638:lane%2Edebuff%2Elayout%2Eper-row	@13	@4290	@4361	@684,1165,43,118,13,2567,725,30,43,118,684,1165,4284,87,3|@13
-@5634	@2045	@96		start_unit_custom_anchor_picker	@1671	@2046	@5651:custom%2Epick	@4378			@2046,113,271,2567,4378,271,2046,4284,87,96,2047,2567,271,113,2048|@13
-@5634	@4819	@3			@4469	@4820	@5637:reminder%2Eopacity	@4471	@4290	@4412	@4821,179,271,1014,4472,13,271,1014,4472,179,4284,87,3|@796
-@5634	@4822	@227			@4469	@4823	@5637:reminder%2Ecolor	@4471	@4290	@4412	@4821,1259,271,1014,4472,13,271,1014,4472,227,4284,87,227|@797
-@5634	@2049	@18	target.portraitPlacement		@4351	@2050	@5644:portraitplacement	@1621	@1369	@1622	@2050,2567,1621,2567,1621,2051,4284,87,18,87,2051|@318
-@5634	@2055	@32			@4351	@1621	@5644:enabled	@1621			@1621,2567,1621,2567,1621,235,4284,87,32|@798
-@5634	@2061	@18	target.portraitDetachedPoint		@4351	@2062	@5644:portraitdetachedpoint	@1621	@1369	@1622	@1621,113,262,2567,1621,2567,1621,2063,4284,87,18,87,2063|@278
-@5634	@2064	@32	target.portraitBgEnabled		@4351	@2065	@5644:portraitbgenabled	@1621	@1369	@1474	@1621,189,2567,1621,2567,1621,2066,4284,87,32,87,2066|@322
-@5634	@2067	@3	target.portraitEdgeSoftness		@4351	@2068	@5644:portraitedgesoftness	@1621	@4353	@5722	@1621,1316,2069,2567,1621,2567,1621,2070,4284,87,3,87,2070|@13
-@5634	@2071	@3	target.portraitAlpha		@4351	@2072	@5644:portraitalpha	@1621	@1369	@1622	@1621,179,2567,1621,2567,1621,2073,4284,87,3,87,2073|@323
-@5634	@2074	@3	target.portraitZoom		@4351	@2075	@5644:portraitzoom	@1621	@1369	@1884	@1621,1119,2567,1621,2567,1621,2076,4284,87,3,87,2076|@13
-@5634	@1167	@18			@25	@868	@5646:lane%2Ebuff%2Eauras3-duration-bar-position	@5653	@4290	@4363	@868,12,28,13,12,30,28,15,414,302,868,4284,87,18|@1124
-@5634	@1167	@18			@76	@868	@5646:lane%2Edebuff%2Eauras3-duration-bar-position	@5654	@4290	@4367	@868,12,43,13,12,30,43,15,414,302,868,4284,87,18|@1124
-@5634	@1167	@18	general.castbarTargetIconPosition		@4339	@868	@5641:detail%2Emsuf2_castbar_icon_position	@2528	@1369	@4448	@868,2528,4342,2567,2528,4342,4330,2528,11,868,4284,87,18,148,5723|@1125
-@5634	@1167	@520	target.portraitMode		@4351	@868	@5644:position	@1621	@1369	@1681	@868,2567,1621,2567,1621,868,4284,87,520,87,2056|@324
-@5634	@4826	@18	general.castbarTargetSpellNamePosition		@4339	@4827	@5641:detail%2Emsuf2_castbar_spell_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,716,868,4284,87,18,148,5724|@1126
-@5634	@4826	@18	general.castbarTargetTargetNamePosition		@4339	@4827	@5641:detail%2Emsuf2_castbar_target_name_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,87,720,868,4284,87,18,148,5725|@1127
-@5634	@4826	@18	general.castbarTargetTimePosition		@4339	@4827	@5641:detail%2Emsuf2_castbar_time_position	@2528	@1369	@4597	@868,538,2528,4342,2567,2528,4342,4330,2528,419,868,4284,87,18,148,5726|@1128
-@5634	@2082	@32	target.powerBarBorderEnabled		@4450	@2083	@5659:powerbarborderenabled	@4451			@128,302,8,2567,128,2567,128,2084,4284,87,32,87,2084|@41
-@5634	@4831	@3	target.powerBarHeight		@4450	@4832	@5659:powerbarheight	@4451			@128,302,347,2567,128,2567,128,4833,4284,87,3,87,4833|@13
-@5634	@4834	@3	target.powerTextLayer		@4672	@4835	@5636:advanced%2Epowertextlayer	@162	@1369	@1474	@128,162,239,162,108,2567,162,108,518,4284,87,3,87,518|@803
-@5634	@2088	@18			@1889	@2089	@5636:power%2Eslot%2Emode	@162	@1369	@1709	@128,606,128,219,2567,162,128,219,602,4284,87,18|@804
-@5634	@1169	@18			@903	@538	@5638:lane%2Ebuff%2Eblacklist%2Epreset-selection	@13	@4290	@4310	@538,28,908,13,2567,725,30,28,908,538,1170,4284,87,18|@176
-@5634	@1169	@18			@927	@538	@5638:lane%2Edebuff%2Eblacklist%2Epreset-selection	@13	@4290	@4314	@538,43,908,13,2567,725,30,43,908,538,1170,4284,87,18|@177
-@5634	@1171	@3			@4480	@1172	@5646:lane%2Ebuff%2Efull-frame%2Epriority	@5664	@4290	@4363	@1172,28,403,38,13,12,30,28,403,38,1172,4284,87,3|@1106
-@5634	@1171	@3			@4482	@1172	@5637:effect%2Epriority	@4483	@4290	@4426	@1172,271,1014,557,13,271,1014,557,1172,4284,87,3|@705
-@5634	@1171	@3			@4484	@1172	@5646:lane%2Edebuff%2Efull-frame%2Epriority	@5665	@4290	@4367	@1172,43,403,38,13,12,30,43,403,38,1172,4284,87,3|@1106
-@5634	@1503	@1043			@4279	@1504	@5635:indicator%2Estatuspvp	@4280	@4281	@5255	@1506,1507,1508,602,1506,1348,922,2567,1348,922,5256,4284,87,1043|@657
-@5634	@4836	@1043			@4279	@4837	@5635:indicator%2Eracetext	@4280	@4281	@4838	@4839,162,1348,922,2567,1348,922,4840,4284,87,1043|@657
-@5634	@1173	@32			@4391	@916	@5637:filters%2Eraid	@13	@4290	@4393	@916,271,1014,937,13,271,1014,937,916,4284,87,32|@13
-@5634	@5257	@1043			@4279	@5258	@5635:indicator%2Eraidgroupname	@4280	@4281	@5259	@916,909,1348,922,2567,1348,922,5260,4284,87,1043|@657
-@5634	@1512	@1043			@4279	@1513	@5635:indicator%2Eraidmarker	@4280	@4281	@4841	@916,420,1348,922,2567,1348,922,1515,4284,87,1043|@657
-@5634	@4842	@32			@4391	@4843	@5637:filters%2Eraidincombat	@13	@4290	@4393	@916,370,271,1014,937,13,271,1014,937,1176,4284,87,32|@13
-@5634	@4842	@32	auras3.target.buff.filter.raidInCombat		@1106	@4843	@5638:lane%2Ebuff%2Efilters%2Eraidincombat	@13	@4290	@4346	@916,370,28,937,13,2567,725,30,28,937,1176,4284,87,32,15,87,28,1444,1176|@805
-@5634	@4842	@32	auras3.target.debuff.filter.raidInCombat		@1109	@4843	@5638:lane%2Edebuff%2Efilters%2Eraidincombat	@13	@4290	@4349	@916,370,43,937,13,2567,725,30,43,937,1176,4284,87,32,15,87,43,1444,1176|@806
-@5634	@4844	@18	target.raidGroupNameStyle		@4845	@4846	@5635:raid_group%2Estyle	@4280	@1369	@1370	@916,909,12,1348,916,909,2567,1348,916,909,12,4284,87,18,87,4847|@954
-@5634	@4848	@32			@4391	@4849	@5637:filters%2Eincludedispellable	@13	@4290	@4393	@4394,254,909,271,1014,937,13,271,1014,937,4547,4284,87,32|@13
-@5634	@2101	@18	target.portraitRender		@4351	@2102	@5644:portraitrender	@1621	@1369	@1681	@2102,2567,1621,2567,1621,2103,4284,87,18,87,2103|@326
-@5634	@2808	@96		reset_aura_custom_container	@4850	@874	@5637:custom1%2Esetup%2Ereset	@13	@4290	@4412	@874,4303,569,13,271,1014,4303,569,874,4284,87,96,874,39,271,1014|@13
-@5634	@2808	@96		reset_aura_custom_container	@4851	@874	@5637:custom2%2Esetup%2Ereset	@13	@4290	@4852	@874,4306,569,13,271,1014,4306,569,874,4284,87,96,874,39,271,1014|@13
-@5634	@2808	@96		reset_aura_custom_container	@4853	@874	@5637:custom3%2Esetup%2Ereset	@13	@4290	@4854	@874,4309,569,13,271,1014,4309,569,874,4284,87,96,874,39,271,1014|@13
-@5634	@2808	@96		reset_aura_custom_container	@4855	@874	@5637:custom4%2Esetup%2Ereset	@13	@4290	@4416	@874,4293,569,13,271,1014,4293,569,874,4284,87,96,874,39,271,1014|@13
-@5634	@4856	@96		reset_unit_status_indicator	@1368	@4857	@5635:selected%2Ereset	@4280	@1369	@1370	@874,981,1348,922,1348,981,2567,1348,981,874,4284,87,96,874,2567,1348,922|@955
-@5634	@4858	@32	target.loadCondHideResting		@4692	@4859	@5702:loadcondhideresting	@4693			@4859,2567,2443,4138,2567,2443,4138,4860,4284,87,32,87,4860|@771
-@5634	@607	@32	target.hpTextReverse		@1984	@608	@5636:hp%2Ereverse	@162	@1369	@1590	@309,609,162,117,2567,162,117,309,4284,87,32,87,2107|@809
-@5634	@4864	@32	target.levelIndicatorForeverBadge		@4738	@4865	@5635:level%2Eforever_badge	@4280	@4866	@5727	@4868,240,4869,1348,240,2567,1348,240,4870,4869,4284,87,32,87,4871|@956
-@5634	@1186	@713			@903	@1187	@5638:lane%2Ebuff%2Eblacklist%2Esearch	@13	@4290	@4310	@1187,28,908,13,2567,725,30,28,908,1187,4284,87,713|@13
-@5634	@1186	@713			@4414	@1187	@5637:target-dots%2Esearch	@13	@4290	@4291	@1187,271,1014,87,86,13,271,1014,87,86,1187,4284,87,713|@13
-@5634	@1186	@713			@4296	@1187	@5637:whitelist%2Esearch	@13	@4290	@4298	@1187,271,1014,4294,13,271,1014,4294,1187,4284,87,713|@13
-@5634	@1186	@713			@927	@1187	@5638:lane%2Edebuff%2Eblacklist%2Esearch	@13	@4290	@4314	@1187,43,908,13,2567,725,30,43,908,1187,4284,87,713|@13
-@5634	@2138	@3			@1588	@2139	@5636:hp%2Eslot%2Esize	@162	@1369	@1590	@981,219,57,117,219,2567,162,117,219,57,4284,87,3|@68
-@5634	@2138	@3			@1889	@2139	@5636:power%2Eslot%2Esize	@162	@1369	@1709	@981,219,57,128,219,2567,162,128,219,57,4284,87,3|@68
-@5634	@2144	@18	target.portraitShape		@4351	@29	@5644:portraitshape	@1621	@1369	@1640	@29,2567,1621,2567,1621,2145,4284,87,18,87,2145|@812
-@5634	@2146	@32	target.hpFullValueShort		@1984	@2147	@5636:hp%2Efull_value_short	@162	@1369	@1590	@2148,2149,162,117,2567,162,117,403,606,2148,4284,87,32,87,2150|@813
-@5634	@2146	@32	target.powerFullValueShort		@1989	@2147	@5636:power%2Efull_value_short	@162	@1369	@1709	@2148,2149,162,128,2567,162,128,403,606,2148,4284,87,32,87,4872|@13
-@5634	@1308	@18	target.unitDispelSymbolMode		@4539	@65	@5678:symbol%2Eunitdispelsymbolmode	@4540			@65,951,357,2567,951,357,4873,4284,87,18,87,4873|@814
-@5634	@1190	@32			@25	@1191	@5646:lane%2Ebuff%2Eshowcooldownswipe	@5703	@4290	@4363	@65,138,1192,12,28,13,12,30,28,1193,4284,87,32|@1117
-@5634	@1190	@32			@76	@1191	@5646:lane%2Edebuff%2Eshowcooldownswipe	@5679	@4290	@4367	@65,138,1192,12,43,13,12,30,43,1193,4284,87,32|@1117
-@5634	@1194	@32			@25	@1195	@5646:lane%2Ebuff%2Eshowcooldowntext	@5703	@4290	@4363	@65,138,162,12,28,13,12,30,28,1197,4284,87,32|@1117
-@5634	@1194	@32			@76	@1195	@5646:lane%2Edebuff%2Eshowcooldowntext	@5679	@4290	@4367	@65,138,162,12,43,13,12,30,43,1197,4284,87,32|@1117
-@5634	@4874	@32			@4414	@4875	@5637:target-dots%2Eportrait-icon	@13	@4290	@4416	@65,86,228,1621,868,271,1014,87,86,13,271,1014,87,86,1621,11,4284,87,32|@815
-@5634	@2151	@32	target.showHP		@1984	@631	@5636:hp%2Eshow	@162	@1369	@1590	@65,117,162,162,117,2567,162,117,65,4284,87,32,87,4876|@816
-@5634	@2158	@32	target.showName		@4369	@2159	@5636:name%2Eshow	@162	@1369	@1605	@65,720,162,720,2567,162,720,65,4284,87,32,87,2160|@817
-@5634	@4877	@32			@4435	@4878	@5637:appearance%2Epandemic%2Eenabled	@4437	@4290	@4438	@65,4439,296,10,4439,13,271,1014,10,4439,235,4284,87,32|@818
-@5634	@4879	@96	target.showPowerBar		@4450	@4880	@5659:enable_now	@4451			@65,128,2567,128,2567,128,842,2268,4284,87,96,87,4881|@20
-@5634	@2168	@32	target.showPowerText		@1989	@2169	@5636:power%2Eshow	@162	@1369	@1709	@65,128,162,162,128,2567,162,128,65,4284,87,32,87,4882|@819
-@5634	@1201	@32			@25	@1202	@5646:lane%2Ebuff%2Eshowstackcount	@5647	@4290	@4363	@65,1204,1205,12,28,13,12,30,28,4886,4284,87,32|@1106
-@5634	@1201	@32			@76	@1202	@5646:lane%2Edebuff%2Eshowstackcount	@5649	@4290	@4367	@65,1204,1205,12,43,13,12,30,43,4886,4284,87,32|@1106
-@5634	@5728	@32	targettarget.showToTInTargetName		@5671	@5729	@5674:show_target_of_target	@5673			@65,87,369,87,162,5675,2567,5675,162,2567,5675,162,65,87,369,87,4284,87,32,5676,5730|@1129
-@5634	@1212	@32			@25	@1213	@5646:lane%2Ebuff%2Eshowdurationbar	@5653	@4290	@4363	@65,157,68,11,12,28,13,12,30,28,1200,4284,87,32|@1115
-@5634	@1212	@32			@76	@1213	@5646:lane%2Edebuff%2Eshowdurationbar	@5654	@4290	@4367	@65,157,68,11,12,43,13,12,30,43,1200,4284,87,32|@1115
-@5634	@1214	@32			@25	@1215	@5646:lane%2Ebuff%2Eshowtooltip	@5703	@4290	@4363	@65,1216,12,28,13,12,30,28,1217,4284,87,32|@1130
-@5634	@1214	@32			@76	@1215	@5646:lane%2Edebuff%2Eshowtooltip	@5679	@4290	@4367	@65,1216,12,43,13,12,30,43,1217,4284,87,32|@1130
-@5634	@1218	@32			@960	@1219	@5638:lane%2Ebuff%2Elayout%2Eshow-as-bars	@13	@4290	@4405	@65,1060,109,28,109,13,2567,725,30,28,109,65,1060,109,4284,87,32|@13
-@5634	@1218	@32			@963	@1219	@5638:lane%2Edebuff%2Elayout%2Eshow-as-bars	@13	@4290	@4406	@65,1060,109,43,109,13,2567,725,30,43,109,65,1060,109,4284,87,32|@13
-@5634	@4887	@18	target.texLayerHealthCondition		@4316	@4888	@5639:healthcondition	@4318	@4319	@5731	@65,254,301,2567,190,239,2567,190,239,4890,4284,87,18,87,4891|@822
-@5634	@2175	@32			@4595	@2176	@5641:portrait_cast_icon	@2528	@1369	@4448	@65,641,716,11,840,1621,2567,2528,2567,2528,1621,641,11,4284,87,32|@13
-@5634	@2175	@32	target.portraitCastSpellIcon		@4351	@2176	@5644:portraitcastspellicon	@1621	@1369	@1474	@65,641,716,11,840,1621,2567,1621,2567,1621,2177,4284,87,32,87,2177|@13
-@5634	@4892	@32			@4414	@4893	@5637:target-dots%2Eportrait-cooldown-text	@13	@4290	@4416	@65,138,162,68,1621,271,1014,87,86,13,271,1014,87,86,1621,138,162,4284,87,32|@823
-@5634	@4894	@32	target.showInterrupt		@4595	@4895	@5641:show_interrupt	@2528	@1369	@1681	@65,2870,2567,2528,2567,2528,65,2870,4284,87,32,87,4896|@13
-@5634	@4897	@32	target.showInterruptSource		@4595	@4898	@5641:show_interrupt_source	@2528	@4899	@5732	@65,4901,720,2567,2528,2567,2528,65,2870,444,4284,87,32,87,4902|@13
-@5634	@1310	@32	target.unitDispelOverlayOnHealth		@4535	@1311	@5678:overlay%2Eunitdispeloverlayonhealth	@4536			@65,68,1312,301,1141,951,1281,2567,951,1281,4903,4284,87,32,87,4903|@13
-@5634	@4904	@32	target.loadCondShowWhenInjured		@4692	@4905	@5702:loadcondshowwheninjured	@4693			@65,1141,1047,4906,301,2567,2443,4138,2567,2443,4138,4907,4284,87,32,87,4907|@824
-@5634	@4908	@32	target.showPowerBar		@4450	@2166	@5659:show	@4451			@65,128,302,2567,128,2567,128,65,4284,87,32,87,4881|@825
-@5634	@1226	@3			@939	@57	@5638:lane%2Ebuff%2Elayout%2Eicon-size	@13	@4290	@4358	@57,28,118,13,2567,725,30,28,118,11,57,4284,87,3|@13
-@5634	@1226	@3			@4359	@57	@5637:layout%2Esize	@13	@4290	@4360	@57,271,1014,118,13,271,1014,118,57,4284,87,3|@13
-@5634	@1226	@3			@941	@57	@5638:lane%2Edebuff%2Elayout%2Eicon-size	@13	@4290	@4361	@57,43,118,13,2567,725,30,43,118,11,57,4284,87,3|@13
-@5634	@1226	@3	general.castbarTargetIconSize		@4339	@57	@5641:detail%2Emsuf2_castbar_icon_size	@2528	@1369	@4448	@57,2528,4342,2567,2528,4342,4330,2528,11,57,4284,87,3,148,5733|@1104
-@5634	@1226	@3	general.castbarTargetSpellNameFontSize		@4339	@57	@5641:detail%2Emsuf2_castbar_spell_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,716,57,4284,87,3,148,5734|@1131
-@5634	@1226	@3	general.castbarTargetTargetNameFontSize		@4339	@57	@5641:detail%2Emsuf2_castbar_target_name_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,87,720,57,4284,87,3,148,5735|@826
-@5634	@1226	@3	general.castbarTargetTimeFontSize		@4339	@57	@5641:detail%2Emsuf2_castbar_time_size	@2528	@1369	@4597	@57,2528,4342,2567,2528,4342,4330,2528,419,57,4284,87,3,148,5736|@1132
-@5634	@1226	@3	target.nameFontSize		@4369	@57	@5636:name%2Esize	@162	@1369	@1605	@57,162,720,2567,162,720,57,4284,87,3,87,2195|@826
-@5634	@2196	@520	target.portraitSizeMode		@4351	@2197	@5644:portraitsizemode	@1621	@4353	@5737	@57,602,2567,1621,2567,1621,2198,4284,87,520,87,2198|@334
-@5634	@2199	@3	target.portraitSizeOverride		@4351	@2200	@5644:portraitsizeoverride	@1621	@1369	@1884	@57,1885,2567,1621,2567,1621,2201,4284,87,3,87,2201|@13
-@5634	@702	@32	target.powerSmoothFill		@4450	@704	@5659:powersmoothfill	@4451			@706,306,2567,128,2567,128,711,4284,87,32,87,711|@20
-@5634	@702	@32	target.smoothFill		@4461	@704	@5661:smooth_fill	@4462			@706,306,2567,1638,2567,1638,706,306,4284,87,32,87,2204|@700
-@5634	@4915	@32	target.loadCondHideSolo		@4692	@1657	@5702:loadcondhidesolo	@4693			@1657,2567,2443,4138,2567,2443,4138,4916,4284,87,32,87,4916|@771
-@5634	@1228	@18			@1147	@1229	@5646:lane%2Ebuff%2Eauras3-sort-method	@13	@4290	@4799	@1150,254,28,1149,13,2567,725,30,28,1149,1150,1230,4284,87,18|@829
-@5634	@1228	@18			@4800	@1229	@5637:custom1%2Eordering%2Ebuff-sort-method	@13	@4290	@4801	@1150,254,4303,1149,13,271,1014,4303,1149,28,1150,1230,4284,87,18|@830
-@5634	@1228	@18			@4800	@1229	@5637:custom1%2Eordering%2Edebuff-sort-method	@13	@4290	@4801	@1150,254,4303,1149,13,271,1014,4303,1149,43,1150,1230,4284,87,18|@830
-@5634	@1228	@18			@4802	@1229	@5637:custom2%2Eordering%2Ebuff-sort-method	@13	@4290	@4803	@1150,254,4306,1149,13,271,1014,4306,1149,28,1150,1230,4284,87,18|@830
-@5634	@1228	@18			@4802	@1229	@5637:custom2%2Eordering%2Edebuff-sort-method	@13	@4290	@4803	@1150,254,4306,1149,13,271,1014,4306,1149,43,1150,1230,4284,87,18|@830
-@5634	@1228	@18			@4804	@1229	@5637:custom3%2Eordering%2Ebuff-sort-method	@13	@4290	@4805	@1150,254,4309,1149,13,271,1014,4309,1149,28,1150,1230,4284,87,18|@830
-@5634	@1228	@18			@4804	@1229	@5637:custom3%2Eordering%2Edebuff-sort-method	@13	@4290	@4805	@1150,254,4309,1149,13,271,1014,4309,1149,43,1150,1230,4284,87,18|@830
-@5634	@1228	@18			@1151	@1229	@5646:lane%2Edebuff%2Eauras3-sort-method	@13	@4290	@4806	@1150,254,43,1149,13,2567,725,30,43,1149,1150,1230,4284,87,18|@831
-@5634	@1228	@18			@4807	@1229	@5637:custom4%2Eordering%2Edebuff-sort-method	@13	@4290	@4808	@1150,254,86,68,87,1149,13,271,1014,86,68,87,1149,43,1150,1230,4284,87,18|@830
-@5634	@4917	@18	target.texLayerColorTreatment		@4316	@4918	@5639:colortreatment	@4318	@4319	@5738	@444,227,2567,190,239,2567,190,239,4920,4284,87,18,87,4921|@832
-@5634	@2216	@3	general.castbarTargetIconSpacing		@4339	@992	@5641:detail%2Emsuf2_castbar_icon_spacing	@2528	@1369	@4448	@992,2528,4342,2567,2528,4342,4330,2528,11,992,4284,87,3,148,5739|@1104
-@5634	@4923	@18			@1368	@4924	@5635:selected%2Ecustomicon	@4280	@1369	@1370	@3118,11,1885,1348,981,2567,1348,981,1415,4284,87,18|@960
-@5634	@1232	@18			@903	@716	@5638:lane%2Ebuff%2Eblacklist%2Espell-selection	@13	@4290	@4310	@716,28,908,13,2567,725,30,28,908,716,1170,4284,87,18|@188
-@5634	@1232	@18			@927	@716	@5638:lane%2Edebuff%2Eblacklist%2Espell-selection	@13	@4290	@4314	@716,43,908,13,2567,725,30,43,908,716,1170,4284,87,18|@834
-@5634	@1239	@3			@4423	@1240	@5637:appearance%2Estackx	@4925	@4290	@4426	@1204,487,271,1014,10,13,271,1014,10,1241,4284,87,3|@710
-@5634	@1242	@3			@4423	@1243	@5637:appearance%2Estacky	@4925	@4290	@4426	@1204,492,271,1014,10,13,271,1014,10,1244,4284,87,3|@710
-@5634	@4926	@18			@4423	@1234	@5637:appearance%2Estack-anchor	@4925	@4290	@4426	@1204,113,271,1014,10,13,271,1014,10,1204,113,4284,87,18|@711
-@5634	@4927	@32			@4423	@4928	@5637:appearance%2Estack-count	@4925	@4290	@4426	@1204,1205,271,1014,10,13,271,1014,10,1204,1205,4284,87,32|@710
-@5634	@4929	@3			@4423	@4930	@5637:appearance%2Estacksize	@4925	@4290	@4426	@1204,57,271,1014,10,13,271,1014,10,1238,4284,87,3|@710
-@5634	@4931	@1551			@4932	@1553	@5635:section	@4280	@1369	@1370	@1348,1181,2567,1348,2567,1348,1551,4284,87,1551|@13
-@5634	@4933	@18			@1368	@4934	@5635:selected%2Eanchor	@4280	@1369	@1370	@1348,922,113,1348,981,2567,1348,981,113,4284,87,18|@961
-@5634	@4935	@32			@1368	@4936	@5635:selected%2Eenabled	@4280	@4866	@5740	@1348,922,235,1348,981,2567,1348,981,235,4284,87,32|@962
-@5634	@4938	@3			@4328	@4939	@5635:placement%2Emsuf2_status_layer	@4280	@1369	@1370	@1348,922,239,1348,2050,2567,1348,2050,4330,1348,239,4284,87,3|@963
-@5634	@4940	@18			@4932	@4941	@5635:selector	@4280	@1369	@1370	@1348,922,696,2567,1348,2567,1348,696,4284,87,18|@1133
-@5634	@4942	@3			@1368	@4943	@5635:selected%2Esize	@4280	@4866	@5741	@1348,922,57,1348,981,2567,1348,981,57,4284,87,3|@965
-@5634	@4945	@32	general.statusIconsUseMidnightStyle		@4932	@4946	@5635:midnight_style	@4280	@1369	@1370	@1348,922,12,2567,1348,2567,1348,4947,12,4284,87,32,148,4948|@966
-@5634	@4949	@18			@1368	@4950	@5635:selected%2Esymbol	@4280	@1369	@1370	@1348,922,357,1348,981,2567,1348,981,357,4284,87,18|@967
-@5634	@4951	@32			@4333	@4952	@5635:preview%2Emsuf2_status_test	@4280	@1369	@1370	@1348,922,2832,602,1348,146,2567,1348,146,4330,1348,2832,4284,87,32|@968
-@5634	@4953	@96			@1368	@4954	@5635:selected%2Etext_settings	@4280	@1369	@1370	@1348,162,2471,1348,981,2567,1348,981,162,2471,4284,87,96|@969
-@5634	@4955	@18			@25	@4956	@5646:lane%2Ebuff%2Eauras3-stealable-marker-style	@5703	@4290	@4363	@4546,420,12,12,28,13,12,30,28,15,4546,420,12,4284,87,18|@1134
-@5634	@4957	@32	target.loadCondHideStealthed		@4692	@4958	@5702:loadcondhidestealthed	@4693			@4958,2567,2443,4138,2567,2443,4138,4959,4284,87,32,87,4959|@771
-@5634	@1558	@18			@4435	@12	@5637:appearance%2Epandemic%2Estyle	@4437	@4290	@4438	@12,10,4439,13,271,1014,10,4439,12,4284,87,18|@845
-@5634	@4960	@18			@4423	@1192	@5637:appearance%2Eswipe-direction	@4504	@4290	@4426	@1192,271,1014,10,13,271,1014,10,1192,748,4284,87,18|@846
-@5634	@1245	@18			@25	@1246	@5646:lane%2Ebuff%2Eauras3-cooldown-swipe-direction	@5645	@4290	@4363	@1192,748,12,28,13,12,30,28,15,138,1192,748,4284,87,18|@1135
-@5634	@1245	@18			@76	@1246	@5646:lane%2Edebuff%2Eauras3-cooldown-swipe-direction	@5648	@4290	@4367	@1192,748,12,43,13,12,30,43,15,138,1192,748,4284,87,18|@1135
-@5634	@1321	@18	target.unitDispelSymbolAnchor		@4539	@1322	@5678:symbol%2Eunitdispelsymbolanchor	@4540			@357,113,951,357,2567,951,357,4961,4284,87,18,87,4961|@671
-@5634	@1324	@18	target.unitDispelSymbolTrigger		@4539	@1325	@5678:symbol%2Eunitdispelsymboltrigger	@4540			@357,1294,951,357,2567,951,357,4962,4284,87,18,87,4962|@793
-@5634	@1327	@3	target.unitDispelSymbolAlpha		@4539	@1328	@5678:symbol%2Eunitdispelsymbolalpha	@4540			@357,179,951,357,2567,951,357,4963,4284,87,3,87,4963|@323
-@5634	@1330	@18	target.unitDispelSymbolStyle		@4539	@1331	@5678:symbol%2Eunitdispelsymbolstyle	@4540			@357,926,951,357,2567,951,357,4964,4284,87,18,87,4964|@848
-@5634	@1333	@3	target.unitDispelSymbolSize		@4539	@1334	@5678:symbol%2Eunitdispelsymbolsize	@4540			@357,57,951,357,2567,951,357,4965,4284,87,3,87,4965|@13
-@5634	@1336	@3	target.unitDispelSymbolSpacing		@4539	@1337	@5678:symbol%2Eunitdispelsymbolspacing	@4540			@357,992,951,357,2567,951,357,4966,4284,87,3,87,4966|@13
-@5634	@4967	@18	target.unitDispelSymbolStrata		@4539	@4968	@5678:symbol%2Eunitdispelsymbolstrata	@4540			@357,4969,951,357,2567,951,357,4970,4284,87,18,87,4970|@849
-@5634	@4971	@3			@25	@744	@5646:lane%2Ebuff%2Ecooldowntextsize	@5645	@4290	@4363	@162,57,12,28,13,12,30,28,4972,4284,87,3|@1136
-@5634	@4971	@3			@25	@744	@5646:lane%2Ebuff%2Estacktextsize	@5647	@4290	@4363	@162,57,12,28,13,12,30,28,4973,4284,87,3|@1137
-@5634	@4971	@3			@76	@744	@5646:lane%2Edebuff%2Ecooldowntextsize	@5648	@4290	@4367	@162,57,12,43,13,12,30,43,4972,4284,87,3|@1136
-@5634	@4971	@3			@76	@744	@5646:lane%2Edebuff%2Estacktextsize	@5649	@4290	@4367	@162,57,12,43,13,12,30,43,4973,4284,87,3|@1137
-@5634	@2230	@32	target.detachedPowerBarTextOnBar		@4450	@2231	@5659:detachedpowerbartextonbar	@4451			@162,68,129,302,2567,128,2567,128,542,4284,87,32,87,542|@13
-@5634	@4974	@18	target.texLayerTexture		@4316	@4975	@5639:texture	@4318	@4319	@5742	@190,2672,2567,190,239,2567,190,239,190,4284,87,18,87,4977|@852
-@5634	@4978	@18	target.texLayerCropMode		@4316	@4979	@5639:cropmode	@4318	@4319	@5743	@190,4981,2567,190,239,2567,190,239,4982,4284,87,18,87,4983|@853
-@5634	@4984	@3			@4480	@22	@5646:lane%2Ebuff%2Efull-frame%2Ethickness	@5664	@4290	@4363	@22,28,403,38,13,12,30,28,403,38,22,4284,87,3|@1106
-@5634	@4984	@3			@4423	@22	@5637:appearance%2Epandemicthickness	@4437	@4290	@4438	@22,271,1014,10,13,271,1014,10,4985,4284,87,3|@795
-@5634	@4984	@3			@4482	@22	@5637:effect%2Ethickness	@4483	@4290	@4426	@22,271,1014,557,13,271,1014,557,22,4284,87,3|@705
-@5634	@4984	@3			@4484	@22	@5646:lane%2Edebuff%2Efull-frame%2Ethickness	@5665	@4290	@4367	@22,43,403,38,13,12,30,43,403,38,22,4284,87,3|@1106
-@5634	@1572	@32			@4279	@1402	@5635:indicator%2Ethreat	@4280	@4281	@5149	@1402,1348,922,2567,1348,922,1402,4284,87,32|@915
-@5634	@5150	@32	target.threatIndicatorBackground		@5151	@5152	@5635:threat%2Ebackground	@4280	@4866	@5744	@1402,189,1348,1402,2567,1348,1402,189,4284,87,32,87,5154|@974
-@5634	@5155	@32	target.threatIndicatorColorCurve		@5151	@5156	@5635:threat%2Ecolor_curve	@4280	@4866	@5745	@1402,263,1348,1402,2567,1348,1402,227,3521,4284,87,32,87,5158|@975
-@5634	@4986	@3			@4435	@4987	@5637:appearance%2Epandemic%2Etint-opacity	@4437	@4290	@4438	@1259,179,10,4439,13,271,1014,10,4439,1259,179,4284,87,3|@695
-@5634	@4988	@32			@4423	@1216	@5637:appearance%2Etooltip	@4696	@4290	@4426	@1216,271,1014,10,13,271,1014,10,1216,4284,87,32|@854
-@5634	@4989	@96		aura_custom_whitelist_add_spell	@4990	@4991	@5637:custom4%2Edots%2Eadd	@13	@4290	@4291	@1263,4552,4293,86,13,271,1014,4293,86,103,4284,87,96,39,271,4294,103,716|@13
-@5634	@2264	@96	general.enableTargetCastbar		@4595	@2266	@5641:use_msuf	@2528	@1369	@1681	@752,1127,2567,2528,2567,2528,752,1127,4284,87,96,148,5746|@1138
-@5634	@4993	@32			@4414	@4994	@5637:target-dots%2Eportrait-position-when-disabled	@13	@4290	@4416	@752,1621,868,1656,1621,2519,2468,271,1014,87,86,13,271,1014,87,86,1621,868,396,4995,4284,87,32|@856
-@5634	@1266	@32	auras3.target.buff.visible		@939	@1267	@5638:lane%2Ebuff%2Elayout%2Evisible	@13	@4290	@4358	@1267,28,118,13,2567,725,30,28,118,1267,4284,87,32,15,87,28,1267|@13
-@5634	@1266	@32	auras3.target.debuff.visible		@941	@1267	@5638:lane%2Edebuff%2Elayout%2Evisible	@13	@4290	@4361	@1267,43,118,13,2567,725,30,43,118,1267,4284,87,32,15,87,43,1267|@13
-@5634	@4996	@18			@1368	@4997	@5635:selected%2Eiconstyle	@4280	@1369	@1370	@4998,12,1182,1225,922,1348,981,2567,1348,981,1470,4284,87,18|@977
-@5634	@764	@3	target.texLayerWidth		@4316	@272	@5639:width	@4318	@4319	@5747	@272,2567,190,239,2567,190,239,272,4284,87,3,87,5000|@703
-@5634	@5001	@18	general.castbarTargetSpellNameTruncate		@4595	@5002	@5641:spell_text_width_mode	@2528	@1369	@1474	@272,139,2567,2528,2567,2528,716,162,272,602,4284,87,18,148,5748|@1139
-@5634	@766	@18	general.castbarTargetMatchWidth		@4595	@768	@5641:width_mode	@2528	@1369	@1681	@272,602,2567,2528,2567,2528,272,602,4284,87,18,148,5749|@1140
-@5634	@2323	@3	target.portraitWidth		@4351	@2324	@5644:portraitwidth	@1621	@1369	@1884	@272,1885,2567,1621,2567,1621,2325,4284,87,3,87,2325|@13
-@5634	@5005	@3			@25	@487	@5646:lane%2Ebuff%2Ecooldowntextoffsetx	@5645	@4290	@4363	@487,12,28,13,12,30,28,5006,4284,87,3|@1136
-@5634	@5005	@3			@25	@487	@5646:lane%2Ebuff%2Estacktextoffsetx	@5647	@4290	@4363	@487,12,28,13,12,30,28,5007,4284,87,3|@1137
-@5634	@5005	@3			@76	@487	@5646:lane%2Edebuff%2Ecooldowntextoffsetx	@5648	@4290	@4367	@487,12,43,13,12,30,43,5006,4284,87,3|@1136
-@5634	@5005	@3			@76	@487	@5646:lane%2Edebuff%2Estacktextoffsetx	@5649	@4290	@4367	@487,12,43,13,12,30,43,5007,4284,87,3|@1137
-@5634	@5009	@3			@25	@492	@5646:lane%2Ebuff%2Ecooldowntextoffsety	@5645	@4290	@4363	@492,12,28,13,12,30,28,5010,4284,87,3|@1136
-@5634	@5009	@3			@25	@492	@5646:lane%2Ebuff%2Estacktextoffsety	@5647	@4290	@4363	@492,12,28,13,12,30,28,5011,4284,87,3|@1137
-@5634	@5009	@3			@76	@492	@5646:lane%2Edebuff%2Ecooldowntextoffsety	@5648	@4290	@4367	@492,12,43,13,12,30,43,5010,4284,87,3|@1136
-@5634	@5009	@3			@76	@492	@5646:lane%2Edebuff%2Estacktextoffsety	@5649	@4290	@4367	@492,12,43,13,12,30,43,5011,4284,87,3|@1137
-@5634	@2326	@3	target.portraitPanX		@4351	@2327	@5644:portraitpanx	@1621	@1369	@1884	@1119,218,487,2567,1621,2567,1621,2328,4284,87,3,87,2328|@340
-@5634	@2329	@3	target.portraitPanY		@4351	@2330	@5644:portraitpany	@1621	@1369	@1884	@1119,218,492,2567,1621,2567,1621,2331,4284,87,3,87,2331|@340
-@5750	@1340	@1043			@4279	@1342	@5751:indicator%2Estatusafktext	@4280	@4281	@4282	@1347,162,1348,922,2567,1348,922,1349,4284,5676,1043|@657
-@5750	@1354	@1043			@4279	@1355	@5751:indicator%2Estatusafktimer	@4280	@4281	@4285	@1347,157,1348,922,2567,1348,922,1357,4284,5676,1043|@657
-@5750	@1587	@520			@1588	@1589	@5752:hp%2Eslot%2Eabsorb	@162	@1369	@1590	@1589,117,219,2567,162,117,219,1589,4284,5676,520|@271
-@5750	@4315	@32	targettarget.texLayerBlendMode		@4316	@4317	@5753:blendmode	@4318	@4319	@4320	@4322,472,2567,190,239,2567,190,239,4323,4284,5676,32,5676,4324|@662
-@5750	@4325	@96		reset_unit_status_indicator	@1527	@4326	@5751:advanced%2Ereset	@4280	@1369	@1474	@108,874,981,1348,922,1348,108,2567,1348,108,874,4284,5676,96,874,2567,1348,922|@1141
-@5750	@4327	@3			@4328	@4329	@5751:placement%2Emsuf2_status_adv_layer	@4280	@1369	@1474	@108,1348,922,239,1348,2050,2567,1348,2050,4330,1348,4331,239,4284,5676,3|@1142
-@5750	@4332	@32			@4333	@4334	@5751:preview%2Emsuf2_status_adv_test	@4280	@1369	@1474	@108,1348,922,2832,602,1348,146,2567,1348,146,4330,1348,4331,2832,4284,5676,32|@1143
-@5750	@1592	@520	targettarget.rangeFadeLayerMode		@4335	@1594	@5754:layer_mode	@4336			@1594,2567,838,1767,2567,838,1767,239,602,4284,5676,520,5676,1596|@666
-@5750	@4350	@32	targettarget.portraitDragonArtwork		@4351	@4352	@5756:portraitdragonartwork	@1621	@4353	@5755	@692,65,4356,2880,2567,1621,2567,1621,4357,4284,5676,32,5676,4357|@670
-@5750	@111	@18	targettarget.nameTextAnchor		@4369	@113	@5752:name%2Eanchor	@162	@1369	@1605	@113,162,720,2567,162,720,113,4284,5676,18,5676,4370|@674
-@5750	@111	@18	targettarget.texLayerAnchor		@4316	@113	@5753:anchor	@4318	@4319	@5757	@113,2567,190,239,2567,190,239,113,4284,5676,18,5676,4372|@675
-@5750	@1607	@18	targettarget.point		@4377	@1608	@5758:anchor_point	@4378			@113,262,2567,113,2567,4378,113,262,4284,5676,18,5676,262|@275
-@5750	@1610	@18	targettarget.anchorToUnitframe		@4377	@1611	@5758:anchor_to	@4378			@113,126,2567,113,2567,4378,113,126,4284,5676,18,5676,4380|@1144
-@5750	@4381	@18	targettarget.texLayerAnchorTarget		@4316	@1611	@5753:anchortarget	@4318	@4319	@5759	@113,126,2567,190,239,2567,190,239,4383,4284,5676,18,5676,4384|@678
-@5750	@1618	@18	targettarget.portraitDetachedTo		@4351	@1620	@5756:portraitdetachedto	@1621	@1369	@1622	@1624,126,38,262,2567,1621,2567,1621,1625,4284,5676,18,5676,1625|@278
-@5750	@1377	@3	targettarget.hpBgAlpha		@4417	@189	@5760:hpbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,1629,4284,5676,3,5676,1629|@686
-@5750	@1377	@3	targettarget.powerBarBgAlpha		@4417	@189	@5760:powerbarbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,4421,4284,5676,3,5676,4421|@687
-@5750	@4440	@520	targettarget.portraitBlizzardDirection		@4351	@4441	@5756:portraitblizzarddirection	@1621	@4353	@5761	@37,1621,4443,38,748,4444,1364,1578,1386,308,307,442,2567,1621,2567,1621,4445,4284,5676,520,5676,4445|@694
-@5750	@1639	@18	targettarget.portraitBorderStyle		@4351	@8	@5756:portraitborderstyle	@1621	@1369	@1640	@8,2567,1621,2567,1621,1641,4284,5676,18,5676,1641|@282
-@5750	@1642	@18	targettarget.portraitBorderArt		@4351	@1643	@5756:portraitborderart	@1621	@1369	@1640	@8,1644,2567,1621,2567,1621,1645,4284,5676,18,5676,1645|@283
-@5750	@1646	@18	targettarget.portraitBorderDirection		@4351	@1647	@5756:portraitborderdirection	@1621	@1369	@1640	@8,748,2567,1621,2567,1621,1648,4284,5676,18,5676,1648|@284
-@5750	@1649	@3	targettarget.portraitBorderThickness		@4351	@21	@5756:portraitborderthickness	@1621	@1369	@1640	@8,22,2567,1621,2567,1621,1651,4284,5676,3,5676,1651|@13
-@5750	@1649	@3	targettarget.powerBarBorderThickness		@4450	@21	@5762:powerbarborderthickness	@4451			@8,22,2567,128,2567,128,1650,4284,5676,3,5676,1650|@20
-@5750	@4456	@32	targettarget.texLayerHealthLowAlphaEnabled		@4316	@4457	@5753:healthlowalphaenabled	@4318	@4319	@5763	@226,179,1047,229,2567,190,239,2567,190,239,4459,4284,5676,32,5676,4460|@699
-@5750	@1659	@32	targettarget.chunkedFill		@4461	@1660	@5764:chunked_fill	@4462			@1661,301,1662,2567,1638,2567,1638,1661,306,4284,5676,32,5676,1663|@700
-@5750	@1664	@32	targettarget.powerChunkedFill		@4450	@1665	@5762:powerchunkedfill	@4451			@1661,128,1662,2567,128,2567,128,1666,4284,5676,32,5676,1666|@701
-@5750	@4464	@1043			@4279	@4465	@5751:indicator%2Eclasstext	@4280	@4281	@4466	@127,162,1348,922,2567,1348,922,4467,4284,5676,1043|@657
-@5750	@1667	@18	targettarget.portraitClassStyle		@4351	@1668	@5756:portraitclassstyle	@1621	@1369	@1474	@127,1621,12,2567,1621,2567,1621,1669,4284,5676,18,5676,1669|@288
-@5750	@1670	@96		clear_unit_custom_anchor	@1671	@1672	@5758:custom%2Eclear	@4378			@1672,113,271,2567,4378,271,1672,4284,5676,96,1672,2567,271,113|@13
-@5750	@1679	@32	targettarget.portraitClickable		@4351	@1680	@5756:portraitclickable	@1621	@4353	@5765	@1682,1621,2567,1621,2567,1621,1683,4284,5676,32,5676,1683|@13
-@5750	@4474	@32	targettarget.texLayerRoundedClip		@4316	@4475	@5753:roundedclip	@4318	@4319	@5766	@4477,126,2681,38,2567,190,239,2567,190,239,4478,4284,5676,32,5676,4479|@703
-@5750	@4486	@18	targettarget.texLayerHealthAboveMode		@4316	@4487	@5753:healthabovemode	@4318	@4319	@5767	@227,2187,229,2567,190,239,2567,190,239,4489,4284,5676,18,5676,4490|@706
-@5750	@4491	@18	targettarget.texLayerColorMode		@4316	@4492	@5753:colormode	@4318	@4319	@5768	@227,602,2567,190,239,2567,190,239,4494,4284,5676,18,5676,4495|@707
-@5750	@4496	@18	targettarget.texLayerVisibility		@4316	@4497	@5753:combat_state	@4318	@4319	@4498	@370,296,2567,190,239,2567,190,239,370,296,4284,5676,18,5676,4499|@708
-@5750	@4512	@96			@4513	@4514	@5769:open				@1038,126,2471,2567,1038,2567,1038,1039,4284,5676,96|@13
-@5750	@4518	@32	targettarget.texLayerTargetOnly		@4316	@4519	@5753:current_target_only	@4318	@4319	@4498	@1312,87,1141,2567,190,239,2567,190,239,1312,87,1141,4284,5676,32,5676,4520|@703
-@5750	@1692	@713	targettarget.anchorFrameName		@1671	@1693	@5758:custom%2Evalue	@4378			@271,113,38,113,271,2567,4378,271,606,4284,5676,713,5676,4521|@713
-@5750	@4524	@713	targettarget.texLayerCustomTexturePath		@4316	@4525	@5753:customtexturepath	@4318	@4319	@4526	@271,190,4527,2567,190,239,2567,190,239,4528,4284,5676,713,5676,4529|@703
-@5750	@1416	@1043			@4279	@1417	@5751:indicator%2Estatusdndtext	@4280	@4281	@4530	@1419,162,1348,922,2567,1348,922,1420,4284,5676,1043|@657
-@5750	@4531	@1043			@4279	@4532	@5751:indicator%2Estatustext	@4280	@4281	@4533	@1429,1775,162,1348,922,2567,1348,922,1430,4284,5676,1043|@657
-@5750	@1705	@32	targettarget.healthTextDecimals		@1984	@1706	@5752:hp%2Edecimals	@162	@1369	@1590	@1707,355,162,117,2567,162,117,1046,4284,5676,32,5676,1708|@715
-@5750	@279	@18	targettarget.hpTextSeparator		@1984	@280	@5752:hp%2Eseparator	@162	@1369	@1590	@280,162,117,2567,162,117,616,4284,5676,18,5676,4534|@718
-@5750	@279	@18	targettarget.powerTextSeparator		@1989	@280	@5752:power%2Eseparator	@162	@1369	@1709	@280,162,128,2567,162,128,616,4284,5676,18,5676,283|@718
-@5750	@1717	@32	targettarget.powerBarDetached		@4450	@1718	@5762:detached	@4451			@1719,690,38,2567,128,2567,128,129,4284,5676,32,5676,287|@20
-@5750	@1720	@3	targettarget.detachedPowerBarHeight		@4450	@1721	@5762:detachedpowerbarheight	@4451			@129,347,2567,128,2567,128,535,4284,5676,3,5676,535|@20
-@5750	@1722	@3	targettarget.detachedPowerBarFrameLevelOffset		@4450	@1723	@5762:detachedpowerbarframeleveloffset	@4451			@129,239,2567,128,2567,128,515,4284,5676,3,5676,515|@719
-@5750	@1724	@3	targettarget.detachedPowerBarWidth		@4450	@1725	@5762:detachedpowerbarwidth	@4451			@129,272,2567,128,2567,128,549,4284,5676,3,5676,549|@720
-@5750	@4553	@18	targettarget.portraitDragonLayer		@4351	@4554	@5756:portraitdragonlayer	@1621	@4353	@5770	@4356,4556,609,2567,1621,2567,1621,4557,4284,5676,18,5676,4557|@728
-@5750	@4558	@3	targettarget.portraitDragonX		@4351	@4559	@5756:portraitdragonx	@1621	@4353	@5771	@4356,1918,4561,2567,1621,2567,1621,4562,4284,5676,3,5676,4562|@729
-@5750	@4563	@3	targettarget.portraitDragonLevel		@4351	@4564	@5756:portraitdragonlevel	@1621	@4353	@5772	@4356,240,2187,1621,2567,1621,2567,1621,4566,4284,5676,3,5676,4566|@13
-@5750	@4567	@3	targettarget.portraitDragonScale		@4351	@4568	@5756:portraitdragonscale	@1621	@4353	@5773	@4356,57,2567,1621,2567,1621,4570,4284,5676,3,5676,4570|@730
-@5750	@4571	@3	targettarget.portraitDragonY		@4351	@4572	@5756:portraitdragony	@1621	@4353	@5774	@4356,2290,4561,2567,1621,2567,1621,4574,4284,5676,3,5676,4574|@731
-@5750	@4577	@3	targettarget.texLayerEdgeSoftness		@4316	@4578	@5753:edgesoftness	@4318	@4319	@5775	@1316,2069,2567,190,239,2567,190,239,4580,4284,5676,3,5676,4581|@703
-@5750	@5075	@1043			@4279	@5076	@5751:indicator%2Eeliteicon	@4280	@4281	@5077	@4588,4589,1348,922,2567,1348,922,5078,4284,5676,1043|@657
-@5750	@4585	@32	targettarget.portraitBlizzardElite		@4351	@4586	@5756:portraitblizzardelite	@1621	@4353	@5776	@4588,956,4589,4356,2567,1621,2567,1621,4590,4284,5676,32,5676,4590|@734
-@5750	@1735	@32	targettarget.embedPowerBarIntoHealth		@4450	@1736	@5762:embedpowerbarintohealth	@4451			@1737,1738,301,2567,128,2567,128,1739,4284,5676,32,5676,1739|@20
-@5750	@1740	@96	targettarget.enabled		@4461	@842	@5764:enable_now	@4462			@842,2567,1638,2567,1638,842,2268,4284,5676,96,5676,235|@700
-@5750	@1740	@32	targettarget.enabled		@4461	@842	@5764:enabled	@4462			@842,2567,1638,2567,1638,235,4284,5676,32,5676,235|@735
-@5750	@4601	@32	targettarget.rangeFadeEnabled		@4335	@4602	@5754:enabled	@4336			@842,838,1767,2567,838,1767,2567,838,1767,235,4284,5676,32,5676,2100|@13
-@5750	@4603	@32	targettarget.texLayerEnabled		@4316	@4604	@5753:enabled	@4318	@4319	@5777	@842,190,239,2567,190,239,2567,190,239,235,4284,5676,32,5676,4606|@703
-@5750	@1764	@32	targettarget.oocFadeEnabled		@4417	@1765	@5760:ooc_fade_enabled	@1626	@4418	@4613	@1767,38,368,369,370,2567,1626,2567,1626,387,1767,235,4284,5676,32,5676,1768|@13
-@5750	@4614	@3	targettarget.hpTextMouseoverFadeIn		@4615	@4616	@5752:hp%2Emouseover%2Efadein	@162	@1369	@1590	@1767,840,168,117,2767,2567,162,117,2767,4617,4284,5676,3,5676,4618|@743
-@5750	@4614	@3	targettarget.nameTextMouseoverFadeIn		@4619	@4616	@5752:name%2Emouseover%2Efadein	@162	@1369	@1605	@1767,840,168,720,2767,2567,162,720,2767,4617,4284,5676,3,5676,4620|@743
-@5750	@4614	@3	targettarget.powerTextMouseoverFadeIn		@4621	@4616	@5752:power%2Emouseover%2Efadein	@162	@1369	@1709	@1767,840,168,128,2767,2567,162,128,2767,4617,4284,5676,3,5676,4622|@743
-@5750	@1769	@32	targettarget.fadeInOnShow		@4417	@1770	@5760:fade_in_on_show	@1626	@4418	@4419	@1767,840,396,1771,2567,1626,2567,1626,1767,840,68,65,4284,5676,32,5676,1772|@744
-@5750	@4623	@3	targettarget.hpTextMouseoverFadeOut		@4615	@4624	@5752:hp%2Emouseover%2Efadeout	@162	@1369	@1590	@1767,368,168,117,2767,2567,162,117,2767,4625,4284,5676,3,5676,4626|@745
-@5750	@4623	@3	targettarget.nameTextMouseoverFadeOut		@4619	@4624	@5752:name%2Emouseover%2Efadeout	@162	@1369	@1605	@1767,368,168,720,2767,2567,162,720,2767,4625,4284,5676,3,5676,4627|@745
-@5750	@4623	@3	targettarget.powerTextMouseoverFadeOut		@4621	@4624	@5752:power%2Emouseover%2Efadeout	@162	@1369	@1709	@1767,368,168,128,2767,2567,162,128,2767,4625,4284,5676,3,5676,4628|@745
-@5750	@1087	@18	targettarget.verticalFillBars		@4461	@1088	@5764:fill_direction	@4462			@306,748,2567,1638,2567,1638,306,748,4284,5676,18,5676,4629|@746
-@5750	@1778	@32	targettarget.portraitFillBorder		@4351	@1779	@5756:portraitfillborder	@1621	@1369	@1640	@306,8,1738,38,332,2567,1621,2567,1621,1780,4284,5676,32,5676,1780|@13
-@5750	@4630	@32	targettarget.portraitDragonFlip		@4351	@4631	@5756:portraitdragonflip	@1621	@4353	@5778	@4633,4356,308,126,307,2567,1621,2567,1621,4634,4284,5676,32,5676,4634|@13
-@5750	@4635	@32	targettarget.portraitFlip		@4351	@4636	@5756:portraitflip	@1621	@4353	@5779	@4633,1621,308,126,307,2567,1621,2567,1621,4638,4284,5676,32,5676,4638|@13
-@5750	@4639	@32	general.anchorToCooldown		@4377	@4640	@5758:cooldown_manager	@4378			@3457,37,846,137,4641,2567,113,2567,4378,138,1637,4284,5676,32,148,4642|@748
-@5750	@4643	@32	targettarget.texLayerFollowFrameAlpha		@4316	@4644	@5753:followframealpha	@4318	@4319	@5780	@3457,38,1626,2567,190,239,2567,190,239,4646,4284,5676,32,5676,4647|@749
-@5750	@4648	@32	targettarget.useBlizzardFrame		@4461	@4649	@5764:force_blizzard_frame	@4462			@4650,37,38,68,2567,1638,2567,1638,4650,37,38,4284,5676,32,5676,4651|@1145
-@5750	@1791	@3	targettarget.hpBarAlpha		@4417	@324	@5760:hpbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,1792,4284,5676,3,5676,1792|@751
-@5750	@1791	@3	targettarget.powerBarAlpha		@4417	@324	@5760:powerbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,4652,4284,5676,3,5676,4652|@752
-@5750	@1449	@1043			@4279	@1450	@5751:indicator%2Estatusghosttext	@4280	@4281	@4655	@1452,162,1348,922,2567,1348,922,1453,4284,5676,1043|@657
-@5750	@4656	@32	targettarget.portraitBlizzardCorner		@4351	@4657	@5756:portraitblizzardcorner	@1621	@4353	@5781	@4659,1364,4660,2567,1621,2567,1621,4661,4284,5676,32,5676,4661|@734
-@5750	@4662	@32	targettarget.texLayerGradientEnabled		@4316	@2726	@5753:gradientenabled	@4318	@4319	@5782	@2726,2567,190,239,2567,190,239,4664,4284,5676,32,5676,4665|@755
-@5750	@2723	@96			@4666	@2725	@5753:gradient_direction%2Eup	@4318	@4319	@4320	@2726,748,190,239,2726,748,2567,190,239,2726,748,1866,4284,5676,96|@13
-@5750	@1867	@3	targettarget.hpTextLayer		@4672	@1868	@5752:advanced%2Ehptextlayer	@162	@1369	@1474	@117,239,162,108,2567,162,108,4673,4284,5676,3,5676,4673|@758
-@5750	@4674	@3	targettarget.texLayerHealthThreshold		@4316	@4675	@5753:healththreshold	@4318	@4319	@5783	@117,229,2567,190,239,2567,190,239,4677,4284,5676,3,5676,4678|@759
-@5750	@1870	@18			@1588	@1871	@5752:hp%2Eslot%2Emode	@162	@1369	@1590	@117,606,117,219,2567,162,117,219,602,4284,5676,18|@760
-@5750	@4679	@18	targettarget.healthColorMode		@4461	@4680	@5764:health_color_mode	@4462			@301,227,4681,2567,1638,2567,1638,301,227,602,4284,5676,18,5676,3504|@761
-@5750	@4683	@3	targettarget.texLayerHeight		@4316	@4684	@5753:height	@4318	@4319	@5784	@347,691,985,2567,190,239,2567,190,239,347,4284,5676,3,5676,4686|@703
-@5750	@1882	@3	targettarget.portraitHeight		@4351	@1883	@5756:portraitheight	@1621	@1369	@1884	@347,1885,2567,1621,2567,1621,1886,4284,5676,3,5676,1886|@13
-@5750	@1887	@32			@1588	@1888	@5752:hp%2Eslot%2Ehide_percent	@162	@1369	@1590	@36,354,117,219,2567,162,117,219,36,355,4284,5676,32|@763
-@5750	@1887	@32			@1889	@1888	@5752:power%2Eslot%2Ehide_percent	@162	@1369	@1709	@36,354,128,219,2567,162,128,219,36,355,4284,5676,32|@763
-@5750	@4688	@32	targettarget.powerHideMissingResource		@4450	@4689	@5762:powerhidemissingresource	@4451			@36,396,104,2519,1838,2567,128,2567,128,4690,4284,5676,32,5676,4690|@20
-@5750	@4691	@32	targettarget.loadCondHideInHousing		@4692	@1905	@5785:loadcondhideinhousing	@4693			@1905,2567,2443,4138,2567,2443,4138,4695,4284,5676,32,5676,4695|@766
-@5750	@4704	@32	targettarget.loadCondHideInCombat		@4692	@4705	@5785:loadcondhideincombat	@4693			@840,370,2567,2443,4138,2567,2443,4138,4706,4284,5676,32,5676,4706|@771
-@5750	@4707	@32	targettarget.loadCondHideInGroup		@4692	@4708	@5785:loadcondhideingroup	@4693			@840,909,2567,2443,4138,2567,2443,4138,4709,4284,5676,32,5676,4709|@771
-@5750	@4710	@32	targettarget.loadCondHideInInstance		@4692	@4711	@5785:loadcondhideininstance	@4693			@840,4712,2567,2443,4138,2567,2443,4138,4713,4284,5676,32,5676,4713|@771
-@5750	@4714	@32	targettarget.loadCondHideInVehicle		@4692	@4715	@5785:loadcondhideinvehicle	@4693			@840,4716,2567,2443,4138,2567,2443,4138,4717,4284,5676,32,5676,4717|@771
-@5750	@4718	@3	targettarget.portraitInnerShadow		@4351	@4719	@5756:portraitinnershadow	@1621	@4353	@5786	@4721,50,2560,2567,1621,2567,1621,4722,4284,5676,3,5676,4722|@772
-@5750	@1948	@32	targettarget.alphaExcludePredictionBars		@4417	@1949	@5760:alpha_exclude_prediction_bars	@1626	@4418	@4419	@1950,1951,676,1267,2567,1626,2567,1626,9,1761,676,109,4284,5676,32,5676,1952|@13
-@5750	@4723	@32	targettarget.portraitDragonInInstances		@4351	@4724	@5756:portraitdragonininstances	@1621	@4353	@5787	@1950,3095,4726,840,4727,2567,1621,2567,1621,4728,4284,5676,32,5676,4728|@773
-@5750	@1958	@32	targettarget.alphaExcludeTextPortrait		@4417	@1959	@5760:alpha_exclude_text_portrait	@1626	@4418	@4419	@1950,162,1621,1267,2567,1626,2567,1626,9,1761,162,1621,4284,5676,32,5676,1960|@13
-@5750	@1123	@3	targettarget.texLayerLevel		@4316	@1124	@5753:level	@4318	@4319	@5788	@239,691,1071,2567,190,239,2567,190,239,240,4284,5676,3,5676,4734|@703
-@5750	@1962	@3	targettarget.portraitLevelOffset		@4351	@1963	@5756:portraitleveloffset	@1621	@1369	@1622	@239,486,2567,1621,2567,1621,1964,4284,5676,3,5676,1964|@316
-@5750	@4737	@32	targettarget.levelIndicatorDifficultyColor		@4738	@4739	@5751:level%2Edifficulty_color	@4280	@1369	@1370	@240,1398,263,1348,240,2567,1348,240,1398,227,4284,5676,32,5676,4740|@1146
-@5750	@1488	@1043			@4279	@1489	@5751:indicator%2Elevel	@4280	@4281	@4741	@240,162,1348,922,2567,1348,922,240,4284,5676,1043|@657
-@5750	@4753	@32	targettarget.texLayerMirrorH		@4316	@4754	@5753:mirrorh	@4318	@4319	@5789	@4444,4756,2567,190,239,2567,190,239,4757,4284,5676,32,5676,4758|@782
-@5750	@4759	@32	targettarget.texLayerMirrorV		@4316	@4760	@5753:mirrorv	@4318	@4319	@5790	@4444,4762,2567,190,239,2567,190,239,4763,4284,5676,32,5676,4764|@783
-@5750	@4765	@32	targettarget.loadCondHideMounted		@4692	@4766	@5785:loadcondhidemounted	@4693			@4766,2567,2443,4138,2567,2443,4138,4767,4284,5676,32,5676,4767|@771
-@5750	@1990	@3	targettarget.nameTextLayer		@4672	@1991	@5752:advanced%2Enametextlayer	@162	@1369	@1474	@720,239,162,108,2567,162,108,1992,4284,5676,3,5676,1992|@784
-@5750	@4770	@32	targettarget.loadCondHideNoTarget		@4692	@4771	@5785:loadcondhidenotarget	@4693			@3835,87,2567,2443,4138,2567,2443,4138,4772,4284,5676,32,5676,4772|@771
-@5750	@4781	@32	targettarget.hpTextMouseover		@1984	@4782	@5752:hp%2Emouseover	@162	@1369	@1590	@1141,65,68,2767,162,117,2567,162,117,2767,4284,5676,32,5676,4783|@790
-@5750	@4781	@32	targettarget.nameTextMouseover		@4369	@4782	@5752:name%2Emouseover	@162	@1369	@1605	@1141,65,68,2767,162,720,2567,162,720,2767,4284,5676,32,5676,4784|@790
-@5750	@4781	@32	targettarget.powerTextMouseover		@1989	@4782	@5752:power%2Emouseover	@162	@1369	@1709	@1141,65,68,2767,162,128,2567,162,128,2767,4284,5676,32,5676,4785|@790
-@5750	@1145	@3	targettarget.texLayerAlpha		@4316	@179	@5753:alpha	@4318	@4319	@5791	@179,2567,190,239,2567,190,239,9,4284,5676,3,5676,4793|@703
-@5750	@4794	@3	targettarget.texLayerHealthLowAlpha		@4316	@4795	@5753:healthlowalpha	@4318	@4319	@5792	@179,1047,229,2567,190,239,2567,190,239,4797,4284,5676,3,5676,4798|@792
-@5750	@2008	@3	targettarget.oocFadeAlpha		@4417	@2009	@5760:ooc_fade_alpha	@1626	@4418	@4613	@368,369,370,179,2567,1626,2567,1626,387,1767,9,4284,5676,3,5676,2010|@13
-@5750	@4809	@32	targettarget.loadCondHideOutOfCombat		@4692	@4810	@5785:loadcondhideoutofcombat	@4693			@368,369,370,2567,2443,4138,2567,2443,4138,4811,4284,5676,32,5676,4811|@771
-@5750	@4812	@32	targettarget.loadCondHideOutOfCombatNoTarget		@4692	@4813	@5785:loadcondhideoutofcombatnotarget	@4693			@368,369,370,956,3835,87,2567,2443,4138,2567,2443,4138,4814,4284,5676,32,5676,4814|@771
-@5750	@2011	@3	targettarget.rangeFadeAlpha		@4335	@2012	@5754:alpha	@4336			@368,369,838,2567,838,1767,2567,838,1767,9,4284,5676,3,5676,2013|@13
-@5750	@2014	@18	targettarget.portraitOverlayAlign		@4351	@2015	@5756:portraitoverlayalign	@1621	@1369	@1622	@1281,622,2567,1621,2567,1621,2016,4284,5676,18,5676,2016|@317
-@5750	@2045	@96		start_unit_custom_anchor_picker	@1671	@2046	@5758:custom%2Epick	@4378			@2046,113,271,2567,4378,271,2046,4284,5676,96,2047,2567,271,113,2048|@13
-@5750	@2049	@18	targettarget.portraitPlacement		@4351	@2050	@5756:portraitplacement	@1621	@1369	@1622	@2050,2567,1621,2567,1621,2051,4284,5676,18,5676,2051|@318
-@5750	@2055	@32			@4351	@1621	@5756:enabled	@1621			@1621,2567,1621,2567,1621,235,4284,5676,32|@798
-@5750	@2061	@18	targettarget.portraitDetachedPoint		@4351	@2062	@5756:portraitdetachedpoint	@1621	@1369	@1622	@1621,113,262,2567,1621,2567,1621,2063,4284,5676,18,5676,2063|@278
-@5750	@2064	@32	targettarget.portraitBgEnabled		@4351	@2065	@5756:portraitbgenabled	@1621	@1369	@1474	@1621,189,2567,1621,2567,1621,2066,4284,5676,32,5676,2066|@322
-@5750	@2067	@3	targettarget.portraitEdgeSoftness		@4351	@2068	@5756:portraitedgesoftness	@1621	@4353	@5793	@1621,1316,2069,2567,1621,2567,1621,2070,4284,5676,3,5676,2070|@13
-@5750	@2071	@3	targettarget.portraitAlpha		@4351	@2072	@5756:portraitalpha	@1621	@1369	@1622	@1621,179,2567,1621,2567,1621,2073,4284,5676,3,5676,2073|@323
-@5750	@2074	@3	targettarget.portraitZoom		@4351	@2075	@5756:portraitzoom	@1621	@1369	@1884	@1621,1119,2567,1621,2567,1621,2076,4284,5676,3,5676,2076|@13
-@5750	@1167	@520	targettarget.portraitMode		@4351	@868	@5756:position	@1621	@1369	@1681	@868,2567,1621,2567,1621,868,4284,5676,520,5676,2056|@324
-@5750	@2082	@32	targettarget.powerBarBorderEnabled		@4450	@2083	@5762:powerbarborderenabled	@4451			@128,302,8,2567,128,2567,128,2084,4284,5676,32,5676,2084|@41
-@5750	@4831	@3	targettarget.powerBarHeight		@4450	@4832	@5762:powerbarheight	@4451			@128,302,347,2567,128,2567,128,4833,4284,5676,3,5676,4833|@13
-@5750	@4834	@3	targettarget.powerTextLayer		@4672	@4835	@5752:advanced%2Epowertextlayer	@162	@1369	@1474	@128,162,239,162,108,2567,162,108,518,4284,5676,3,5676,518|@803
-@5750	@2088	@18			@1889	@2089	@5752:power%2Eslot%2Emode	@162	@1369	@1709	@128,606,128,219,2567,162,128,219,602,4284,5676,18|@804
-@5750	@1503	@1043			@4279	@1504	@5751:indicator%2Estatuspvp	@4280	@4281	@5255	@1506,1507,1508,602,1506,1348,922,2567,1348,922,5256,4284,5676,1043|@657
-@5750	@4836	@1043			@4279	@4837	@5751:indicator%2Eracetext	@4280	@4281	@4838	@4839,162,1348,922,2567,1348,922,4840,4284,5676,1043|@657
-@5750	@5257	@1043			@4279	@5258	@5751:indicator%2Eraidgroupname	@4280	@4281	@5259	@916,909,1348,922,2567,1348,922,5260,4284,5676,1043|@657
-@5750	@1512	@1043			@4279	@1513	@5751:indicator%2Eraidmarker	@4280	@4281	@4841	@916,420,1348,922,2567,1348,922,1515,4284,5676,1043|@657
-@5750	@4844	@18	targettarget.raidGroupNameStyle		@4845	@4846	@5751:raid_group%2Estyle	@4280	@1369	@1370	@916,909,12,1348,916,909,2567,1348,916,909,12,4284,5676,18,5676,4847|@1147
-@5750	@2101	@18	targettarget.portraitRender		@4351	@2102	@5756:portraitrender	@1621	@1369	@1681	@2102,2567,1621,2567,1621,2103,4284,5676,18,5676,2103|@326
-@5750	@4856	@96		reset_unit_status_indicator	@1368	@4857	@5751:selected%2Ereset	@4280	@1369	@1370	@874,981,1348,922,1348,981,2567,1348,981,874,4284,5676,96,874,2567,1348,922|@1148
-@5750	@4858	@32	targettarget.loadCondHideResting		@4692	@4859	@5785:loadcondhideresting	@4693			@4859,2567,2443,4138,2567,2443,4138,4860,4284,5676,32,5676,4860|@771
-@5750	@607	@32	targettarget.hpTextReverse		@1984	@608	@5752:hp%2Ereverse	@162	@1369	@1590	@309,609,162,117,2567,162,117,309,4284,5676,32,5676,2107|@809
-@5750	@4864	@32	targettarget.levelIndicatorForeverBadge		@4738	@4865	@5751:level%2Eforever_badge	@4280	@4866	@5794	@4868,240,4869,1348,240,2567,1348,240,4870,4869,4284,5676,32,5676,4871|@1149
-@5750	@2138	@3			@1588	@2139	@5752:hp%2Eslot%2Esize	@162	@1369	@1590	@981,219,57,117,219,2567,162,117,219,57,4284,5676,3|@68
-@5750	@2138	@3			@1889	@2139	@5752:power%2Eslot%2Esize	@162	@1369	@1709	@981,219,57,128,219,2567,162,128,219,57,4284,5676,3|@68
-@5750	@2144	@18	targettarget.portraitShape		@4351	@29	@5756:portraitshape	@1621	@1369	@1640	@29,2567,1621,2567,1621,2145,4284,5676,18,5676,2145|@812
-@5750	@2146	@32	targettarget.hpFullValueShort		@1984	@2147	@5752:hp%2Efull_value_short	@162	@1369	@1590	@2148,2149,162,117,2567,162,117,403,606,2148,4284,5676,32,5676,2150|@813
-@5750	@2146	@32	targettarget.powerFullValueShort		@1989	@2147	@5752:power%2Efull_value_short	@162	@1369	@1709	@2148,2149,162,128,2567,162,128,403,606,2148,4284,5676,32,5676,4872|@13
-@5750	@2151	@32	targettarget.showHP		@1984	@631	@5752:hp%2Eshow	@162	@1369	@1590	@65,117,162,162,117,2567,162,117,65,4284,5676,32,5676,4876|@816
-@5750	@2158	@32	targettarget.showName		@4369	@2159	@5752:name%2Eshow	@162	@1369	@1605	@65,720,162,720,2567,162,720,65,4284,5676,32,5676,2160|@817
-@5750	@4879	@96	targettarget.showPowerBar		@4450	@4880	@5762:enable_now	@4451			@65,128,2567,128,2567,128,842,2268,4284,5676,96,5676,4881|@20
-@5750	@2168	@32	targettarget.showPowerText		@1989	@2169	@5752:power%2Eshow	@162	@1369	@1709	@65,128,162,162,128,2567,162,128,65,4284,5676,32,5676,4882|@819
-@5750	@4887	@18	targettarget.texLayerHealthCondition		@4316	@4888	@5753:healthcondition	@4318	@4319	@5795	@65,254,301,2567,190,239,2567,190,239,4890,4284,5676,18,5676,4891|@822
-@5750	@2175	@32	targettarget.portraitCastSpellIcon		@4351	@2176	@5756:portraitcastspellicon	@1621	@1369	@1474	@65,641,716,11,840,1621,2567,1621,2567,1621,2177,4284,5676,32,5676,2177|@13
-@5750	@4904	@32	targettarget.loadCondShowWhenInjured		@4692	@4905	@5785:loadcondshowwheninjured	@4693			@65,1141,1047,4906,301,2567,2443,4138,2567,2443,4138,4907,4284,5676,32,5676,4907|@824
-@5750	@4908	@32	targettarget.showPowerBar		@4450	@2166	@5762:show	@4451			@65,128,302,2567,128,2567,128,65,4284,5676,32,5676,4881|@825
-@5750	@1226	@3	targettarget.nameFontSize		@4369	@57	@5752:name%2Esize	@162	@1369	@1605	@57,162,720,2567,162,720,57,4284,5676,3,5676,2195|@826
-@5750	@2196	@520	targettarget.portraitSizeMode		@4351	@2197	@5756:portraitsizemode	@1621	@4353	@5796	@57,602,2567,1621,2567,1621,2198,4284,5676,520,5676,2198|@334
-@5750	@2199	@3	targettarget.portraitSizeOverride		@4351	@2200	@5756:portraitsizeoverride	@1621	@1369	@1884	@57,1885,2567,1621,2567,1621,2201,4284,5676,3,5676,2201|@13
-@5750	@702	@32	targettarget.powerSmoothFill		@4450	@704	@5762:powersmoothfill	@4451			@706,306,2567,128,2567,128,711,4284,5676,32,5676,711|@20
-@5750	@702	@32	targettarget.smoothFill		@4461	@704	@5764:smooth_fill	@4462			@706,306,2567,1638,2567,1638,706,306,4284,5676,32,5676,2204|@700
-@5750	@4915	@32	targettarget.loadCondHideSolo		@4692	@1657	@5785:loadcondhidesolo	@4693			@1657,2567,2443,4138,2567,2443,4138,4916,4284,5676,32,5676,4916|@771
-@5750	@4917	@18	targettarget.texLayerColorTreatment		@4316	@4918	@5753:colortreatment	@4318	@4319	@5797	@444,227,2567,190,239,2567,190,239,4920,4284,5676,18,5676,4921|@832
-@5750	@4923	@18			@1368	@4924	@5751:selected%2Ecustomicon	@4280	@1369	@1370	@3118,11,1885,1348,981,2567,1348,981,1415,4284,5676,18|@1150
-@5750	@4931	@1551			@4932	@1553	@5751:section	@4280	@1369	@1370	@1348,1181,2567,1348,2567,1348,1551,4284,5676,1551|@13
-@5750	@4933	@18			@1368	@4934	@5751:selected%2Eanchor	@4280	@1369	@1370	@1348,922,113,1348,981,2567,1348,981,113,4284,5676,18|@1151
-@5750	@4935	@32			@1368	@4936	@5751:selected%2Eenabled	@4280	@4866	@5798	@1348,922,235,1348,981,2567,1348,981,235,4284,5676,32|@1152
-@5750	@4938	@3			@4328	@4939	@5751:placement%2Emsuf2_status_layer	@4280	@1369	@1370	@1348,922,239,1348,2050,2567,1348,2050,4330,1348,239,4284,5676,3|@1153
-@5750	@4940	@18			@4932	@4941	@5751:selector	@4280	@1369	@1370	@1348,922,696,2567,1348,2567,1348,696,4284,5676,18|@1154
-@5750	@4942	@3			@1368	@4943	@5751:selected%2Esize	@4280	@4866	@5799	@1348,922,57,1348,981,2567,1348,981,57,4284,5676,3|@1155
-@5750	@4945	@32	general.statusIconsUseMidnightStyle		@4932	@4946	@5751:midnight_style	@4280	@1369	@1370	@1348,922,12,2567,1348,2567,1348,4947,12,4284,5676,32,148,4948|@1156
-@5750	@4949	@18			@1368	@4950	@5751:selected%2Esymbol	@4280	@1369	@1370	@1348,922,357,1348,981,2567,1348,981,357,4284,5676,18|@1157
-@5750	@4951	@32			@4333	@4952	@5751:preview%2Emsuf2_status_test	@4280	@1369	@1370	@1348,922,2832,602,1348,146,2567,1348,146,4330,1348,2832,4284,5676,32|@1158
-@5750	@4953	@96			@1368	@4954	@5751:selected%2Etext_settings	@4280	@1369	@1370	@1348,162,2471,1348,981,2567,1348,981,162,2471,4284,5676,96|@1159
-@5750	@4957	@32	targettarget.loadCondHideStealthed		@4692	@4958	@5785:loadcondhidestealthed	@4693			@4958,2567,2443,4138,2567,2443,4138,4959,4284,5676,32,5676,4959|@771
-@5750	@2230	@32	targettarget.detachedPowerBarTextOnBar		@4450	@2231	@5762:detachedpowerbartextonbar	@4451			@162,68,129,302,2567,128,2567,128,542,4284,5676,32,5676,542|@13
-@5750	@4974	@18	targettarget.texLayerTexture		@4316	@4975	@5753:texture	@4318	@4319	@5800	@190,2672,2567,190,239,2567,190,239,190,4284,5676,18,5676,4977|@852
-@5750	@4978	@18	targettarget.texLayerCropMode		@4316	@4979	@5753:cropmode	@4318	@4319	@5801	@190,4981,2567,190,239,2567,190,239,4982,4284,5676,18,5676,4983|@853
-@5750	@4996	@18			@1368	@4997	@5751:selected%2Eiconstyle	@4280	@1369	@1370	@4998,12,1182,1225,922,1348,981,2567,1348,981,1470,4284,5676,18|@1160
-@5750	@764	@3	targettarget.texLayerWidth		@4316	@272	@5753:width	@4318	@4319	@5802	@272,2567,190,239,2567,190,239,272,4284,5676,3,5676,5000|@703
-@5750	@2323	@3	targettarget.portraitWidth		@4351	@2324	@5756:portraitwidth	@1621	@1369	@1884	@272,1885,2567,1621,2567,1621,2325,4284,5676,3,5676,2325|@13
-@5750	@2326	@3	targettarget.portraitPanX		@4351	@2327	@5756:portraitpanx	@1621	@1369	@1884	@1119,218,487,2567,1621,2567,1621,2328,4284,5676,3,5676,2328|@340
-@5750	@2329	@3	targettarget.portraitPanY		@4351	@2330	@5756:portraitpany	@1621	@1369	@1884	@1119,218,492,2567,1621,2567,1621,2331,4284,5676,3,5676,2331|@340
+@5635	@1340	@1043			@4279	@1342	@5636:indicator%2Estatusafktext	@4280	@4281	@4282	@1347,162,1348,922,2567,1348,922,1349,4284,87,1043|@657
+@5635	@1354	@1043			@4279	@1355	@5636:indicator%2Estatusafktimer	@4280	@4281	@4285	@1347,157,1348,922,2567,1348,922,1357,4284,87,1043|@657
+@5635	@1587	@520			@1588	@1589	@5637:hp%2Eslot%2Eabsorb	@162	@1369	@1590	@1589,117,219,2567,162,117,219,1589,4284,87,520|@271
+@5635	@4287	@96		aura_custom_whitelist_add_spell	@4288	@4289	@5638:custom4%2Edots%2Ecustom-id%2Eadd	@13	@4290	@4291	@103,271,717,86,271,717,13,271,1014,4293,86,271,717,103,4284,87,96,39,271,4294,103,716|@13
+@5635	@4295	@713			@4296	@4297	@5638:whitelist%2Einput	@13	@4290	@4298	@103,2006,28,716,717,716,718,719,4299,718,271,1014,4294,13,271,1014,4294,1077,4284,87,713|@658
+@5635	@4300	@96		aura_custom_whitelist_add_spell	@4301	@4302	@5638:custom1%2Ewhitelist%2Eadd	@13	@4290	@4298	@103,28,4303,4294,13,271,1014,4303,4294,103,4284,87,96,39,271,4294,103,716|@659
+@5635	@4300	@96		aura_custom_whitelist_add_spell	@4304	@4302	@5638:custom2%2Ewhitelist%2Eadd	@13	@4290	@4305	@103,28,4306,4294,13,271,1014,4306,4294,103,4284,87,96,39,271,4294,103,716|@659
+@5635	@4300	@96		aura_custom_whitelist_add_spell	@4307	@4302	@5638:custom3%2Ewhitelist%2Eadd	@13	@4290	@4308	@103,28,4309,4294,13,271,1014,4309,4294,103,4284,87,96,39,271,4294,103,716|@659
+@5635	@902	@96		aura_blacklist_add_spell	@903	@904	@5639:lane%2Ebuff%2Eblacklist%2Eadd-manual	@13	@4290	@4310	@103,271,28,28,908,13,2567,725,30,28,908,103,277,4284,87,96,39,908,103,716|@660
+@5635	@4312	@96		aura_blacklist_add_spell	@927	@4313	@5639:lane%2Edebuff%2Eblacklist%2Eadd-manual	@13	@4290	@4314	@103,3095,43,43,908,13,2567,725,30,43,908,103,277,4284,87,96,39,908,103,716|@661
+@5635	@923	@96		aura_blacklist_add_preset	@903	@924	@5639:lane%2Ebuff%2Eblacklist%2Eadd-preset-set	@13	@4290	@4310	@103,925,926,28,908,13,2567,725,30,28,908,103,538,926,4284,87,96,39,908,103,538|@117
+@5635	@923	@96		aura_blacklist_add_preset	@927	@924	@5639:lane%2Edebuff%2Eblacklist%2Eadd-preset-set	@13	@4290	@4314	@103,925,926,43,908,13,2567,725,30,43,908,103,538,926,4284,87,96,39,908,103,538|@117
+@5635	@931	@96		aura_blacklist_add_spell	@903	@932	@5639:lane%2Ebuff%2Eblacklist%2Eadd-preset-spell	@13	@4290	@4310	@103,716,28,908,13,2567,725,30,28,908,103,538,716,4284,87,96,39,908,103,716|@118
+@5635	@931	@96		aura_blacklist_add_spell	@927	@932	@5639:lane%2Edebuff%2Eblacklist%2Eadd-preset-spell	@13	@4290	@4314	@103,716,43,908,13,2567,725,30,43,908,103,538,716,4284,87,96,39,908,103,716|@118
+@5635	@4315	@32	target.texLayerBlendMode		@4316	@4317	@5640:blendmode	@4318	@4319	@4320	@4322,472,2567,190,239,2567,190,239,4323,4284,87,32,87,4324|@662
+@5635	@4325	@96		reset_unit_status_indicator	@1527	@4326	@5636:advanced%2Ereset	@4280	@1369	@1474	@108,874,981,1348,922,1348,108,2567,1348,108,874,4284,87,96,874,2567,1348,922|@923
+@5635	@4327	@3			@4328	@4329	@5636:placement%2Emsuf2_status_adv_layer	@4280	@1369	@1474	@108,1348,922,239,1348,2050,2567,1348,2050,4330,1348,4331,239,4284,87,3|@924
+@5635	@4332	@32			@4333	@4334	@5636:preview%2Emsuf2_status_adv_test	@4280	@1369	@1474	@108,1348,922,2832,602,1348,146,2567,1348,146,4330,1348,4331,2832,4284,87,32|@925
+@5635	@1592	@520	target.rangeFadeLayerMode		@4335	@1594	@5641:layer_mode	@4336			@1594,2567,838,1767,2567,838,1767,239,602,4284,87,520,87,1596|@666
+@5635	@4338	@18	general.castbarTargetTargetNameAlign		@4339	@622	@5642:detail%2Emsuf2_castbar_target_name_align	@2528	@1369	@4340	@622,2528,4342,2567,2528,4342,4330,2528,87,720,4275,4284,87,18,148,5643|@87
+@5635	@4344	@32	auras3.target.buff.filter.includeNameplateOnly		@1106	@4345	@5639:lane%2Ebuff%2Efilters%2Eincludenameplateonly	@13	@4290	@4346	@3238,1944,4347,1141,28,937,13,2567,725,30,28,937,4348,4284,87,32,15,87,28,1444,4348|@668
+@5635	@4344	@32	auras3.target.debuff.filter.includeNameplateOnly		@1109	@4345	@5639:lane%2Edebuff%2Efilters%2Eincludenameplateonly	@13	@4290	@4349	@3238,1944,4347,1141,43,937,13,2567,725,30,43,937,4348,4284,87,32,15,87,43,1444,4348|@669
+@5635	@4350	@32	target.portraitDragonArtwork		@4351	@4352	@5645:portraitdragonartwork	@1621	@4353	@5644	@692,65,4356,2880,2567,1621,2567,1621,4357,4284,87,32,87,4357|@670
+@5635	@111	@18			@939	@113	@5639:lane%2Ebuff%2Elayout%2Eanchor	@13	@4290	@4358	@113,28,118,13,2567,725,30,28,118,113,4284,87,18|@671
+@5635	@111	@18			@4359	@113	@5638:layout%2Eanchor	@13	@4290	@4360	@113,271,1014,118,13,271,1014,118,113,4284,87,18|@671
+@5635	@111	@18			@941	@113	@5639:lane%2Edebuff%2Elayout%2Eanchor	@13	@4290	@4361	@113,43,118,13,2567,725,30,43,118,113,4284,87,18|@671
+@5635	@111	@18			@25	@113	@5647:lane%2Ebuff%2Eauras3-cooldown-anchor	@5646	@4290	@4363	@113,12,28,13,12,30,28,15,138,113,4284,87,18|@1100
+@5635	@111	@18			@25	@113	@5647:lane%2Ebuff%2Estack-anchor	@5648	@4290	@4363	@113,12,28,13,12,30,28,1204,113,4284,87,18|@1101
+@5635	@111	@18			@76	@113	@5647:lane%2Edebuff%2Eauras3-cooldown-anchor	@5649	@4290	@4367	@113,12,43,13,12,30,43,15,138,113,4284,87,18|@1100
+@5635	@111	@18			@76	@113	@5647:lane%2Edebuff%2Estack-anchor	@5650	@4290	@4367	@113,12,43,13,12,30,43,1204,113,4284,87,18|@1101
+@5635	@111	@18	target.nameTextAnchor		@4369	@113	@5637:name%2Eanchor	@162	@1369	@1605	@113,162,720,2567,162,720,113,4284,87,18,87,4370|@674
+@5635	@111	@18	target.texLayerAnchor		@4316	@113	@5640:anchor	@4318	@4319	@5651	@113,2567,190,239,2567,190,239,113,4284,87,18,87,4372|@675
+@5635	@1607	@18	target.point		@4377	@1608	@5652:anchor_point	@4378			@113,262,2567,113,2567,4378,113,262,4284,87,18,87,262|@275
+@5635	@1610	@18	target.anchorToUnitframe		@4377	@1611	@5652:anchor_to	@4378			@113,126,2567,113,2567,4378,113,126,4284,87,18,87,4380|@1102
+@5635	@4381	@18	target.texLayerAnchorTarget		@4316	@1611	@5640:anchortarget	@4318	@4319	@5653	@113,126,2567,190,239,2567,190,239,4383,4284,87,18,87,4384|@1103
+@5635	@4385	@32	auras3.target.buff.filter.dispellableAny		@1106	@4386	@5639:lane%2Ebuff%2Efilters%2Edispellableany	@13	@4290	@4346	@950,951,4387,255,28,937,13,2567,725,30,28,937,4388,4284,87,32,15,87,28,1444,4388|@679
+@5635	@4389	@32	auras3.target.debuff.filter.dispellableAny		@1109	@949	@5639:lane%2Edebuff%2Efilters%2Edispellableany	@13	@4290	@4349	@950,951,255,43,937,13,2567,725,30,43,937,4388,4284,87,32,15,87,43,1444,4388|@680
+@5635	@4390	@32			@4391	@4392	@5638:filters%2Edispellableany	@13	@4290	@4393	@950,4394,255,271,1014,937,13,271,1014,937,4388,4284,87,32|@13
+@5635	@4395	@32	auras3.target.buff.filter.raid		@1106	@4396	@5639:lane%2Ebuff%2Efilters%2Eraid	@13	@4290	@4346	@955,254,957,28,937,13,2567,725,30,28,937,916,4284,87,32,15,87,28,1444,916|@681
+@5635	@5488	@1043			@4279	@5489	@5636:indicator%2Eassist	@4280	@4281	@5490	@1372,11,1348,922,2567,1348,922,1372,4284,87,1043|@657
+@5635	@1618	@18	target.portraitDetachedTo		@4351	@1620	@5645:portraitdetachedto	@1621	@1369	@1622	@1624,126,38,262,2567,1621,2567,1621,1625,4284,87,18,87,1625|@278
+@5635	@959	@227			@960	@961	@5639:lane%2Ebuff%2Ebars%2Efill-color	@13	@4290	@4405	@39,302,306,227,28,109,13,2567,725,30,28,109,306,227,4284,87,227|@13
+@5635	@959	@227			@963	@961	@5639:lane%2Edebuff%2Ebars%2Efill-color	@13	@4290	@4406	@39,302,306,227,43,109,13,2567,725,30,43,109,306,227,4284,87,227|@13
+@5635	@965	@96			@25	@967	@5647:lane%2Ebuff%2Eauras3-duration-bar-display	@5654	@4290	@4363	@39,302,118,12,28,13,12,30,28,15,414,302,451,4284,87,96|@1104
+@5635	@965	@96			@76	@967	@5647:lane%2Edebuff%2Eauras3-duration-bar-display	@5655	@4290	@4367	@39,302,118,12,43,13,12,30,43,15,414,302,451,4284,87,96|@1104
+@5635	@975	@18			@960	@976	@5639:lane%2Ebuff%2Ebars%2Ebar-texture	@13	@4290	@4405	@39,302,190,28,109,13,2567,725,30,28,109,302,190,4284,87,18|@125
+@5635	@975	@18			@963	@976	@5639:lane%2Edebuff%2Ebars%2Ebar-texture	@13	@4290	@4406	@39,302,190,43,109,13,2567,725,30,43,109,302,190,4284,87,18|@125
+@5635	@4409	@18			@4410	@4411	@5638:setup%2Eaura-type	@13	@4290	@4412	@39,255,271,1014,569,13,271,1014,569,39,255,4284,87,18|@684
+@5635	@4413	@32			@4414	@4415	@5638:target-dots%2Eauto-blacklist-debuffs	@13	@4290	@4416	@985,908,690,44,271,1014,87,86,13,271,1014,87,86,985,908,44,4284,87,32|@685
+@5635	@1377	@3	target.hpBgAlpha		@4417	@189	@5656:hpbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,1629,4284,87,3,87,1629|@686
+@5635	@1377	@3	target.powerBarBgAlpha		@4417	@189	@5656:powerbarbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,4421,4284,87,3,87,4421|@687
+@5635	@986	@18			@960	@987	@5639:lane%2Ebuff%2Ebars%2Eicon-position	@13	@4290	@4405	@302,11,868,28,109,13,2567,725,30,28,109,11,868,4284,87,18|@127
+@5635	@986	@18			@963	@987	@5639:lane%2Edebuff%2Ebars%2Eicon-position	@13	@4290	@4406	@302,11,868,43,109,13,2567,725,30,43,109,11,868,4284,87,18|@127
+@5635	@988	@18			@960	@989	@5639:lane%2Ebuff%2Ebars%2Eicon-size	@13	@4290	@4405	@302,11,57,28,109,13,2567,725,30,28,109,11,57,4284,87,18|@128
+@5635	@988	@18			@963	@989	@5639:lane%2Edebuff%2Ebars%2Eicon-size	@13	@4290	@4406	@302,11,57,43,109,13,2567,725,30,43,109,11,57,4284,87,18|@128
+@5635	@990	@18			@960	@991	@5639:lane%2Ebuff%2Ebars%2Eicon-spacing	@13	@4290	@4405	@302,11,992,28,109,13,2567,725,30,28,109,11,992,4284,87,18|@129
+@5635	@990	@18			@963	@991	@5639:lane%2Edebuff%2Ebars%2Eicon-spacing	@13	@4290	@4406	@302,11,992,43,109,13,2567,725,30,43,109,11,992,4284,87,18|@129
+@5635	@4422	@18			@4423	@4424	@5638:appearance%2Eduration-display	@4425	@4290	@4426	@302,451,271,1014,10,13,271,1014,10,414,451,4284,87,18|@688
+@5635	@4427	@18			@4423	@4428	@5638:appearance%2Eduration-direction	@4425	@4290	@4426	@302,306,271,1014,10,13,271,1014,10,414,748,4284,87,18|@689
+@5635	@4429	@3			@4423	@4430	@5638:appearance%2Edurationbarheight	@4425	@4290	@4426	@302,347,271,1014,10,13,271,1014,10,1101,4284,87,3|@690
+@5635	@4431	@18			@4423	@4432	@5638:appearance%2Eduration-position	@4425	@4290	@4426	@302,868,271,1014,10,13,271,1014,10,414,868,4284,87,18|@691
+@5635	@4433	@32			@4391	@997	@5638:filters%2Ebigdefensive	@13	@4290	@4393	@998,999,271,1014,937,13,271,1014,937,1000,4284,87,32|@13
+@5635	@4433	@32	auras3.target.buff.filter.bigDefensive		@1106	@997	@5639:lane%2Ebuff%2Efilters%2Ebigdefensive	@13	@4290	@4346	@998,999,28,937,13,2567,725,30,28,937,1000,4284,87,32,15,87,28,1444,1000|@692
+@5635	@4434	@18			@4435	@4436	@5638:appearance%2Epandemic%2Eblend	@4437	@4290	@4438	@4436,10,4439,13,271,1014,10,4439,4436,4284,87,18|@693
+@5635	@4440	@520	target.portraitBlizzardDirection		@4351	@4441	@5645:portraitblizzarddirection	@1621	@4353	@5657	@37,1621,4443,38,748,4444,1364,1578,1386,308,307,442,2567,1621,2567,1621,4445,4284,87,520,87,4445|@694
+@5635	@1639	@18	target.portraitBorderStyle		@4351	@8	@5645:portraitborderstyle	@1621	@1369	@1640	@8,2567,1621,2567,1621,1641,4284,87,18,87,1641|@282
+@5635	@4446	@3			@4435	@4447	@5638:appearance%2Epandemic%2Eborder-opacity	@4437	@4290	@4438	@8,179,10,4439,13,271,1014,10,4439,8,179,4284,87,3|@695
+@5635	@17	@18	general.castbarTargetIconBorderStyle		@4339	@19	@5642:detail%2Emsuf2_castbar_icon_border_style	@2528	@1369	@4448	@8,12,2528,4342,2567,2528,4342,4330,2528,11,8,12,4284,87,18,148,5658|@1105
+@5635	@1642	@18	target.portraitBorderArt		@4351	@1643	@5645:portraitborderart	@1621	@1369	@1640	@8,1644,2567,1621,2567,1621,1645,4284,87,18,87,1645|@283
+@5635	@1646	@18	target.portraitBorderDirection		@4351	@1647	@5645:portraitborderdirection	@1621	@1369	@1640	@8,748,2567,1621,2567,1621,1648,4284,87,18,87,1648|@284
+@5635	@1649	@3	general.castbarTargetIconBorderThickness		@4339	@21	@5642:detail%2Emsuf2_castbar_icon_border_thickness	@2528	@1369	@4448	@8,22,2528,4342,2567,2528,4342,4330,2528,11,8,22,4284,87,3,148,5659|@1104
+@5635	@1649	@3	target.portraitBorderThickness		@4351	@21	@5645:portraitborderthickness	@1621	@1369	@1640	@8,22,2567,1621,2567,1621,1651,4284,87,3,87,1651|@13
+@5635	@1649	@3	target.powerBarBorderThickness		@4450	@21	@5660:powerbarborderthickness	@4451			@8,22,2567,128,2567,128,1650,4284,87,3,87,1650|@20
+@5635	@4454	@32			@4391	@4455	@5638:filters%2Ecancelable	@13	@4290	@4393	@4455,271,1014,937,13,271,1014,937,4455,4284,87,32|@13
+@5635	@4454	@32	auras3.target.buff.filter.cancelable		@1106	@4455	@5639:lane%2Ebuff%2Efilters%2Ecancelable	@13	@4290	@4346	@4455,28,937,13,2567,725,30,28,937,4455,4284,87,32,15,87,28,1444,4455|@698
+@5635	@4456	@32	target.texLayerHealthLowAlphaEnabled		@4316	@4457	@5640:healthlowalphaenabled	@4318	@4319	@5661	@226,179,1047,229,2567,190,239,2567,190,239,4459,4284,87,32,87,4460|@699
+@5635	@1659	@32	target.chunkedFill		@4461	@1660	@5662:chunked_fill	@4462			@1661,301,1662,2567,1638,2567,1638,1661,306,4284,87,32,87,1663|@700
+@5635	@1664	@32	target.powerChunkedFill		@4450	@1665	@5660:powerchunkedfill	@4451			@1661,128,1662,2567,128,2567,128,1666,4284,87,32,87,1666|@701
+@5635	@4464	@1043			@4279	@4465	@5636:indicator%2Eclasstext	@4280	@4281	@4466	@127,162,1348,922,2567,1348,922,4467,4284,87,1043|@657
+@5635	@1667	@18	target.portraitClassStyle		@4351	@1668	@5645:portraitclassstyle	@1621	@1369	@1474	@127,1621,12,2567,1621,2567,1621,1669,4284,87,18,87,1669|@288
+@5635	@1670	@96		clear_unit_custom_anchor	@1671	@1672	@5652:custom%2Eclear	@4378			@1672,113,271,2567,4378,271,1672,4284,87,96,1672,2567,271,113|@13
+@5635	@4468	@32			@4469	@4470	@5638:reminder%2Eclick-cast	@4471	@4290	@4412	@805,689,11,126,641,689,716,271,1014,4472,13,271,1014,4472,805,641,4284,87,32|@702
+@5635	@1679	@32	target.portraitClickable		@4351	@1680	@5645:portraitclickable	@1621	@4353	@5663	@1682,1621,2567,1621,2567,1621,1683,4284,87,32,87,1683|@13
+@5635	@4474	@32	target.texLayerRoundedClip		@4316	@4475	@5640:roundedclip	@4318	@4319	@5664	@4477,126,2681,38,2567,190,239,2567,190,239,4478,4284,87,32,87,4479|@703
+@5635	@3343	@227			@4435	@227	@5638:appearance%2Epandemic%2Ecolor	@4437	@4290	@4438	@227,10,4439,13,271,1014,10,4439,227,4284,87,227|@695
+@5635	@3343	@227			@4480	@227	@5647:lane%2Ebuff%2Efull-frame%2Ecolor	@5665	@4290	@4363	@227,28,403,38,13,12,30,28,403,38,227,4284,87,227|@1106
+@5635	@3343	@227			@4482	@227	@5638:effect%2Ecolor	@4483	@4290	@4426	@227,271,1014,557,13,271,1014,557,227,4284,87,227|@705
+@5635	@3343	@227			@4484	@227	@5647:lane%2Edebuff%2Efull-frame%2Ecolor	@5666	@4290	@4367	@227,43,403,38,13,12,30,43,403,38,227,4284,87,227|@1106
+@5635	@4486	@18	target.texLayerHealthAboveMode		@4316	@4487	@5640:healthabovemode	@4318	@4319	@5667	@227,2187,229,2567,190,239,2567,190,239,4489,4284,87,18,87,4490|@706
+@5635	@4491	@18	target.texLayerColorMode		@4316	@4492	@5640:colormode	@4318	@4319	@5668	@227,602,2567,190,239,2567,190,239,4494,4284,87,18,87,4495|@707
+@5635	@5520	@1043			@4279	@370	@5636:indicator%2Estatuscombat	@4280	@4281	@5521	@370,1348,922,2567,1348,922,5522,4284,87,1043|@1054
+@5635	@4496	@18	target.texLayerVisibility		@4316	@4497	@5640:combat_state	@4318	@4319	@4498	@370,296,2567,190,239,2567,190,239,370,296,4284,87,18,87,4499|@708
+@5635	@1009	@32			@960	@1010	@5639:lane%2Ebuff%2Ebars%2Ecombine-debuff-bars	@13	@4290	@4405	@1011,28,956,43,109,28,109,13,2567,725,30,28,109,1011,43,109,4284,87,32|@133
+@5635	@4500	@713			@4410	@4501	@5638:setup%2Ename	@13	@4290	@4412	@1014,720,271,1014,569,13,271,1014,569,720,4284,87,713|@13
+@5635	@4502	@520			@1013	@1014	@5639:container-selector	@13	@4290	@5669	@1014,13,13,2567,725,1014,696,4284,87,520|@709
+@5635	@1028	@3			@4423	@1029	@5638:appearance%2Ecooldownx	@4504	@4290	@4426	@138,487,271,1014,10,13,271,1014,10,1030,4284,87,3|@710
+@5635	@1031	@3			@4423	@1032	@5638:appearance%2Ecooldowny	@4504	@4290	@4426	@138,492,271,1014,10,13,271,1014,10,1033,4284,87,3|@710
+@5635	@4505	@18			@4423	@1016	@5638:appearance%2Ecooldown-anchor	@4504	@4290	@4426	@138,113,271,1014,10,13,271,1014,10,138,113,4284,87,18|@711
+@5635	@4506	@3			@4423	@4507	@5638:appearance%2Ecooldownsize	@4504	@4290	@4426	@138,57,271,1014,10,13,271,1014,10,1027,4284,87,3|@710
+@5635	@4508	@32			@4423	@4509	@5638:appearance%2Ecooldown-swipe	@4504	@4290	@4426	@138,1192,271,1014,10,13,271,1014,10,138,1192,4284,87,32|@710
+@5635	@4510	@32			@4423	@4511	@5638:appearance%2Ecooldown-text	@4504	@4290	@4426	@138,162,271,1014,10,13,271,1014,10,138,162,4284,87,32|@710
+@5635	@4512	@96			@4513	@4514	@5670:open				@1038,126,2471,2567,1038,2567,1038,1039,4284,87,96|@13
+@5635	@4516	@32			@4391	@1041	@5638:filters%2Ecrowdcontrol	@13	@4290	@4393	@1042,1043,271,1014,937,13,271,1014,937,4517,4284,87,32|@13
+@5635	@4516	@32	auras3.target.debuff.filter.crowdControl		@1109	@1041	@5639:lane%2Edebuff%2Efilters%2Ecrowdcontrol	@13	@4290	@4349	@1042,1043,43,937,13,2567,725,30,43,937,4517,4284,87,32,15,87,43,1444,4517|@712
+@5635	@4518	@32	target.texLayerTargetOnly		@4316	@4519	@5640:current_target_only	@4318	@4319	@4498	@1312,87,1141,2567,190,239,2567,190,239,1312,87,1141,4284,87,32,87,4520|@703
+@5635	@1692	@713	target.anchorFrameName		@1671	@1693	@5652:custom%2Evalue	@4378			@271,113,38,113,271,2567,4378,271,606,4284,87,713,87,4521|@713
+@5635	@4522	@713			@4414	@4523	@5638:target-dots%2Ecustom-id	@13	@4290	@4291	@271,716,717,271,1014,87,86,13,271,1014,87,86,271,717,4284,87,713|@714
+@5635	@5671	@713	targettarget.totInlineCustomSeparator		@5672	@5673	@5675:custom_separator	@5674			@271,616,2567,5676,162,2567,5676,162,271,616,4284,87,713,5677,5678|@1107
+@5635	@4524	@713	target.texLayerCustomTexturePath		@4316	@4525	@5640:customtexturepath	@4318	@4319	@4526	@271,190,4527,2567,190,239,2567,190,239,4528,4284,87,713,87,4529|@703
+@5635	@1416	@1043			@4279	@1417	@5636:indicator%2Estatusdndtext	@4280	@4281	@4530	@1419,162,1348,922,2567,1348,922,1420,4284,87,1043|@657
+@5635	@4531	@1043			@4279	@4532	@5636:indicator%2Estatustext	@4280	@4281	@4533	@1429,1775,162,1348,922,2567,1348,922,1430,4284,87,1043|@657
+@5635	@1705	@32	target.healthTextDecimals		@1984	@1706	@5637:hp%2Edecimals	@162	@1369	@1590	@1707,355,162,117,2567,162,117,1046,4284,87,32,87,1708|@715
+@5635	@1044	@3			@4423	@1045	@5638:appearance%2Ecooldowndecimalseconds	@4504	@4290	@4426	@1046,1047,1048,271,1014,10,13,271,1014,10,1049,4284,87,3|@716
+@5635	@1044	@3			@25	@1045	@5647:lane%2Ebuff%2Ecooldowndecimalseconds	@5646	@4290	@4363	@1046,1047,1048,12,28,13,12,30,28,1049,4284,87,3|@1108
+@5635	@1044	@3			@76	@1045	@5647:lane%2Edebuff%2Ecooldowndecimalseconds	@5649	@4290	@4367	@1046,1047,1048,12,43,13,12,30,43,1049,4284,87,3|@1108
+@5635	@279	@18	target.hpTextSeparator		@1984	@280	@5637:hp%2Eseparator	@162	@1369	@1590	@280,162,117,2567,162,117,616,4284,87,18,87,4534|@718
+@5635	@279	@18	target.powerTextSeparator		@1989	@280	@5637:power%2Eseparator	@162	@1369	@1709	@280,162,128,2567,162,128,616,4284,87,18,87,283|@718
+@5635	@1717	@32	target.powerBarDetached		@4450	@1718	@5660:detached	@4451			@1719,690,38,2567,128,2567,128,129,4284,87,32,87,287|@20
+@5635	@1720	@3	target.detachedPowerBarHeight		@4450	@1721	@5660:detachedpowerbarheight	@4451			@129,347,2567,128,2567,128,535,4284,87,3,87,535|@20
+@5635	@1722	@3	target.detachedPowerBarFrameLevelOffset		@4450	@1723	@5660:detachedpowerbarframeleveloffset	@4451			@129,239,2567,128,2567,128,515,4284,87,3,87,515|@719
+@5635	@1724	@3	target.detachedPowerBarWidth		@4450	@1725	@5660:detachedpowerbarwidth	@4451			@129,272,2567,128,2567,128,549,4284,87,3,87,549|@720
+@5635	@1279	@32	target.unitDispelOverlayEnabled		@4535	@1280	@5679:overlay%2Eenabled	@4536			@951,1281,951,1281,2567,951,1281,235,4284,87,32,87,4538|@192
+@5635	@1283	@32	target.unitDispelSymbolEnabled		@4539	@1284	@5679:symbol%2Eenabled	@4540			@951,357,951,357,2567,951,357,235,4284,87,32,87,4541|@193
+@5635	@1050	@18			@4423	@1051	@5638:appearance%2Edispel-type-border	@4542	@4290	@4438	@951,255,8,271,1014,10,13,271,1014,10,951,255,8,4284,87,18|@721
+@5635	@1050	@18			@76	@1051	@5647:lane%2Edebuff%2Eauras3-debuff-type-border-mode	@5680	@4290	@4367	@951,255,8,12,43,13,12,30,43,15,43,255,8,602,4284,87,18|@1109
+@5635	@4544	@32	auras3.target.buff.filter.includeDispellable		@1106	@4545	@5639:lane%2Ebuff%2Efilters%2Eincludedispellable	@13	@4290	@4346	@952,4546,254,909,28,937,13,2567,725,30,28,937,4547,4284,87,32,15,87,28,1444,4547|@723
+@5635	@4548	@32	auras3.target.debuff.filter.includeDispellable		@1109	@1054	@5639:lane%2Edebuff%2Efilters%2Eincludedispellable	@13	@4290	@4349	@952,254,909,43,937,13,2567,725,30,43,937,4547,4284,87,32,15,87,43,1444,4547|@724
+@5635	@4549	@32			@1109	@4550	@5639:lane%2Edebuff%2Efilters%2Eraid	@13	@4290	@4349	@952,254,957,43,937,13,2567,725,30,43,937,916,4284,87,32|@725
+@5635	@1055	@18			@4469	@451	@5638:reminder%2Eenabled	@13	@4290	@4412	@451,271,1014,4472,13,271,1014,4472,235,4284,87,18|@726
+@5635	@4551	@18			@4414	@4552	@5638:target-dots%2Eselection	@13	@4290	@4291	@4552,271,1014,87,86,13,271,1014,87,86,1170,4284,87,18|@874
+@5635	@4553	@18	target.portraitDragonLayer		@4351	@4554	@5645:portraitdragonlayer	@1621	@4353	@5681	@4356,4556,609,2567,1621,2567,1621,4557,4284,87,18,87,4557|@728
+@5635	@4558	@3	target.portraitDragonX		@4351	@4559	@5645:portraitdragonx	@1621	@4353	@5682	@4356,1918,4561,2567,1621,2567,1621,4562,4284,87,3,87,4562|@729
+@5635	@4563	@3	target.portraitDragonLevel		@4351	@4564	@5645:portraitdragonlevel	@1621	@4353	@5683	@4356,240,2187,1621,2567,1621,2567,1621,4566,4284,87,3,87,4566|@13
+@5635	@4567	@3	target.portraitDragonScale		@4351	@4568	@5645:portraitdragonscale	@1621	@4353	@5684	@4356,57,2567,1621,2567,1621,4570,4284,87,3,87,4570|@730
+@5635	@4571	@3	target.portraitDragonY		@4351	@4572	@5645:portraitdragony	@1621	@4353	@5685	@4356,2290,4561,2567,1621,2567,1621,4574,4284,87,3,87,4574|@731
+@5635	@4575	@32			@4423	@4576	@5638:appearance%2Eduration-bar	@4425	@4290	@4426	@414,302,271,1014,10,13,271,1014,10,414,302,4284,87,32|@710
+@5635	@1433	@1043			@4279	@1434	@5636:indicator%2Estatusconsumptiontext	@4280	@4281	@5212	@1436,1437,162,1348,922,2567,1348,922,1438,4284,87,1043|@935
+@5635	@4577	@3	target.texLayerEdgeSoftness		@4316	@4578	@5640:edgesoftness	@4318	@4319	@5686	@1316,2069,2567,190,239,2567,190,239,4580,4284,87,3,87,4581|@703
+@5635	@4582	@520			@1013	@1063	@5639:tool-selector	@13	@4290	@4358	@1063,13,13,2567,725,1065,696,4284,87,520|@145
+@5635	@1067	@18			@4482	@557	@5638:effect%2Etype	@4483	@4290	@4426	@557,271,1014,557,13,271,1014,557,255,4284,87,18|@732
+@5635	@1067	@18	auras3.target.buff.frameEffectType		@4480	@557	@5647:lane%2Ebuff%2Efull-frame%2Etype	@5665	@4290	@4363	@557,28,403,38,13,12,30,28,403,38,255,4284,87,18,15,87,28,4583|@733
+@5635	@1067	@18	auras3.target.debuff.frameEffectType		@4484	@557	@5647:lane%2Edebuff%2Efull-frame%2Etype	@5666	@4290	@4367	@557,43,403,38,13,12,30,43,403,38,255,4284,87,18,15,87,43,4583|@733
+@5635	@1069	@3	target.unitDispelSymbolLayer		@4539	@1070	@5679:symbol%2Eunitdispelsymbollayer	@4540			@557,239,691,1071,951,357,2567,951,357,4584,4284,87,3,87,4584|@13
+@5635	@5075	@1043			@4279	@5076	@5636:indicator%2Eeliteicon	@4280	@4281	@5077	@4588,4589,1348,922,2567,1348,922,5078,4284,87,1043|@657
+@5635	@4585	@32	target.portraitBlizzardElite		@4351	@4586	@5645:portraitblizzardelite	@1621	@4353	@5687	@4588,956,4589,4356,2567,1621,2567,1621,4590,4284,87,32,87,4590|@734
+@5635	@1735	@32	target.embedPowerBarIntoHealth		@4450	@1736	@5660:embedpowerbarintohealth	@4451			@1737,1738,301,2567,128,2567,128,1739,4284,87,32,87,1739|@20
+@5635	@1740	@96	target.enabled		@4461	@842	@5662:enable_now	@4462			@842,2567,1638,2567,1638,842,2268,4284,87,96,87,235|@700
+@5635	@1740	@32	general.castbarTargetShowIcon		@4591	@842	@5642:feature%2Emsuf2_castbar_icon	@2528	@1369	@4448	@842,2528,4592,2567,2528,4592,4330,2528,11,4284,87,32,148,5688|@1110
+@5635	@1740	@32	general.castbarTargetShowSpellName		@4591	@842	@5642:feature%2Emsuf2_castbar_text	@2528	@1369	@4340	@842,2528,4592,2567,2528,4592,4330,2528,162,4284,87,32,148,5689|@1111
+@5635	@1740	@32	general.castbarTargetShowTargetName		@4595	@842	@5642:show_target_name	@2528	@1369	@4340	@842,2567,2528,2567,2528,65,87,720,4284,87,32,148,5690|@13
+@5635	@1740	@32	general.showTargetCastTime		@4591	@842	@5642:feature%2Emsuf2_castbar_time	@2528	@1369	@4597	@842,2528,4592,2567,2528,4592,4330,2528,419,4284,87,32,148,5691|@1112
+@5635	@1740	@32	target.enabled		@4461	@842	@5662:enabled	@4462			@842,2567,1638,2567,1638,235,4284,87,32,87,235|@735
+@5635	@4599	@32			@4595	@4600	@5642:enabled	@2528			@842,2528,2567,2528,2567,2528,235,4284,87,32|@738
+@5635	@4601	@32	target.rangeFadeEnabled		@4335	@4602	@5641:enabled	@4336			@842,838,1767,2567,838,1767,2567,838,1767,235,4284,87,32,87,2100|@13
+@5635	@4603	@32	target.texLayerEnabled		@4316	@4604	@5640:enabled	@4318	@4319	@5692	@842,190,239,2567,190,239,2567,190,239,235,4284,87,32,87,4606|@703
+@5635	@4607	@32			@4391	@4608	@5638:filters%2Eenabled	@13	@4290	@4393	@842,937,271,1014,937,13,271,1014,937,235,4284,87,32|@13
+@5635	@4607	@32	auras3.target.buff.filtersEnabled		@1106	@4608	@5639:lane%2Ebuff%2Efilters%2Eenabled	@13	@4290	@4346	@842,937,28,937,13,2567,725,30,28,937,235,4284,87,32,15,87,28,4609|@739
+@5635	@4607	@32	auras3.target.debuff.filtersEnabled		@1109	@4608	@5639:lane%2Edebuff%2Efilters%2Eenabled	@13	@4290	@4349	@842,937,43,937,13,2567,725,30,43,937,235,4284,87,32,15,87,43,4609|@739
+@5635	@1440	@32			@4410	@235	@5638:setup%2Eenabled	@13	@4290	@4412	@235,271,1014,569,13,271,1014,569,235,4284,87,32|@13
+@5635	@1440	@32			@4414	@235	@5638:target-dots%2Eenabled	@13	@4290	@4416	@235,271,1014,87,86,13,271,1014,87,86,235,4284,87,32|@740
+@5635	@4610	@713			@927	@4611	@5639:lane%2Edebuff%2Eblacklist%2Emanual-input	@13	@4290	@4314	@3095,43,716,717,718,719,720,43,908,13,2567,725,30,43,908,277,1077,4284,87,713|@741
+@5635	@1075	@713			@903	@1076	@5639:lane%2Ebuff%2Eblacklist%2Emanual-input	@13	@4290	@4310	@820,28,716,717,718,719,720,28,908,13,2567,725,30,28,908,277,1077,4284,87,713|@741
+@5635	@4612	@32			@4391	@1079	@5638:filters%2Eexternaldefensive	@13	@4290	@4393	@1080,999,271,1014,937,13,271,1014,937,1081,4284,87,32|@13
+@5635	@4612	@32	auras3.target.buff.filter.externalDefensive		@1106	@1079	@5639:lane%2Ebuff%2Efilters%2Eexternaldefensive	@13	@4290	@4346	@1080,999,28,937,13,2567,725,30,28,937,1081,4284,87,32,15,87,28,1444,1081|@742
+@5635	@5220	@32	target.pvpIndicatorShowOpenWorldFaction		@5221	@5222	@5636:pvp%2Eopen_world_faction	@4280	@4866	@5693	@5224,357,3838,1506,1507,1348,1506,2567,1348,1506,1039,5225,5224,4284,87,32,87,5226|@939
+@5635	@1764	@32	target.oocFadeEnabled		@4417	@1765	@5656:ooc_fade_enabled	@1626	@4418	@4613	@1767,38,368,369,370,2567,1626,2567,1626,387,1767,235,4284,87,32,87,1768|@13
+@5635	@4614	@3	target.hpTextMouseoverFadeIn		@4615	@4616	@5637:hp%2Emouseover%2Efadein	@162	@1369	@1590	@1767,840,168,117,2767,2567,162,117,2767,4617,4284,87,3,87,4618|@743
+@5635	@4614	@3	target.nameTextMouseoverFadeIn		@4619	@4616	@5637:name%2Emouseover%2Efadein	@162	@1369	@1605	@1767,840,168,720,2767,2567,162,720,2767,4617,4284,87,3,87,4620|@743
+@5635	@4614	@3	target.powerTextMouseoverFadeIn		@4621	@4616	@5637:power%2Emouseover%2Efadein	@162	@1369	@1709	@1767,840,168,128,2767,2567,162,128,2767,4617,4284,87,3,87,4622|@743
+@5635	@1769	@32	target.fadeInOnShow		@4417	@1770	@5656:fade_in_on_show	@1626	@4418	@4419	@1767,840,396,1771,2567,1626,2567,1626,1767,840,68,65,4284,87,32,87,1772|@744
+@5635	@4623	@3	target.hpTextMouseoverFadeOut		@4615	@4624	@5637:hp%2Emouseover%2Efadeout	@162	@1369	@1590	@1767,368,168,117,2767,2567,162,117,2767,4625,4284,87,3,87,4626|@745
+@5635	@4623	@3	target.nameTextMouseoverFadeOut		@4619	@4624	@5637:name%2Emouseover%2Efadeout	@162	@1369	@1605	@1767,368,168,720,2767,2567,162,720,2767,4625,4284,87,3,87,4627|@745
+@5635	@4623	@3	target.powerTextMouseoverFadeOut		@4621	@4624	@5637:power%2Emouseover%2Efadeout	@162	@1369	@1709	@1767,368,168,128,2767,2567,162,128,2767,4625,4284,87,3,87,4628|@745
+@5635	@1085	@18			@960	@1086	@5639:lane%2Ebuff%2Ebars%2Efill-color-mode	@13	@4290	@4405	@306,227,602,28,109,13,2567,725,30,28,109,306,227,602,4284,87,18|@151
+@5635	@1085	@18			@963	@1086	@5639:lane%2Edebuff%2Ebars%2Efill-color-mode	@13	@4290	@4406	@306,227,602,43,109,13,2567,725,30,43,109,306,227,602,4284,87,18|@151
+@5635	@1087	@18			@960	@1088	@5639:lane%2Ebuff%2Elayout%2Eaura-bar-fill	@13	@4290	@4405	@306,748,28,109,13,2567,725,30,28,109,39,302,306,4284,87,18|@152
+@5635	@1087	@18			@963	@1088	@5639:lane%2Edebuff%2Elayout%2Eaura-bar-fill	@13	@4290	@4406	@306,748,43,109,13,2567,725,30,43,109,39,302,306,4284,87,18|@152
+@5635	@1087	@18	target.verticalFillBars		@4461	@1088	@5662:fill_direction	@4462			@306,748,2567,1638,2567,1638,306,748,4284,87,18,87,4629|@746
+@5635	@1089	@18			@25	@1090	@5647:lane%2Ebuff%2Eauras3-duration-bar-direction	@5654	@4290	@4363	@306,602,12,28,13,12,30,28,15,414,302,748,4284,87,18|@1113
+@5635	@1089	@18			@76	@1090	@5647:lane%2Edebuff%2Eauras3-duration-bar-direction	@5655	@4290	@4367	@306,602,12,43,13,12,30,43,15,414,302,748,4284,87,18|@1113
+@5635	@1778	@32	target.portraitFillBorder		@4351	@1779	@5645:portraitfillborder	@1621	@1369	@1640	@306,8,1738,38,332,2567,1621,2567,1621,1780,4284,87,32,87,1780|@13
+@5635	@4630	@32	target.portraitDragonFlip		@4351	@4631	@5645:portraitdragonflip	@1621	@4353	@5694	@4633,4356,308,126,307,2567,1621,2567,1621,4634,4284,87,32,87,4634|@13
+@5635	@4635	@32	target.portraitFlip		@4351	@4636	@5645:portraitflip	@1621	@4353	@5695	@4633,1621,308,126,307,2567,1621,2567,1621,4638,4284,87,32,87,4638|@13
+@5635	@4639	@32	general.anchorToCooldown		@4377	@4640	@5652:cooldown_manager	@4378			@3457,37,846,137,4641,2567,113,2567,4378,138,1637,4284,87,32,148,4642|@748
+@5635	@4643	@32	target.texLayerFollowFrameAlpha		@4316	@4644	@5640:followframealpha	@4318	@4319	@5696	@3457,38,1626,2567,190,239,2567,190,239,4646,4284,87,32,87,4647|@749
+@5635	@4648	@32	target.useBlizzardFrame		@4461	@4649	@5662:force_blizzard_frame	@4462			@4650,37,38,68,2567,1638,2567,1638,4650,37,38,4284,87,32,87,4651|@750
+@5635	@1791	@3	target.hpBarAlpha		@4417	@324	@5656:hpbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,1792,4284,87,3,87,1792|@751
+@5635	@1791	@3	target.powerBarAlpha		@4417	@324	@5656:powerbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,4652,4284,87,3,87,4652|@752
+@5635	@4653	@18	general.castbarTargetTimeFormat		@4339	@3167	@5642:detail%2Emsuf2_castbar_time_format	@2528	@1369	@4597	@3167,2528,4342,2567,2528,4342,4330,2528,419,3167,4284,87,18,148,5697|@1114
+@5635	@331	@3			@939	@332	@5639:lane%2Ebuff%2Elayout%2Espacing	@13	@4290	@4358	@332,28,118,13,2567,725,30,28,118,992,4284,87,3|@13
+@5635	@331	@3			@4359	@332	@5638:layout%2Espacing	@13	@4290	@4360	@332,271,1014,118,13,271,1014,118,992,4284,87,3|@13
+@5635	@331	@3			@941	@332	@5639:lane%2Edebuff%2Elayout%2Espacing	@13	@4290	@4361	@332,43,118,13,2567,725,30,43,118,992,4284,87,3|@13
+@5635	@1449	@1043			@4279	@1450	@5636:indicator%2Estatusghosttext	@4280	@4281	@4655	@1452,162,1348,922,2567,1348,922,1453,4284,87,1043|@657
+@5635	@1092	@96			@1013	@1093	@5639:open-aura-style	@13	@4290	@4358	@761,39,10,13,13,2567,725,1039,39,12,4284,87,96|@754
+@5635	@4656	@32	target.portraitBlizzardCorner		@4351	@4657	@5645:portraitblizzardcorner	@1621	@4353	@5698	@4659,1364,4660,2567,1621,2567,1621,4661,4284,87,32,87,4661|@734
+@5635	@4662	@32	target.texLayerGradientEnabled		@4316	@2726	@5640:gradientenabled	@4318	@4319	@5699	@2726,2567,190,239,2567,190,239,4664,4284,87,32,87,4665|@755
+@5635	@2723	@96			@4666	@2725	@5640:gradient_direction%2Eup	@4318	@4319	@4320	@2726,748,190,239,2726,748,2567,190,239,2726,748,1866,4284,87,96|@13
+@5635	@4667	@32			@4469	@4668	@5638:reminder%2Edesaturate	@4471	@4290	@4412	@4196,368,4669,271,1014,4472,13,271,1014,4472,4670,4284,87,32|@756
+@5635	@1289	@18	target.unitDispelSymbolGrowth		@4539	@1290	@5679:symbol%2Eunitdispelsymbolgrowth	@4540			@1290,951,357,2567,951,357,4671,4284,87,18,87,4671|@757
+@5635	@1094	@18			@939	@1095	@5639:lane%2Ebuff%2Elayout%2Egrowth	@13	@4290	@4358	@1095,28,118,13,2567,725,30,28,118,1095,4284,87,18|@156
+@5635	@1094	@18			@4359	@1095	@5638:layout%2Egrowth	@13	@4290	@4360	@1095,271,1014,118,13,271,1014,118,1095,4284,87,18|@156
+@5635	@1094	@18			@941	@1095	@5639:lane%2Edebuff%2Elayout%2Egrowth	@13	@4290	@4361	@1095,43,118,13,2567,725,30,43,118,1095,4284,87,18|@156
+@5635	@1096	@18			@960	@1097	@5639:lane%2Ebuff%2Ebars%2Ebar-growth	@13	@4290	@4405	@1095,748,28,109,13,2567,725,30,28,109,302,1095,4284,87,18|@158
+@5635	@1096	@18			@963	@1097	@5639:lane%2Edebuff%2Ebars%2Ebar-growth	@13	@4290	@4406	@1095,748,43,109,13,2567,725,30,43,109,302,1095,4284,87,18|@159
+@5635	@1867	@3	target.hpTextLayer		@4672	@1868	@5637:advanced%2Ehptextlayer	@162	@1369	@1474	@117,239,162,108,2567,162,108,4673,4284,87,3,87,4673|@758
+@5635	@4674	@3	target.texLayerHealthThreshold		@4316	@4675	@5640:healththreshold	@4318	@4319	@5700	@117,229,2567,190,239,2567,190,239,4677,4284,87,3,87,4678|@759
+@5635	@1870	@18			@1588	@1871	@5637:hp%2Eslot%2Emode	@162	@1369	@1590	@117,606,117,219,2567,162,117,219,602,4284,87,18|@760
+@5635	@4679	@18	target.healthColorMode		@4461	@4680	@5662:health_color_mode	@4462			@301,227,4681,2567,1638,2567,1638,301,227,602,4284,87,18,87,3504|@761
+@5635	@346	@3			@25	@347	@5647:lane%2Ebuff%2Edurationbarheight	@5654	@4290	@4363	@347,12,28,13,12,30,28,1101,4284,87,3|@1115
+@5635	@346	@3			@76	@347	@5647:lane%2Edebuff%2Edurationbarheight	@5655	@4290	@4367	@347,12,43,13,12,30,43,1101,4284,87,3|@1115
+@5635	@346	@3	general.castbarTargetBarHeight		@4595	@347	@5642:height	@2528	@1369	@1681	@347,2567,2528,2567,2528,347,4284,87,3,148,5701|@1116
+@5635	@4683	@3	target.texLayerHeight		@4316	@4684	@5640:height	@4318	@4319	@5702	@347,691,985,2567,190,239,2567,190,239,347,4284,87,3,87,4686|@703
+@5635	@1882	@3	target.portraitHeight		@4351	@1883	@5645:portraitheight	@1621	@1369	@1884	@347,1885,2567,1621,2567,1621,1886,4284,87,3,87,1886|@13
+@5635	@1887	@32			@1588	@1888	@5637:hp%2Eslot%2Ehide_percent	@162	@1369	@1590	@36,354,117,219,2567,162,117,219,36,355,4284,87,32|@763
+@5635	@1887	@32			@1889	@1888	@5637:power%2Eslot%2Ehide_percent	@162	@1369	@1709	@36,354,128,219,2567,162,128,219,36,355,4284,87,32|@763
+@5635	@1105	@32			@4391	@1107	@5638:filters%2Ehide-permanent	@13	@4290	@4393	@36,1108,271,1014,937,13,271,1014,937,36,1108,4284,87,32|@764
+@5635	@1105	@32	auras3.target.buff.blacklist.hidePermanent		@1106	@1107	@5639:lane%2Ebuff%2Efilters%2Ehide-permanent	@13	@4290	@4346	@36,1108,28,937,13,2567,725,30,28,937,36,1108,4284,87,32,15,87,28,908,4687|@765
+@5635	@1105	@32	auras3.target.debuff.blacklist.hidePermanent		@1109	@1107	@5639:lane%2Edebuff%2Efilters%2Ehide-permanent	@13	@4290	@4349	@36,1108,43,937,13,2567,725,30,43,937,36,1108,4284,87,32,15,87,43,908,4687|@765
+@5635	@4688	@32	target.powerHideMissingResource		@4450	@4689	@5660:powerhidemissingresource	@4451			@36,396,104,2519,1838,2567,128,2567,128,4690,4284,87,32,87,4690|@20
+@5635	@4691	@32	target.loadCondHideInHousing		@4692	@1905	@5703:loadcondhideinhousing	@4693			@1905,2567,2443,4138,2567,2443,4138,4695,4284,87,32,87,4695|@766
+@5635	@1117	@3			@4423	@1118	@5638:appearance%2Eicon-zoom	@4696	@4290	@4426	@11,1119,271,1014,10,13,271,1014,10,11,1119,4284,87,3|@767
+@5635	@1117	@3			@25	@1118	@5647:lane%2Ebuff%2Eiconzoom	@5704	@4290	@4363	@11,1119,12,28,13,12,30,28,1121,4284,87,3|@1117
+@5635	@1117	@3			@76	@1118	@5647:lane%2Edebuff%2Eiconzoom	@5680	@4290	@4367	@11,1119,12,43,13,12,30,43,1121,4284,87,3|@1117
+@5635	@1117	@3	general.castbarTargetIconZoom		@4339	@1118	@5642:detail%2Emsuf2_castbar_icon_zoom	@2528	@1369	@4448	@11,1119,2528,4342,2567,2528,4342,4330,2528,11,1119,4284,87,3,148,5705|@1104
+@5635	@4699	@3			@939	@4700	@5639:lane%2Ebuff%2Elayout%2Eicon-height	@13	@4290	@4358	@11,347,355,28,118,13,2567,725,30,28,118,11,347,4284,87,3|@13
+@5635	@4699	@3			@941	@4700	@5639:lane%2Edebuff%2Elayout%2Eicon-height	@13	@4290	@4361	@11,347,355,43,118,13,2567,725,30,43,118,11,347,4284,87,3|@13
+@5635	@4701	@32			@4391	@4702	@5638:filters%2Eonlyimportant	@13	@4290	@4393	@4702,271,1014,937,13,271,1014,937,4703,4284,87,32|@13
+@5635	@4701	@32	auras3.target.buff.filter.onlyImportant		@1106	@4702	@5639:lane%2Ebuff%2Efilters%2Eonlyimportant	@13	@4290	@4346	@4702,28,937,13,2567,725,30,28,937,4703,4284,87,32,15,87,28,1444,4703|@769
+@5635	@4701	@32	auras3.target.debuff.filter.onlyImportant		@1109	@4702	@5639:lane%2Edebuff%2Efilters%2Eonlyimportant	@13	@4290	@4349	@4702,43,937,13,2567,725,30,43,937,4703,4284,87,32,15,87,43,1444,4703|@770
+@5635	@4704	@32	target.loadCondHideInCombat		@4692	@4705	@5703:loadcondhideincombat	@4693			@840,370,2567,2443,4138,2567,2443,4138,4706,4284,87,32,87,4706|@771
+@5635	@4707	@32	target.loadCondHideInGroup		@4692	@4708	@5703:loadcondhideingroup	@4693			@840,909,2567,2443,4138,2567,2443,4138,4709,4284,87,32,87,4709|@771
+@5635	@4710	@32	target.loadCondHideInInstance		@4692	@4711	@5703:loadcondhideininstance	@4693			@840,4712,2567,2443,4138,2567,2443,4138,4713,4284,87,32,87,4713|@771
+@5635	@4714	@32	target.loadCondHideInVehicle		@4692	@4715	@5703:loadcondhideinvehicle	@4693			@840,4716,2567,2443,4138,2567,2443,4138,4717,4284,87,32,87,4717|@771
+@5635	@5556	@1043			@4279	@5557	@5636:indicator%2Estatusincomingres	@4280	@4281	@5558	@5559,5560,1348,922,2567,1348,922,5561,4284,87,1043|@657
+@5635	@5706	@18	targettarget.totInlineColorMode		@5672	@5707	@5675:color	@5674			@5676,227,2567,5676,162,2567,5676,162,227,4284,87,18,5677,5708|@1118
+@5635	@5709	@18	targettarget.totInlineSeparator		@5672	@5710	@5675:separator	@5674			@5676,616,2567,5676,162,2567,5676,162,616,4284,87,18,5677,5711|@1119
+@5635	@4718	@3	target.portraitInnerShadow		@4351	@4719	@5645:portraitinnershadow	@1621	@4353	@5712	@4721,50,2560,2567,1621,2567,1621,4722,4284,87,3,87,4722|@772
+@5635	@1948	@32	target.alphaExcludePredictionBars		@4417	@1949	@5656:alpha_exclude_prediction_bars	@1626	@4418	@4419	@1950,1951,676,1267,2567,1626,2567,1626,9,1761,676,109,4284,87,32,87,1952|@13
+@5635	@4723	@32	target.portraitDragonInInstances		@4351	@4724	@5645:portraitdragonininstances	@1621	@4353	@5713	@1950,3095,4726,840,4727,2567,1621,2567,1621,4728,4284,87,32,87,4728|@773
+@5635	@1958	@32	target.alphaExcludeTextPortrait		@4417	@1959	@5656:alpha_exclude_text_portrait	@1626	@4418	@4419	@1950,162,1621,1267,2567,1626,2567,1626,9,1761,162,1621,4284,87,32,87,1960|@13
+@5635	@4729	@3			@4423	@4730	@5638:appearance%2Estyle-padding	@4696	@4290	@4426	@30,1495,271,1014,10,13,271,1014,10,12,1495,4284,87,3|@774
+@5635	@4729	@3			@25	@4730	@5647:lane%2Ebuff%2Estylepadding	@5704	@4290	@4363	@30,1495,12,28,13,12,30,28,4731,4284,87,3|@1117
+@5635	@4729	@3			@76	@4730	@5647:lane%2Edebuff%2Estylepadding	@5680	@4290	@4367	@30,1495,12,43,13,12,30,43,4731,4284,87,3|@1117
+@5635	@1123	@3			@4480	@1124	@5647:lane%2Ebuff%2Efull-frame%2Elayer	@5665	@4290	@4363	@239,691,1071,28,403,38,13,12,30,28,403,38,239,4284,87,3|@1106
+@5635	@1123	@3			@939	@1124	@5639:lane%2Ebuff%2Elayout%2Elayer	@13	@4290	@4358	@239,691,1071,28,118,13,2567,725,30,28,118,239,4284,87,3|@13
+@5635	@1123	@3			@4482	@1124	@5638:effect%2Elayer	@4483	@4290	@4426	@239,691,1071,271,1014,557,13,271,1014,557,239,4284,87,3|@705
+@5635	@1123	@3			@4359	@1124	@5638:layout%2Elayer	@13	@4290	@4360	@239,691,1071,271,1014,118,13,271,1014,118,239,4284,87,3|@13
+@5635	@1123	@3			@4484	@1124	@5647:lane%2Edebuff%2Efull-frame%2Elayer	@5666	@4290	@4367	@239,691,1071,43,403,38,13,12,30,43,403,38,239,4284,87,3|@1106
+@5635	@1123	@3			@941	@1124	@5639:lane%2Edebuff%2Elayout%2Elayer	@13	@4290	@4361	@239,691,1071,43,118,13,2567,725,30,43,118,239,4284,87,3|@13
+@5635	@1123	@3	general.castbarTargetFrameLevelOffset		@4595	@1124	@5642:frame_layer	@2528	@1369	@1474	@239,691,1071,2567,2528,2567,2528,38,239,4284,87,3,148,5714|@1120
+@5635	@1123	@3	general.castbarTargetIconFrameLevelOffset		@4339	@1124	@5642:detail%2Emsuf2_castbar_icon_layer	@2528	@1369	@1474	@239,691,1071,2528,4342,2567,2528,4342,4330,2528,11,239,4284,87,3,148,5715|@1121
+@5635	@1123	@3	target.texLayerLevel		@4316	@1124	@5640:level	@4318	@4319	@5716	@239,691,1071,2567,190,239,2567,190,239,240,4284,87,3,87,4734|@703
+@5635	@1962	@3	target.portraitLevelOffset		@4351	@1963	@5645:portraitleveloffset	@1621	@1369	@1622	@239,486,2567,1621,2567,1621,1964,4284,87,3,87,1964|@316
+@5635	@5567	@1043			@4279	@5568	@5636:indicator%2Eleader	@4280	@4281	@5569	@1483,11,1348,922,2567,1348,922,1483,4284,87,1043|@1071
+@5635	@4737	@32	target.levelIndicatorDifficultyColor		@4738	@4739	@5636:level%2Edifficulty_color	@4280	@1369	@1370	@240,1398,263,1348,240,2567,1348,240,1398,227,4284,87,32,87,4740|@947
+@5635	@1488	@1043			@4279	@1489	@5636:indicator%2Elevel	@4280	@4281	@4741	@240,162,1348,922,2567,1348,922,240,4284,87,1043|@657
+@5635	@4742	@3	general.castbarTargetSpellNameMaxWidth		@4595	@4743	@5642:spell_text_manual_width	@2528	@1369	@1474	@277,162,272,2567,2528,2567,2528,716,162,277,272,4284,87,3,148,5717|@1122
+@5635	@4745	@3	general.castbarTargetBarWidth		@4595	@4746	@5642:manual_width	@2528	@1369	@1681	@277,272,2567,2528,2567,2528,277,272,4284,87,3,148,5718|@1116
+@5635	@4748	@32			@25	@4749	@5647:lane%2Ebuff%2Eshowstealable	@5704	@4290	@4363	@105,4546,16,12,28,13,12,30,28,4750,4284,87,32|@1123
+@5635	@1130	@3			@939	@1131	@5639:lane%2Ebuff%2Elayout%2Emax-icons	@13	@4290	@4358	@1131,28,118,13,2567,725,30,28,118,1131,1181,4284,87,3|@13
+@5635	@1130	@3			@4359	@1131	@5638:layout%2Emax	@13	@4290	@4360	@1131,271,1014,118,13,271,1014,118,1131,4284,87,3|@13
+@5635	@1130	@3			@941	@1131	@5639:lane%2Edebuff%2Elayout%2Emax-icons	@13	@4290	@4361	@1131,43,118,13,2567,725,30,43,118,1131,1181,4284,87,3|@13
+@5635	@4751	@3			@4414	@4752	@5638:target-dots%2Eportrait-max-icons	@13	@4290	@4416	@1131,1621,1181,271,1014,87,86,13,271,1014,87,86,1621,1131,1181,4284,87,3|@781
+@5635	@1132	@3			@1106	@1133	@5639:lane%2Ebuff%2Efilters%2Emax-duration	@13	@4290	@4346	@1134,414,28,937,13,2567,725,30,28,937,1131,414,4284,87,3|@168
+@5635	@1132	@3			@4391	@1133	@5638:filters%2Emax-duration	@13	@4290	@4393	@1134,414,271,1014,937,13,271,1014,937,1131,414,4284,87,3|@168
+@5635	@1132	@3			@1109	@1133	@5639:lane%2Edebuff%2Efilters%2Emax-duration	@13	@4290	@4349	@1134,414,43,937,13,2567,725,30,43,937,1131,414,4284,87,3|@168
+@5635	@4753	@32	target.texLayerMirrorH		@4316	@4754	@5640:mirrorh	@4318	@4319	@5719	@4444,4756,2567,190,239,2567,190,239,4757,4284,87,32,87,4758|@782
+@5635	@4759	@32	target.texLayerMirrorV		@4316	@4760	@5640:mirrorv	@4318	@4319	@5720	@4444,4762,2567,190,239,2567,190,239,4763,4284,87,32,87,4764|@783
+@5635	@4765	@32	target.loadCondHideMounted		@4692	@4766	@5703:loadcondhidemounted	@4693			@4766,2567,2443,4138,2567,2443,4138,4767,4284,87,32,87,4767|@771
+@5635	@1990	@3	target.nameTextLayer		@4672	@1991	@5637:advanced%2Enametextlayer	@162	@1369	@1474	@720,239,162,108,2567,162,108,1992,4284,87,3,87,1992|@784
+@5635	@4768	@32			@4391	@4769	@5638:filters%2Eincludenameplateonly	@13	@4290	@4393	@4347,1141,271,1014,937,13,271,1014,937,4348,4284,87,32|@13
+@5635	@4770	@32	target.loadCondHideNoTarget		@4692	@4771	@5703:loadcondhidenotarget	@4693			@3835,87,2567,2443,4138,2567,2443,4138,4772,4284,87,32,87,4772|@771
+@5635	@4773	@32	auras3.target.debuff.filter.nonPlayer		@1109	@1136	@5639:lane%2Edebuff%2Efilters%2Enonplayer	@13	@4290	@4349	@1137,69,13,43,937,13,2567,725,30,43,937,1138,4284,87,32,15,87,43,1444,1138|@785
+@5635	@4774	@32			@4391	@4775	@5638:filters%2Enotcancelable	@13	@4290	@4393	@2465,4455,271,1014,937,13,271,1014,937,4776,4284,87,32|@13
+@5635	@4774	@32	auras3.target.buff.filter.notCancelable		@1106	@4775	@5639:lane%2Ebuff%2Efilters%2Enotcancelable	@13	@4290	@4346	@2465,4455,28,937,13,2567,725,30,28,937,4776,4284,87,32,15,87,28,1444,4776|@786
+@5635	@4777	@32			@4482	@4778	@5638:effect%2Eonly-during-pandemic-window	@4779	@4290	@4438	@1141,759,4439,156,271,1014,557,13,271,1014,557,1141,759,4439,156,4284,87,32|@787
+@5635	@1998	@32			@4391	@1999	@5638:filters%2Eonlymine	@13	@4290	@4393	@1141,1144,271,1014,937,13,271,1014,937,4780,4284,87,32|@13
+@5635	@1998	@32	auras3.target.buff.filter.onlyMine		@1106	@1999	@5639:lane%2Ebuff%2Efilters%2Eonlymine	@13	@4290	@4346	@1141,1144,28,937,13,2567,725,30,28,937,4780,4284,87,32,15,87,28,1444,4780|@788
+@5635	@1998	@32	auras3.target.debuff.filter.onlyMine		@1109	@1999	@5639:lane%2Edebuff%2Efilters%2Eonlymine	@13	@4290	@4349	@1141,1144,43,937,13,2567,725,30,43,937,4780,4284,87,32,15,87,43,1444,4780|@789
+@5635	@4781	@32	target.hpTextMouseover		@1984	@4782	@5637:hp%2Emouseover	@162	@1369	@1590	@1141,65,68,2767,162,117,2567,162,117,2767,4284,87,32,87,4783|@790
+@5635	@4781	@32	target.nameTextMouseover		@4369	@4782	@5637:name%2Emouseover	@162	@1369	@1605	@1141,65,68,2767,162,720,2567,162,720,2767,4284,87,32,87,4784|@790
+@5635	@4781	@32	target.powerTextMouseover		@1989	@4782	@5637:power%2Emouseover	@162	@1369	@1709	@1141,65,68,2767,162,128,2567,162,128,2767,4284,87,32,87,4785|@790
+@5635	@4786	@32			@4469	@4787	@5638:reminder%2Eonly-castable	@4471	@4290	@4412	@1141,65,2518,4788,4789,2420,4790,271,1014,4472,13,271,1014,4472,1141,4791,4284,87,32|@791
+@5635	@1145	@3			@4480	@179	@5647:lane%2Ebuff%2Efull-frame%2Ealpha	@5665	@4290	@4363	@179,28,403,38,13,12,30,28,403,38,9,4284,87,3|@1106
+@5635	@1145	@3			@4423	@179	@5638:appearance%2Eopacity	@4696	@4290	@4426	@179,271,1014,10,13,271,1014,10,179,4284,87,3|@767
+@5635	@1145	@3			@4482	@179	@5638:effect%2Eopacity	@4483	@4290	@4426	@179,271,1014,557,13,271,1014,557,179,4284,87,3|@705
+@5635	@1145	@3			@4484	@179	@5647:lane%2Edebuff%2Efull-frame%2Ealpha	@5666	@4290	@4367	@179,43,403,38,13,12,30,43,403,38,9,4284,87,3|@1106
+@5635	@1145	@3	target.texLayerAlpha		@4316	@179	@5640:alpha	@4318	@4319	@5721	@179,2567,190,239,2567,190,239,9,4284,87,3,87,4793|@703
+@5635	@4794	@3	target.texLayerHealthLowAlpha		@4316	@4795	@5640:healthlowalpha	@4318	@4319	@5722	@179,1047,229,2567,190,239,2567,190,239,4797,4284,87,3,87,4798|@792
+@5635	@1146	@18			@1147	@609	@5647:lane%2Ebuff%2Eauras3-sort-direction	@13	@4290	@4799	@609,28,1149,13,2567,725,30,28,1149,1150,748,4284,87,18|@170
+@5635	@1146	@18			@4800	@609	@5638:custom1%2Eordering%2Esort-direction	@13	@4290	@4801	@609,4303,1149,13,271,1014,4303,1149,1150,748,4284,87,18|@170
+@5635	@1146	@18			@4802	@609	@5638:custom2%2Eordering%2Esort-direction	@13	@4290	@4803	@609,4306,1149,13,271,1014,4306,1149,1150,748,4284,87,18|@170
+@5635	@1146	@18			@4804	@609	@5638:custom3%2Eordering%2Esort-direction	@13	@4290	@4805	@609,4309,1149,13,271,1014,4309,1149,1150,748,4284,87,18|@170
+@5635	@1146	@18			@1151	@609	@5647:lane%2Edebuff%2Eauras3-sort-direction	@13	@4290	@4806	@609,43,1149,13,2567,725,30,43,1149,1150,748,4284,87,18|@170
+@5635	@1146	@18			@4807	@609	@5638:custom4%2Eordering%2Esort-direction	@13	@4290	@4808	@609,86,68,87,1149,13,271,1014,86,68,87,1149,1150,748,4284,87,18|@170
+@5635	@2008	@3	target.oocFadeAlpha		@4417	@2009	@5656:ooc_fade_alpha	@1626	@4418	@4613	@368,369,370,179,2567,1626,2567,1626,387,1767,9,4284,87,3,87,2010|@13
+@5635	@4809	@32	target.loadCondHideOutOfCombat		@4692	@4810	@5703:loadcondhideoutofcombat	@4693			@368,369,370,2567,2443,4138,2567,2443,4138,4811,4284,87,32,87,4811|@771
+@5635	@4812	@32	target.loadCondHideOutOfCombatNoTarget		@4692	@4813	@5703:loadcondhideoutofcombatnotarget	@4693			@368,369,370,956,3835,87,2567,2443,4138,2567,2443,4138,4814,4284,87,32,87,4814|@771
+@5635	@2011	@3	target.rangeFadeAlpha		@4335	@2012	@5641:alpha	@4336			@368,369,838,2567,838,1767,2567,838,1767,9,4284,87,3,87,2013|@13
+@5635	@1155	@227			@960	@1156	@5639:lane%2Ebuff%2Ebars%2Eoutline-color	@13	@4290	@4405	@503,227,28,109,13,2567,725,30,28,109,503,227,4284,87,227|@13
+@5635	@1155	@227			@963	@1156	@5639:lane%2Edebuff%2Ebars%2Eoutline-color	@13	@4290	@4406	@503,227,43,109,13,2567,725,30,43,109,503,227,4284,87,227|@13
+@5635	@1157	@18			@960	@1158	@5639:lane%2Ebuff%2Ebars%2Eoutline-color-mode	@13	@4290	@4405	@503,227,602,28,109,13,2567,725,30,28,109,503,227,602,4284,87,18|@171
+@5635	@1157	@18			@963	@1158	@5639:lane%2Edebuff%2Ebars%2Eoutline-color-mode	@13	@4290	@4406	@503,227,602,43,109,13,2567,725,30,43,109,503,227,602,4284,87,18|@171
+@5635	@1159	@18			@960	@1160	@5639:lane%2Ebuff%2Ebars%2Eoutline-thickness	@13	@4290	@4405	@503,22,28,109,13,2567,725,30,28,109,503,22,4284,87,18|@172
+@5635	@1159	@18			@963	@1160	@5639:lane%2Edebuff%2Ebars%2Eoutline-thickness	@13	@4290	@4406	@503,22,43,109,13,2567,725,30,43,109,503,22,4284,87,18|@172
+@5635	@1161	@18			@960	@1162	@5639:lane%2Ebuff%2Ebars%2Eoutline-style	@13	@4290	@4405	@503,12,28,109,13,2567,725,30,28,109,503,12,4284,87,18|@173
+@5635	@1161	@18			@963	@1162	@5639:lane%2Edebuff%2Ebars%2Eoutline-style	@13	@4290	@4406	@503,12,43,109,13,2567,725,30,43,109,503,12,4284,87,18|@173
+@5635	@2014	@18	target.portraitOverlayAlign		@4351	@2015	@5645:portraitoverlayalign	@1621	@1369	@1622	@1281,622,2567,1621,2567,1621,2016,4284,87,18,87,2016|@317
+@5635	@1292	@18	target.unitDispelOverlayTrigger		@4535	@1293	@5679:overlay%2Eunitdispeloverlaytrigger	@4536			@1281,1294,951,1281,2567,951,1281,4815,4284,87,18,87,4815|@793
+@5635	@1296	@3	target.unitDispelOverlayAlpha		@4535	@1297	@5679:overlay%2Eunitdispeloverlayalpha	@4536			@1281,179,951,1281,2567,951,1281,4816,4284,87,3,87,4816|@323
+@5635	@1299	@18	target.unitDispelOverlayStyle		@4535	@1300	@5679:overlay%2Eunitdispeloverlaystyle	@4536			@1281,12,951,1281,2567,951,1281,4817,4284,87,18,87,4817|@794
+@5635	@1494	@3			@4423	@1495	@5638:appearance%2Epandemicpadding	@4437	@4290	@4438	@1495,271,1014,10,13,271,1014,10,4818,4284,87,3|@795
+@5635	@1163	@3			@939	@1164	@5639:lane%2Ebuff%2Elayout%2Eper-row	@13	@4290	@4358	@684,1165,28,118,13,2567,725,30,28,118,684,1165,4284,87,3|@13
+@5635	@1163	@3			@4359	@1164	@5638:layout%2Eperrow	@13	@4290	@4360	@684,1165,271,1014,118,13,271,1014,118,1166,4284,87,3|@13
+@5635	@1163	@3			@941	@1164	@5639:lane%2Edebuff%2Elayout%2Eper-row	@13	@4290	@4361	@684,1165,43,118,13,2567,725,30,43,118,684,1165,4284,87,3|@13
+@5635	@2045	@96		start_unit_custom_anchor_picker	@1671	@2046	@5652:custom%2Epick	@4378			@2046,113,271,2567,4378,271,2046,4284,87,96,2047,2567,271,113,2048|@13
+@5635	@4819	@3			@4469	@4820	@5638:reminder%2Eopacity	@4471	@4290	@4412	@4821,179,271,1014,4472,13,271,1014,4472,179,4284,87,3|@796
+@5635	@4822	@227			@4469	@4823	@5638:reminder%2Ecolor	@4471	@4290	@4412	@4821,1259,271,1014,4472,13,271,1014,4472,227,4284,87,227|@797
+@5635	@2049	@18	target.portraitPlacement		@4351	@2050	@5645:portraitplacement	@1621	@1369	@1622	@2050,2567,1621,2567,1621,2051,4284,87,18,87,2051|@318
+@5635	@2055	@32			@4351	@1621	@5645:enabled	@1621			@1621,2567,1621,2567,1621,235,4284,87,32|@798
+@5635	@2061	@18	target.portraitDetachedPoint		@4351	@2062	@5645:portraitdetachedpoint	@1621	@1369	@1622	@1621,113,262,2567,1621,2567,1621,2063,4284,87,18,87,2063|@278
+@5635	@2064	@32	target.portraitBgEnabled		@4351	@2065	@5645:portraitbgenabled	@1621	@1369	@1474	@1621,189,2567,1621,2567,1621,2066,4284,87,32,87,2066|@322
+@5635	@2067	@3	target.portraitEdgeSoftness		@4351	@2068	@5645:portraitedgesoftness	@1621	@4353	@5723	@1621,1316,2069,2567,1621,2567,1621,2070,4284,87,3,87,2070|@13
+@5635	@2071	@3	target.portraitAlpha		@4351	@2072	@5645:portraitalpha	@1621	@1369	@1622	@1621,179,2567,1621,2567,1621,2073,4284,87,3,87,2073|@323
+@5635	@2074	@3	target.portraitZoom		@4351	@2075	@5645:portraitzoom	@1621	@1369	@1884	@1621,1119,2567,1621,2567,1621,2076,4284,87,3,87,2076|@13
+@5635	@1167	@18			@25	@868	@5647:lane%2Ebuff%2Eauras3-duration-bar-position	@5654	@4290	@4363	@868,12,28,13,12,30,28,15,414,302,868,4284,87,18|@1124
+@5635	@1167	@18			@76	@868	@5647:lane%2Edebuff%2Eauras3-duration-bar-position	@5655	@4290	@4367	@868,12,43,13,12,30,43,15,414,302,868,4284,87,18|@1124
+@5635	@1167	@18	general.castbarTargetIconPosition		@4339	@868	@5642:detail%2Emsuf2_castbar_icon_position	@2528	@1369	@4448	@868,2528,4342,2567,2528,4342,4330,2528,11,868,4284,87,18,148,5724|@1125
+@5635	@1167	@520	target.portraitMode		@4351	@868	@5645:position	@1621	@1369	@1681	@868,2567,1621,2567,1621,868,4284,87,520,87,2056|@324
+@5635	@4826	@18	general.castbarTargetSpellNamePosition		@4339	@4827	@5642:detail%2Emsuf2_castbar_spell_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,716,868,4284,87,18,148,5725|@1126
+@5635	@4826	@18	general.castbarTargetTargetNamePosition		@4339	@4827	@5642:detail%2Emsuf2_castbar_target_name_position	@2528	@1369	@4340	@868,538,2528,4342,2567,2528,4342,4330,2528,87,720,868,4284,87,18,148,5726|@1127
+@5635	@4826	@18	general.castbarTargetTimePosition		@4339	@4827	@5642:detail%2Emsuf2_castbar_time_position	@2528	@1369	@4597	@868,538,2528,4342,2567,2528,4342,4330,2528,419,868,4284,87,18,148,5727|@1128
+@5635	@2082	@32	target.powerBarBorderEnabled		@4450	@2083	@5660:powerbarborderenabled	@4451			@128,302,8,2567,128,2567,128,2084,4284,87,32,87,2084|@41
+@5635	@4831	@3	target.powerBarHeight		@4450	@4832	@5660:powerbarheight	@4451			@128,302,347,2567,128,2567,128,4833,4284,87,3,87,4833|@13
+@5635	@4834	@3	target.powerTextLayer		@4672	@4835	@5637:advanced%2Epowertextlayer	@162	@1369	@1474	@128,162,239,162,108,2567,162,108,518,4284,87,3,87,518|@803
+@5635	@2088	@18			@1889	@2089	@5637:power%2Eslot%2Emode	@162	@1369	@1709	@128,606,128,219,2567,162,128,219,602,4284,87,18|@804
+@5635	@1169	@18			@903	@538	@5639:lane%2Ebuff%2Eblacklist%2Epreset-selection	@13	@4290	@4310	@538,28,908,13,2567,725,30,28,908,538,1170,4284,87,18|@176
+@5635	@1169	@18			@927	@538	@5639:lane%2Edebuff%2Eblacklist%2Epreset-selection	@13	@4290	@4314	@538,43,908,13,2567,725,30,43,908,538,1170,4284,87,18|@177
+@5635	@1171	@3			@4480	@1172	@5647:lane%2Ebuff%2Efull-frame%2Epriority	@5665	@4290	@4363	@1172,28,403,38,13,12,30,28,403,38,1172,4284,87,3|@1106
+@5635	@1171	@3			@4482	@1172	@5638:effect%2Epriority	@4483	@4290	@4426	@1172,271,1014,557,13,271,1014,557,1172,4284,87,3|@705
+@5635	@1171	@3			@4484	@1172	@5647:lane%2Edebuff%2Efull-frame%2Epriority	@5666	@4290	@4367	@1172,43,403,38,13,12,30,43,403,38,1172,4284,87,3|@1106
+@5635	@1503	@1043			@4279	@1504	@5636:indicator%2Estatuspvp	@4280	@4281	@5255	@1506,1507,1508,602,1506,1348,922,2567,1348,922,5256,4284,87,1043|@657
+@5635	@4836	@1043			@4279	@4837	@5636:indicator%2Eracetext	@4280	@4281	@4838	@4839,162,1348,922,2567,1348,922,4840,4284,87,1043|@657
+@5635	@1173	@32			@4391	@916	@5638:filters%2Eraid	@13	@4290	@4393	@916,271,1014,937,13,271,1014,937,916,4284,87,32|@13
+@5635	@5257	@1043			@4279	@5258	@5636:indicator%2Eraidgroupname	@4280	@4281	@5259	@916,909,1348,922,2567,1348,922,5260,4284,87,1043|@657
+@5635	@1512	@1043			@4279	@1513	@5636:indicator%2Eraidmarker	@4280	@4281	@4841	@916,420,1348,922,2567,1348,922,1515,4284,87,1043|@657
+@5635	@4842	@32			@4391	@4843	@5638:filters%2Eraidincombat	@13	@4290	@4393	@916,370,271,1014,937,13,271,1014,937,1176,4284,87,32|@13
+@5635	@4842	@32	auras3.target.buff.filter.raidInCombat		@1106	@4843	@5639:lane%2Ebuff%2Efilters%2Eraidincombat	@13	@4290	@4346	@916,370,28,937,13,2567,725,30,28,937,1176,4284,87,32,15,87,28,1444,1176|@805
+@5635	@4842	@32	auras3.target.debuff.filter.raidInCombat		@1109	@4843	@5639:lane%2Edebuff%2Efilters%2Eraidincombat	@13	@4290	@4349	@916,370,43,937,13,2567,725,30,43,937,1176,4284,87,32,15,87,43,1444,1176|@806
+@5635	@4844	@18	target.raidGroupNameStyle		@4845	@4846	@5636:raid_group%2Estyle	@4280	@1369	@1370	@916,909,12,1348,916,909,2567,1348,916,909,12,4284,87,18,87,4847|@954
+@5635	@4848	@32			@4391	@4849	@5638:filters%2Eincludedispellable	@13	@4290	@4393	@4394,254,909,271,1014,937,13,271,1014,937,4547,4284,87,32|@13
+@5635	@2101	@18	target.portraitRender		@4351	@2102	@5645:portraitrender	@1621	@1369	@1681	@2102,2567,1621,2567,1621,2103,4284,87,18,87,2103|@326
+@5635	@2808	@96		reset_aura_custom_container	@4850	@874	@5638:custom1%2Esetup%2Ereset	@13	@4290	@4412	@874,4303,569,13,271,1014,4303,569,874,4284,87,96,874,39,271,1014|@13
+@5635	@2808	@96		reset_aura_custom_container	@4851	@874	@5638:custom2%2Esetup%2Ereset	@13	@4290	@4852	@874,4306,569,13,271,1014,4306,569,874,4284,87,96,874,39,271,1014|@13
+@5635	@2808	@96		reset_aura_custom_container	@4853	@874	@5638:custom3%2Esetup%2Ereset	@13	@4290	@4854	@874,4309,569,13,271,1014,4309,569,874,4284,87,96,874,39,271,1014|@13
+@5635	@2808	@96		reset_aura_custom_container	@4855	@874	@5638:custom4%2Esetup%2Ereset	@13	@4290	@4416	@874,4293,569,13,271,1014,4293,569,874,4284,87,96,874,39,271,1014|@13
+@5635	@4856	@96		reset_unit_status_indicator	@1368	@4857	@5636:selected%2Ereset	@4280	@1369	@1370	@874,981,1348,922,1348,981,2567,1348,981,874,4284,87,96,874,2567,1348,922|@955
+@5635	@4858	@32	target.loadCondHideResting		@4692	@4859	@5703:loadcondhideresting	@4693			@4859,2567,2443,4138,2567,2443,4138,4860,4284,87,32,87,4860|@771
+@5635	@607	@32	target.hpTextReverse		@1984	@608	@5637:hp%2Ereverse	@162	@1369	@1590	@309,609,162,117,2567,162,117,309,4284,87,32,87,2107|@809
+@5635	@4864	@32	target.levelIndicatorForeverBadge		@4738	@4865	@5636:level%2Eforever_badge	@4280	@4866	@5728	@4868,240,4869,1348,240,2567,1348,240,4870,4869,4284,87,32,87,4871|@956
+@5635	@1186	@713			@903	@1187	@5639:lane%2Ebuff%2Eblacklist%2Esearch	@13	@4290	@4310	@1187,28,908,13,2567,725,30,28,908,1187,4284,87,713|@13
+@5635	@1186	@713			@4414	@1187	@5638:target-dots%2Esearch	@13	@4290	@4291	@1187,271,1014,87,86,13,271,1014,87,86,1187,4284,87,713|@13
+@5635	@1186	@713			@4296	@1187	@5638:whitelist%2Esearch	@13	@4290	@4298	@1187,271,1014,4294,13,271,1014,4294,1187,4284,87,713|@13
+@5635	@1186	@713			@927	@1187	@5639:lane%2Edebuff%2Eblacklist%2Esearch	@13	@4290	@4314	@1187,43,908,13,2567,725,30,43,908,1187,4284,87,713|@13
+@5635	@2138	@3			@1588	@2139	@5637:hp%2Eslot%2Esize	@162	@1369	@1590	@981,219,57,117,219,2567,162,117,219,57,4284,87,3|@68
+@5635	@2138	@3			@1889	@2139	@5637:power%2Eslot%2Esize	@162	@1369	@1709	@981,219,57,128,219,2567,162,128,219,57,4284,87,3|@68
+@5635	@2144	@18	target.portraitShape		@4351	@29	@5645:portraitshape	@1621	@1369	@1640	@29,2567,1621,2567,1621,2145,4284,87,18,87,2145|@812
+@5635	@2146	@32	target.hpFullValueShort		@1984	@2147	@5637:hp%2Efull_value_short	@162	@1369	@1590	@2148,2149,162,117,2567,162,117,403,606,2148,4284,87,32,87,2150|@813
+@5635	@2146	@32	target.powerFullValueShort		@1989	@2147	@5637:power%2Efull_value_short	@162	@1369	@1709	@2148,2149,162,128,2567,162,128,403,606,2148,4284,87,32,87,4872|@13
+@5635	@1308	@18	target.unitDispelSymbolMode		@4539	@65	@5679:symbol%2Eunitdispelsymbolmode	@4540			@65,951,357,2567,951,357,4873,4284,87,18,87,4873|@814
+@5635	@1190	@32			@25	@1191	@5647:lane%2Ebuff%2Eshowcooldownswipe	@5704	@4290	@4363	@65,138,1192,12,28,13,12,30,28,1193,4284,87,32|@1117
+@5635	@1190	@32			@76	@1191	@5647:lane%2Edebuff%2Eshowcooldownswipe	@5680	@4290	@4367	@65,138,1192,12,43,13,12,30,43,1193,4284,87,32|@1117
+@5635	@1194	@32			@25	@1195	@5647:lane%2Ebuff%2Eshowcooldowntext	@5704	@4290	@4363	@65,138,162,12,28,13,12,30,28,1197,4284,87,32|@1117
+@5635	@1194	@32			@76	@1195	@5647:lane%2Edebuff%2Eshowcooldowntext	@5680	@4290	@4367	@65,138,162,12,43,13,12,30,43,1197,4284,87,32|@1117
+@5635	@4874	@32			@4414	@4875	@5638:target-dots%2Eportrait-icon	@13	@4290	@4416	@65,86,228,1621,868,271,1014,87,86,13,271,1014,87,86,1621,11,4284,87,32|@815
+@5635	@2151	@32	target.showHP		@1984	@631	@5637:hp%2Eshow	@162	@1369	@1590	@65,117,162,162,117,2567,162,117,65,4284,87,32,87,4876|@816
+@5635	@2158	@32	target.showName		@4369	@2159	@5637:name%2Eshow	@162	@1369	@1605	@65,720,162,720,2567,162,720,65,4284,87,32,87,2160|@817
+@5635	@4877	@32			@4435	@4878	@5638:appearance%2Epandemic%2Eenabled	@4437	@4290	@4438	@65,4439,296,10,4439,13,271,1014,10,4439,235,4284,87,32|@818
+@5635	@4879	@96	target.showPowerBar		@4450	@4880	@5660:enable_now	@4451			@65,128,2567,128,2567,128,842,2268,4284,87,96,87,4881|@20
+@5635	@2168	@32	target.showPowerText		@1989	@2169	@5637:power%2Eshow	@162	@1369	@1709	@65,128,162,162,128,2567,162,128,65,4284,87,32,87,4882|@819
+@5635	@1201	@32			@25	@1202	@5647:lane%2Ebuff%2Eshowstackcount	@5648	@4290	@4363	@65,1204,1205,12,28,13,12,30,28,4886,4284,87,32|@1106
+@5635	@1201	@32			@76	@1202	@5647:lane%2Edebuff%2Eshowstackcount	@5650	@4290	@4367	@65,1204,1205,12,43,13,12,30,43,4886,4284,87,32|@1106
+@5635	@5729	@32	targettarget.showToTInTargetName		@5672	@5730	@5675:show_target_of_target	@5674			@65,87,369,87,162,5676,2567,5676,162,2567,5676,162,65,87,369,87,4284,87,32,5677,5731|@1129
+@5635	@1212	@32			@25	@1213	@5647:lane%2Ebuff%2Eshowdurationbar	@5654	@4290	@4363	@65,157,68,11,12,28,13,12,30,28,1200,4284,87,32|@1115
+@5635	@1212	@32			@76	@1213	@5647:lane%2Edebuff%2Eshowdurationbar	@5655	@4290	@4367	@65,157,68,11,12,43,13,12,30,43,1200,4284,87,32|@1115
+@5635	@1214	@32			@25	@1215	@5647:lane%2Ebuff%2Eshowtooltip	@5704	@4290	@4363	@65,1216,12,28,13,12,30,28,1217,4284,87,32|@1130
+@5635	@1214	@32			@76	@1215	@5647:lane%2Edebuff%2Eshowtooltip	@5680	@4290	@4367	@65,1216,12,43,13,12,30,43,1217,4284,87,32|@1130
+@5635	@1218	@32			@960	@1219	@5639:lane%2Ebuff%2Elayout%2Eshow-as-bars	@13	@4290	@4405	@65,1060,109,28,109,13,2567,725,30,28,109,65,1060,109,4284,87,32|@13
+@5635	@1218	@32			@963	@1219	@5639:lane%2Edebuff%2Elayout%2Eshow-as-bars	@13	@4290	@4406	@65,1060,109,43,109,13,2567,725,30,43,109,65,1060,109,4284,87,32|@13
+@5635	@4887	@18	target.texLayerHealthCondition		@4316	@4888	@5640:healthcondition	@4318	@4319	@5732	@65,254,301,2567,190,239,2567,190,239,4890,4284,87,18,87,4891|@822
+@5635	@2175	@32			@4595	@2176	@5642:portrait_cast_icon	@2528	@1369	@4448	@65,641,716,11,840,1621,2567,2528,2567,2528,1621,641,11,4284,87,32|@13
+@5635	@2175	@32	target.portraitCastSpellIcon		@4351	@2176	@5645:portraitcastspellicon	@1621	@1369	@1474	@65,641,716,11,840,1621,2567,1621,2567,1621,2177,4284,87,32,87,2177|@13
+@5635	@4892	@32			@4414	@4893	@5638:target-dots%2Eportrait-cooldown-text	@13	@4290	@4416	@65,138,162,68,1621,271,1014,87,86,13,271,1014,87,86,1621,138,162,4284,87,32|@823
+@5635	@4894	@32	target.showInterrupt		@4595	@4895	@5642:show_interrupt	@2528	@1369	@1681	@65,2870,2567,2528,2567,2528,65,2870,4284,87,32,87,4896|@13
+@5635	@4897	@32	target.showInterruptSource		@4595	@4898	@5642:show_interrupt_source	@2528	@4899	@5733	@65,4901,720,2567,2528,2567,2528,65,2870,444,4284,87,32,87,4902|@13
+@5635	@1310	@32	target.unitDispelOverlayOnHealth		@4535	@1311	@5679:overlay%2Eunitdispeloverlayonhealth	@4536			@65,68,1312,301,1141,951,1281,2567,951,1281,4903,4284,87,32,87,4903|@13
+@5635	@4904	@32	target.loadCondShowWhenInjured		@4692	@4905	@5703:loadcondshowwheninjured	@4693			@65,1141,1047,4906,301,2567,2443,4138,2567,2443,4138,4907,4284,87,32,87,4907|@824
+@5635	@4908	@32	target.showPowerBar		@4450	@2166	@5660:show	@4451			@65,128,302,2567,128,2567,128,65,4284,87,32,87,4881|@825
+@5635	@1226	@3			@939	@57	@5639:lane%2Ebuff%2Elayout%2Eicon-size	@13	@4290	@4358	@57,28,118,13,2567,725,30,28,118,11,57,4284,87,3|@13
+@5635	@1226	@3			@4359	@57	@5638:layout%2Esize	@13	@4290	@4360	@57,271,1014,118,13,271,1014,118,57,4284,87,3|@13
+@5635	@1226	@3			@941	@57	@5639:lane%2Edebuff%2Elayout%2Eicon-size	@13	@4290	@4361	@57,43,118,13,2567,725,30,43,118,11,57,4284,87,3|@13
+@5635	@1226	@3	general.castbarTargetIconSize		@4339	@57	@5642:detail%2Emsuf2_castbar_icon_size	@2528	@1369	@4448	@57,2528,4342,2567,2528,4342,4330,2528,11,57,4284,87,3,148,5734|@1104
+@5635	@1226	@3	general.castbarTargetSpellNameFontSize		@4339	@57	@5642:detail%2Emsuf2_castbar_spell_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,716,57,4284,87,3,148,5735|@1131
+@5635	@1226	@3	general.castbarTargetTargetNameFontSize		@4339	@57	@5642:detail%2Emsuf2_castbar_target_name_size	@2528	@1369	@4340	@57,2528,4342,2567,2528,4342,4330,2528,87,720,57,4284,87,3,148,5736|@826
+@5635	@1226	@3	general.castbarTargetTimeFontSize		@4339	@57	@5642:detail%2Emsuf2_castbar_time_size	@2528	@1369	@4597	@57,2528,4342,2567,2528,4342,4330,2528,419,57,4284,87,3,148,5737|@1132
+@5635	@1226	@3	target.nameFontSize		@4369	@57	@5637:name%2Esize	@162	@1369	@1605	@57,162,720,2567,162,720,57,4284,87,3,87,2195|@826
+@5635	@2196	@520	target.portraitSizeMode		@4351	@2197	@5645:portraitsizemode	@1621	@4353	@5738	@57,602,2567,1621,2567,1621,2198,4284,87,520,87,2198|@334
+@5635	@2199	@3	target.portraitSizeOverride		@4351	@2200	@5645:portraitsizeoverride	@1621	@1369	@1884	@57,1885,2567,1621,2567,1621,2201,4284,87,3,87,2201|@13
+@5635	@702	@32	target.powerSmoothFill		@4450	@704	@5660:powersmoothfill	@4451			@706,306,2567,128,2567,128,711,4284,87,32,87,711|@20
+@5635	@702	@32	target.smoothFill		@4461	@704	@5662:smooth_fill	@4462			@706,306,2567,1638,2567,1638,706,306,4284,87,32,87,2204|@700
+@5635	@4915	@32	target.loadCondHideSolo		@4692	@1657	@5703:loadcondhidesolo	@4693			@1657,2567,2443,4138,2567,2443,4138,4916,4284,87,32,87,4916|@771
+@5635	@1228	@18			@1147	@1229	@5647:lane%2Ebuff%2Eauras3-sort-method	@13	@4290	@4799	@1150,254,28,1149,13,2567,725,30,28,1149,1150,1230,4284,87,18|@829
+@5635	@1228	@18			@4800	@1229	@5638:custom1%2Eordering%2Ebuff-sort-method	@13	@4290	@4801	@1150,254,4303,1149,13,271,1014,4303,1149,28,1150,1230,4284,87,18|@830
+@5635	@1228	@18			@4800	@1229	@5638:custom1%2Eordering%2Edebuff-sort-method	@13	@4290	@4801	@1150,254,4303,1149,13,271,1014,4303,1149,43,1150,1230,4284,87,18|@830
+@5635	@1228	@18			@4802	@1229	@5638:custom2%2Eordering%2Ebuff-sort-method	@13	@4290	@4803	@1150,254,4306,1149,13,271,1014,4306,1149,28,1150,1230,4284,87,18|@830
+@5635	@1228	@18			@4802	@1229	@5638:custom2%2Eordering%2Edebuff-sort-method	@13	@4290	@4803	@1150,254,4306,1149,13,271,1014,4306,1149,43,1150,1230,4284,87,18|@830
+@5635	@1228	@18			@4804	@1229	@5638:custom3%2Eordering%2Ebuff-sort-method	@13	@4290	@4805	@1150,254,4309,1149,13,271,1014,4309,1149,28,1150,1230,4284,87,18|@830
+@5635	@1228	@18			@4804	@1229	@5638:custom3%2Eordering%2Edebuff-sort-method	@13	@4290	@4805	@1150,254,4309,1149,13,271,1014,4309,1149,43,1150,1230,4284,87,18|@830
+@5635	@1228	@18			@1151	@1229	@5647:lane%2Edebuff%2Eauras3-sort-method	@13	@4290	@4806	@1150,254,43,1149,13,2567,725,30,43,1149,1150,1230,4284,87,18|@831
+@5635	@1228	@18			@4807	@1229	@5638:custom4%2Eordering%2Edebuff-sort-method	@13	@4290	@4808	@1150,254,86,68,87,1149,13,271,1014,86,68,87,1149,43,1150,1230,4284,87,18|@830
+@5635	@4917	@18	target.texLayerColorTreatment		@4316	@4918	@5640:colortreatment	@4318	@4319	@5739	@444,227,2567,190,239,2567,190,239,4920,4284,87,18,87,4921|@832
+@5635	@2216	@3	general.castbarTargetIconSpacing		@4339	@992	@5642:detail%2Emsuf2_castbar_icon_spacing	@2528	@1369	@4448	@992,2528,4342,2567,2528,4342,4330,2528,11,992,4284,87,3,148,5740|@1104
+@5635	@4923	@18			@1368	@4924	@5636:selected%2Ecustomicon	@4280	@1369	@1370	@3118,11,1885,1348,981,2567,1348,981,1415,4284,87,18|@960
+@5635	@1232	@18			@903	@716	@5639:lane%2Ebuff%2Eblacklist%2Espell-selection	@13	@4290	@4310	@716,28,908,13,2567,725,30,28,908,716,1170,4284,87,18|@188
+@5635	@1232	@18			@927	@716	@5639:lane%2Edebuff%2Eblacklist%2Espell-selection	@13	@4290	@4314	@716,43,908,13,2567,725,30,43,908,716,1170,4284,87,18|@834
+@5635	@1239	@3			@4423	@1240	@5638:appearance%2Estackx	@4925	@4290	@4426	@1204,487,271,1014,10,13,271,1014,10,1241,4284,87,3|@710
+@5635	@1242	@3			@4423	@1243	@5638:appearance%2Estacky	@4925	@4290	@4426	@1204,492,271,1014,10,13,271,1014,10,1244,4284,87,3|@710
+@5635	@4926	@18			@4423	@1234	@5638:appearance%2Estack-anchor	@4925	@4290	@4426	@1204,113,271,1014,10,13,271,1014,10,1204,113,4284,87,18|@711
+@5635	@4927	@32			@4423	@4928	@5638:appearance%2Estack-count	@4925	@4290	@4426	@1204,1205,271,1014,10,13,271,1014,10,1204,1205,4284,87,32|@710
+@5635	@4929	@3			@4423	@4930	@5638:appearance%2Estacksize	@4925	@4290	@4426	@1204,57,271,1014,10,13,271,1014,10,1238,4284,87,3|@710
+@5635	@4931	@1551			@4932	@1553	@5636:section	@4280	@1369	@1370	@1348,1181,2567,1348,2567,1348,1551,4284,87,1551|@13
+@5635	@4933	@18			@1368	@4934	@5636:selected%2Eanchor	@4280	@1369	@1370	@1348,922,113,1348,981,2567,1348,981,113,4284,87,18|@961
+@5635	@4935	@32			@1368	@4936	@5636:selected%2Eenabled	@4280	@4866	@5741	@1348,922,235,1348,981,2567,1348,981,235,4284,87,32|@962
+@5635	@4938	@3			@4328	@4939	@5636:placement%2Emsuf2_status_layer	@4280	@1369	@1370	@1348,922,239,1348,2050,2567,1348,2050,4330,1348,239,4284,87,3|@963
+@5635	@4940	@18			@4932	@4941	@5636:selector	@4280	@1369	@1370	@1348,922,696,2567,1348,2567,1348,696,4284,87,18|@1133
+@5635	@4942	@3			@1368	@4943	@5636:selected%2Esize	@4280	@4866	@5742	@1348,922,57,1348,981,2567,1348,981,57,4284,87,3|@965
+@5635	@4945	@32	general.statusIconsUseMidnightStyle		@4932	@4946	@5636:midnight_style	@4280	@1369	@1370	@1348,922,12,2567,1348,2567,1348,4947,12,4284,87,32,148,4948|@966
+@5635	@4949	@18			@1368	@4950	@5636:selected%2Esymbol	@4280	@1369	@1370	@1348,922,357,1348,981,2567,1348,981,357,4284,87,18|@967
+@5635	@4951	@32			@4333	@4952	@5636:preview%2Emsuf2_status_test	@4280	@1369	@1370	@1348,922,2832,602,1348,146,2567,1348,146,4330,1348,2832,4284,87,32|@968
+@5635	@4953	@96			@1368	@4954	@5636:selected%2Etext_settings	@4280	@1369	@1370	@1348,162,2471,1348,981,2567,1348,981,162,2471,4284,87,96|@969
+@5635	@4955	@18			@25	@4956	@5647:lane%2Ebuff%2Eauras3-stealable-marker-style	@5704	@4290	@4363	@4546,420,12,12,28,13,12,30,28,15,4546,420,12,4284,87,18|@1134
+@5635	@4957	@32	target.loadCondHideStealthed		@4692	@4958	@5703:loadcondhidestealthed	@4693			@4958,2567,2443,4138,2567,2443,4138,4959,4284,87,32,87,4959|@771
+@5635	@1558	@18			@4435	@12	@5638:appearance%2Epandemic%2Estyle	@4437	@4290	@4438	@12,10,4439,13,271,1014,10,4439,12,4284,87,18|@845
+@5635	@4960	@18			@4423	@1192	@5638:appearance%2Eswipe-direction	@4504	@4290	@4426	@1192,271,1014,10,13,271,1014,10,1192,748,4284,87,18|@846
+@5635	@1245	@18			@25	@1246	@5647:lane%2Ebuff%2Eauras3-cooldown-swipe-direction	@5646	@4290	@4363	@1192,748,12,28,13,12,30,28,15,138,1192,748,4284,87,18|@1135
+@5635	@1245	@18			@76	@1246	@5647:lane%2Edebuff%2Eauras3-cooldown-swipe-direction	@5649	@4290	@4367	@1192,748,12,43,13,12,30,43,15,138,1192,748,4284,87,18|@1135
+@5635	@1321	@18	target.unitDispelSymbolAnchor		@4539	@1322	@5679:symbol%2Eunitdispelsymbolanchor	@4540			@357,113,951,357,2567,951,357,4961,4284,87,18,87,4961|@671
+@5635	@1324	@18	target.unitDispelSymbolTrigger		@4539	@1325	@5679:symbol%2Eunitdispelsymboltrigger	@4540			@357,1294,951,357,2567,951,357,4962,4284,87,18,87,4962|@793
+@5635	@1327	@3	target.unitDispelSymbolAlpha		@4539	@1328	@5679:symbol%2Eunitdispelsymbolalpha	@4540			@357,179,951,357,2567,951,357,4963,4284,87,3,87,4963|@323
+@5635	@1330	@18	target.unitDispelSymbolStyle		@4539	@1331	@5679:symbol%2Eunitdispelsymbolstyle	@4540			@357,926,951,357,2567,951,357,4964,4284,87,18,87,4964|@848
+@5635	@1333	@3	target.unitDispelSymbolSize		@4539	@1334	@5679:symbol%2Eunitdispelsymbolsize	@4540			@357,57,951,357,2567,951,357,4965,4284,87,3,87,4965|@13
+@5635	@1336	@3	target.unitDispelSymbolSpacing		@4539	@1337	@5679:symbol%2Eunitdispelsymbolspacing	@4540			@357,992,951,357,2567,951,357,4966,4284,87,3,87,4966|@13
+@5635	@4967	@18	target.unitDispelSymbolStrata		@4539	@4968	@5679:symbol%2Eunitdispelsymbolstrata	@4540			@357,4969,951,357,2567,951,357,4970,4284,87,18,87,4970|@849
+@5635	@4971	@3			@25	@744	@5647:lane%2Ebuff%2Ecooldowntextsize	@5646	@4290	@4363	@162,57,12,28,13,12,30,28,4972,4284,87,3|@1136
+@5635	@4971	@3			@25	@744	@5647:lane%2Ebuff%2Estacktextsize	@5648	@4290	@4363	@162,57,12,28,13,12,30,28,4973,4284,87,3|@1137
+@5635	@4971	@3			@76	@744	@5647:lane%2Edebuff%2Ecooldowntextsize	@5649	@4290	@4367	@162,57,12,43,13,12,30,43,4972,4284,87,3|@1136
+@5635	@4971	@3			@76	@744	@5647:lane%2Edebuff%2Estacktextsize	@5650	@4290	@4367	@162,57,12,43,13,12,30,43,4973,4284,87,3|@1137
+@5635	@2230	@32	target.detachedPowerBarTextOnBar		@4450	@2231	@5660:detachedpowerbartextonbar	@4451			@162,68,129,302,2567,128,2567,128,542,4284,87,32,87,542|@13
+@5635	@4974	@18	target.texLayerTexture		@4316	@4975	@5640:texture	@4318	@4319	@5743	@190,2672,2567,190,239,2567,190,239,190,4284,87,18,87,4977|@852
+@5635	@4978	@18	target.texLayerCropMode		@4316	@4979	@5640:cropmode	@4318	@4319	@5744	@190,4981,2567,190,239,2567,190,239,4982,4284,87,18,87,4983|@853
+@5635	@4984	@3			@4480	@22	@5647:lane%2Ebuff%2Efull-frame%2Ethickness	@5665	@4290	@4363	@22,28,403,38,13,12,30,28,403,38,22,4284,87,3|@1106
+@5635	@4984	@3			@4423	@22	@5638:appearance%2Epandemicthickness	@4437	@4290	@4438	@22,271,1014,10,13,271,1014,10,4985,4284,87,3|@795
+@5635	@4984	@3			@4482	@22	@5638:effect%2Ethickness	@4483	@4290	@4426	@22,271,1014,557,13,271,1014,557,22,4284,87,3|@705
+@5635	@4984	@3			@4484	@22	@5647:lane%2Edebuff%2Efull-frame%2Ethickness	@5666	@4290	@4367	@22,43,403,38,13,12,30,43,403,38,22,4284,87,3|@1106
+@5635	@1572	@32			@4279	@1402	@5636:indicator%2Ethreat	@4280	@4281	@5149	@1402,1348,922,2567,1348,922,1402,4284,87,32|@915
+@5635	@5150	@32	target.threatIndicatorBackground		@5151	@5152	@5636:threat%2Ebackground	@4280	@4866	@5745	@1402,189,1348,1402,2567,1348,1402,189,4284,87,32,87,5154|@974
+@5635	@5155	@32	target.threatIndicatorColorCurve		@5151	@5156	@5636:threat%2Ecolor_curve	@4280	@4866	@5746	@1402,263,1348,1402,2567,1348,1402,227,3521,4284,87,32,87,5158|@975
+@5635	@4986	@3			@4435	@4987	@5638:appearance%2Epandemic%2Etint-opacity	@4437	@4290	@4438	@1259,179,10,4439,13,271,1014,10,4439,1259,179,4284,87,3|@695
+@5635	@4988	@32			@4423	@1216	@5638:appearance%2Etooltip	@4696	@4290	@4426	@1216,271,1014,10,13,271,1014,10,1216,4284,87,32|@854
+@5635	@4989	@96		aura_custom_whitelist_add_spell	@4990	@4991	@5638:custom4%2Edots%2Eadd	@13	@4290	@4291	@1263,4552,4293,86,13,271,1014,4293,86,103,4284,87,96,39,271,4294,103,716|@13
+@5635	@2264	@96	general.enableTargetCastbar		@4595	@2266	@5642:use_msuf	@2528	@1369	@1681	@752,1127,2567,2528,2567,2528,752,1127,4284,87,96,148,5747|@1138
+@5635	@4993	@32			@4414	@4994	@5638:target-dots%2Eportrait-position-when-disabled	@13	@4290	@4416	@752,1621,868,1656,1621,2519,2468,271,1014,87,86,13,271,1014,87,86,1621,868,396,4995,4284,87,32|@856
+@5635	@1266	@32	auras3.target.buff.visible		@939	@1267	@5639:lane%2Ebuff%2Elayout%2Evisible	@13	@4290	@4358	@1267,28,118,13,2567,725,30,28,118,1267,4284,87,32,15,87,28,1267|@13
+@5635	@1266	@32	auras3.target.debuff.visible		@941	@1267	@5639:lane%2Edebuff%2Elayout%2Evisible	@13	@4290	@4361	@1267,43,118,13,2567,725,30,43,118,1267,4284,87,32,15,87,43,1267|@13
+@5635	@4996	@18			@1368	@4997	@5636:selected%2Eiconstyle	@4280	@1369	@1370	@4998,12,1182,1225,922,1348,981,2567,1348,981,1470,4284,87,18|@977
+@5635	@764	@3	target.texLayerWidth		@4316	@272	@5640:width	@4318	@4319	@5748	@272,2567,190,239,2567,190,239,272,4284,87,3,87,5000|@703
+@5635	@5001	@18	general.castbarTargetSpellNameTruncate		@4595	@5002	@5642:spell_text_width_mode	@2528	@1369	@1474	@272,139,2567,2528,2567,2528,716,162,272,602,4284,87,18,148,5749|@1139
+@5635	@766	@18	general.castbarTargetMatchWidth		@4595	@768	@5642:width_mode	@2528	@1369	@1681	@272,602,2567,2528,2567,2528,272,602,4284,87,18,148,5750|@1140
+@5635	@2323	@3	target.portraitWidth		@4351	@2324	@5645:portraitwidth	@1621	@1369	@1884	@272,1885,2567,1621,2567,1621,2325,4284,87,3,87,2325|@13
+@5635	@5005	@3			@25	@487	@5647:lane%2Ebuff%2Ecooldowntextoffsetx	@5646	@4290	@4363	@487,12,28,13,12,30,28,5006,4284,87,3|@1136
+@5635	@5005	@3			@25	@487	@5647:lane%2Ebuff%2Estacktextoffsetx	@5648	@4290	@4363	@487,12,28,13,12,30,28,5007,4284,87,3|@1137
+@5635	@5005	@3			@76	@487	@5647:lane%2Edebuff%2Ecooldowntextoffsetx	@5649	@4290	@4367	@487,12,43,13,12,30,43,5006,4284,87,3|@1136
+@5635	@5005	@3			@76	@487	@5647:lane%2Edebuff%2Estacktextoffsetx	@5650	@4290	@4367	@487,12,43,13,12,30,43,5007,4284,87,3|@1137
+@5635	@5009	@3			@25	@492	@5647:lane%2Ebuff%2Ecooldowntextoffsety	@5646	@4290	@4363	@492,12,28,13,12,30,28,5010,4284,87,3|@1136
+@5635	@5009	@3			@25	@492	@5647:lane%2Ebuff%2Estacktextoffsety	@5648	@4290	@4363	@492,12,28,13,12,30,28,5011,4284,87,3|@1137
+@5635	@5009	@3			@76	@492	@5647:lane%2Edebuff%2Ecooldowntextoffsety	@5649	@4290	@4367	@492,12,43,13,12,30,43,5010,4284,87,3|@1136
+@5635	@5009	@3			@76	@492	@5647:lane%2Edebuff%2Estacktextoffsety	@5650	@4290	@4367	@492,12,43,13,12,30,43,5011,4284,87,3|@1137
+@5635	@2326	@3	target.portraitPanX		@4351	@2327	@5645:portraitpanx	@1621	@1369	@1884	@1119,218,487,2567,1621,2567,1621,2328,4284,87,3,87,2328|@340
+@5635	@2329	@3	target.portraitPanY		@4351	@2330	@5645:portraitpany	@1621	@1369	@1884	@1119,218,492,2567,1621,2567,1621,2331,4284,87,3,87,2331|@340
+@5751	@1340	@1043			@4279	@1342	@5752:indicator%2Estatusafktext	@4280	@4281	@4282	@1347,162,1348,922,2567,1348,922,1349,4284,5677,1043|@657
+@5751	@1354	@1043			@4279	@1355	@5752:indicator%2Estatusafktimer	@4280	@4281	@4285	@1347,157,1348,922,2567,1348,922,1357,4284,5677,1043|@657
+@5751	@1587	@520			@1588	@1589	@5753:hp%2Eslot%2Eabsorb	@162	@1369	@1590	@1589,117,219,2567,162,117,219,1589,4284,5677,520|@271
+@5751	@4315	@32	targettarget.texLayerBlendMode		@4316	@4317	@5754:blendmode	@4318	@4319	@4320	@4322,472,2567,190,239,2567,190,239,4323,4284,5677,32,5677,4324|@662
+@5751	@4325	@96		reset_unit_status_indicator	@1527	@4326	@5752:advanced%2Ereset	@4280	@1369	@1474	@108,874,981,1348,922,1348,108,2567,1348,108,874,4284,5677,96,874,2567,1348,922|@1141
+@5751	@4327	@3			@4328	@4329	@5752:placement%2Emsuf2_status_adv_layer	@4280	@1369	@1474	@108,1348,922,239,1348,2050,2567,1348,2050,4330,1348,4331,239,4284,5677,3|@1142
+@5751	@4332	@32			@4333	@4334	@5752:preview%2Emsuf2_status_adv_test	@4280	@1369	@1474	@108,1348,922,2832,602,1348,146,2567,1348,146,4330,1348,4331,2832,4284,5677,32|@1143
+@5751	@1592	@520	targettarget.rangeFadeLayerMode		@4335	@1594	@5755:layer_mode	@4336			@1594,2567,838,1767,2567,838,1767,239,602,4284,5677,520,5677,1596|@666
+@5751	@4350	@32	targettarget.portraitDragonArtwork		@4351	@4352	@5757:portraitdragonartwork	@1621	@4353	@5756	@692,65,4356,2880,2567,1621,2567,1621,4357,4284,5677,32,5677,4357|@670
+@5751	@111	@18	targettarget.nameTextAnchor		@4369	@113	@5753:name%2Eanchor	@162	@1369	@1605	@113,162,720,2567,162,720,113,4284,5677,18,5677,4370|@674
+@5751	@111	@18	targettarget.texLayerAnchor		@4316	@113	@5754:anchor	@4318	@4319	@5758	@113,2567,190,239,2567,190,239,113,4284,5677,18,5677,4372|@675
+@5751	@1607	@18	targettarget.point		@4377	@1608	@5759:anchor_point	@4378			@113,262,2567,113,2567,4378,113,262,4284,5677,18,5677,262|@275
+@5751	@1610	@18	targettarget.anchorToUnitframe		@4377	@1611	@5759:anchor_to	@4378			@113,126,2567,113,2567,4378,113,126,4284,5677,18,5677,4380|@1144
+@5751	@4381	@18	targettarget.texLayerAnchorTarget		@4316	@1611	@5754:anchortarget	@4318	@4319	@5760	@113,126,2567,190,239,2567,190,239,4383,4284,5677,18,5677,4384|@678
+@5751	@1618	@18	targettarget.portraitDetachedTo		@4351	@1620	@5757:portraitdetachedto	@1621	@1369	@1622	@1624,126,38,262,2567,1621,2567,1621,1625,4284,5677,18,5677,1625|@278
+@5751	@1377	@3	targettarget.hpBgAlpha		@4417	@189	@5761:hpbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,1629,4284,5677,3,5677,1629|@686
+@5751	@1377	@3	targettarget.powerBarBgAlpha		@4417	@189	@5761:powerbarbgalpha	@1626	@4418	@4419	@189,2567,1626,2567,1626,4421,4284,5677,3,5677,4421|@687
+@5751	@4440	@520	targettarget.portraitBlizzardDirection		@4351	@4441	@5757:portraitblizzarddirection	@1621	@4353	@5762	@37,1621,4443,38,748,4444,1364,1578,1386,308,307,442,2567,1621,2567,1621,4445,4284,5677,520,5677,4445|@694
+@5751	@1639	@18	targettarget.portraitBorderStyle		@4351	@8	@5757:portraitborderstyle	@1621	@1369	@1640	@8,2567,1621,2567,1621,1641,4284,5677,18,5677,1641|@282
+@5751	@1642	@18	targettarget.portraitBorderArt		@4351	@1643	@5757:portraitborderart	@1621	@1369	@1640	@8,1644,2567,1621,2567,1621,1645,4284,5677,18,5677,1645|@283
+@5751	@1646	@18	targettarget.portraitBorderDirection		@4351	@1647	@5757:portraitborderdirection	@1621	@1369	@1640	@8,748,2567,1621,2567,1621,1648,4284,5677,18,5677,1648|@284
+@5751	@1649	@3	targettarget.portraitBorderThickness		@4351	@21	@5757:portraitborderthickness	@1621	@1369	@1640	@8,22,2567,1621,2567,1621,1651,4284,5677,3,5677,1651|@13
+@5751	@1649	@3	targettarget.powerBarBorderThickness		@4450	@21	@5763:powerbarborderthickness	@4451			@8,22,2567,128,2567,128,1650,4284,5677,3,5677,1650|@20
+@5751	@4456	@32	targettarget.texLayerHealthLowAlphaEnabled		@4316	@4457	@5754:healthlowalphaenabled	@4318	@4319	@5764	@226,179,1047,229,2567,190,239,2567,190,239,4459,4284,5677,32,5677,4460|@699
+@5751	@1659	@32	targettarget.chunkedFill		@4461	@1660	@5765:chunked_fill	@4462			@1661,301,1662,2567,1638,2567,1638,1661,306,4284,5677,32,5677,1663|@700
+@5751	@1664	@32	targettarget.powerChunkedFill		@4450	@1665	@5763:powerchunkedfill	@4451			@1661,128,1662,2567,128,2567,128,1666,4284,5677,32,5677,1666|@701
+@5751	@4464	@1043			@4279	@4465	@5752:indicator%2Eclasstext	@4280	@4281	@4466	@127,162,1348,922,2567,1348,922,4467,4284,5677,1043|@657
+@5751	@1667	@18	targettarget.portraitClassStyle		@4351	@1668	@5757:portraitclassstyle	@1621	@1369	@1474	@127,1621,12,2567,1621,2567,1621,1669,4284,5677,18,5677,1669|@288
+@5751	@1670	@96		clear_unit_custom_anchor	@1671	@1672	@5759:custom%2Eclear	@4378			@1672,113,271,2567,4378,271,1672,4284,5677,96,1672,2567,271,113|@13
+@5751	@1679	@32	targettarget.portraitClickable		@4351	@1680	@5757:portraitclickable	@1621	@4353	@5766	@1682,1621,2567,1621,2567,1621,1683,4284,5677,32,5677,1683|@13
+@5751	@4474	@32	targettarget.texLayerRoundedClip		@4316	@4475	@5754:roundedclip	@4318	@4319	@5767	@4477,126,2681,38,2567,190,239,2567,190,239,4478,4284,5677,32,5677,4479|@703
+@5751	@4486	@18	targettarget.texLayerHealthAboveMode		@4316	@4487	@5754:healthabovemode	@4318	@4319	@5768	@227,2187,229,2567,190,239,2567,190,239,4489,4284,5677,18,5677,4490|@706
+@5751	@4491	@18	targettarget.texLayerColorMode		@4316	@4492	@5754:colormode	@4318	@4319	@5769	@227,602,2567,190,239,2567,190,239,4494,4284,5677,18,5677,4495|@707
+@5751	@4496	@18	targettarget.texLayerVisibility		@4316	@4497	@5754:combat_state	@4318	@4319	@4498	@370,296,2567,190,239,2567,190,239,370,296,4284,5677,18,5677,4499|@708
+@5751	@4512	@96			@4513	@4514	@5770:open				@1038,126,2471,2567,1038,2567,1038,1039,4284,5677,96|@13
+@5751	@4518	@32	targettarget.texLayerTargetOnly		@4316	@4519	@5754:current_target_only	@4318	@4319	@4498	@1312,87,1141,2567,190,239,2567,190,239,1312,87,1141,4284,5677,32,5677,4520|@703
+@5751	@1692	@713	targettarget.anchorFrameName		@1671	@1693	@5759:custom%2Evalue	@4378			@271,113,38,113,271,2567,4378,271,606,4284,5677,713,5677,4521|@713
+@5751	@4524	@713	targettarget.texLayerCustomTexturePath		@4316	@4525	@5754:customtexturepath	@4318	@4319	@4526	@271,190,4527,2567,190,239,2567,190,239,4528,4284,5677,713,5677,4529|@703
+@5751	@1416	@1043			@4279	@1417	@5752:indicator%2Estatusdndtext	@4280	@4281	@4530	@1419,162,1348,922,2567,1348,922,1420,4284,5677,1043|@657
+@5751	@4531	@1043			@4279	@4532	@5752:indicator%2Estatustext	@4280	@4281	@4533	@1429,1775,162,1348,922,2567,1348,922,1430,4284,5677,1043|@657
+@5751	@1705	@32	targettarget.healthTextDecimals		@1984	@1706	@5753:hp%2Edecimals	@162	@1369	@1590	@1707,355,162,117,2567,162,117,1046,4284,5677,32,5677,1708|@715
+@5751	@279	@18	targettarget.hpTextSeparator		@1984	@280	@5753:hp%2Eseparator	@162	@1369	@1590	@280,162,117,2567,162,117,616,4284,5677,18,5677,4534|@718
+@5751	@279	@18	targettarget.powerTextSeparator		@1989	@280	@5753:power%2Eseparator	@162	@1369	@1709	@280,162,128,2567,162,128,616,4284,5677,18,5677,283|@718
+@5751	@1717	@32	targettarget.powerBarDetached		@4450	@1718	@5763:detached	@4451			@1719,690,38,2567,128,2567,128,129,4284,5677,32,5677,287|@20
+@5751	@1720	@3	targettarget.detachedPowerBarHeight		@4450	@1721	@5763:detachedpowerbarheight	@4451			@129,347,2567,128,2567,128,535,4284,5677,3,5677,535|@20
+@5751	@1722	@3	targettarget.detachedPowerBarFrameLevelOffset		@4450	@1723	@5763:detachedpowerbarframeleveloffset	@4451			@129,239,2567,128,2567,128,515,4284,5677,3,5677,515|@719
+@5751	@1724	@3	targettarget.detachedPowerBarWidth		@4450	@1725	@5763:detachedpowerbarwidth	@4451			@129,272,2567,128,2567,128,549,4284,5677,3,5677,549|@720
+@5751	@4553	@18	targettarget.portraitDragonLayer		@4351	@4554	@5757:portraitdragonlayer	@1621	@4353	@5771	@4356,4556,609,2567,1621,2567,1621,4557,4284,5677,18,5677,4557|@728
+@5751	@4558	@3	targettarget.portraitDragonX		@4351	@4559	@5757:portraitdragonx	@1621	@4353	@5772	@4356,1918,4561,2567,1621,2567,1621,4562,4284,5677,3,5677,4562|@729
+@5751	@4563	@3	targettarget.portraitDragonLevel		@4351	@4564	@5757:portraitdragonlevel	@1621	@4353	@5773	@4356,240,2187,1621,2567,1621,2567,1621,4566,4284,5677,3,5677,4566|@13
+@5751	@4567	@3	targettarget.portraitDragonScale		@4351	@4568	@5757:portraitdragonscale	@1621	@4353	@5774	@4356,57,2567,1621,2567,1621,4570,4284,5677,3,5677,4570|@730
+@5751	@4571	@3	targettarget.portraitDragonY		@4351	@4572	@5757:portraitdragony	@1621	@4353	@5775	@4356,2290,4561,2567,1621,2567,1621,4574,4284,5677,3,5677,4574|@731
+@5751	@4577	@3	targettarget.texLayerEdgeSoftness		@4316	@4578	@5754:edgesoftness	@4318	@4319	@5776	@1316,2069,2567,190,239,2567,190,239,4580,4284,5677,3,5677,4581|@703
+@5751	@5075	@1043			@4279	@5076	@5752:indicator%2Eeliteicon	@4280	@4281	@5077	@4588,4589,1348,922,2567,1348,922,5078,4284,5677,1043|@657
+@5751	@4585	@32	targettarget.portraitBlizzardElite		@4351	@4586	@5757:portraitblizzardelite	@1621	@4353	@5777	@4588,956,4589,4356,2567,1621,2567,1621,4590,4284,5677,32,5677,4590|@734
+@5751	@1735	@32	targettarget.embedPowerBarIntoHealth		@4450	@1736	@5763:embedpowerbarintohealth	@4451			@1737,1738,301,2567,128,2567,128,1739,4284,5677,32,5677,1739|@20
+@5751	@1740	@96	targettarget.enabled		@4461	@842	@5765:enable_now	@4462			@842,2567,1638,2567,1638,842,2268,4284,5677,96,5677,235|@700
+@5751	@1740	@32	targettarget.enabled		@4461	@842	@5765:enabled	@4462			@842,2567,1638,2567,1638,235,4284,5677,32,5677,235|@735
+@5751	@4601	@32	targettarget.rangeFadeEnabled		@4335	@4602	@5755:enabled	@4336			@842,838,1767,2567,838,1767,2567,838,1767,235,4284,5677,32,5677,2100|@13
+@5751	@4603	@32	targettarget.texLayerEnabled		@4316	@4604	@5754:enabled	@4318	@4319	@5778	@842,190,239,2567,190,239,2567,190,239,235,4284,5677,32,5677,4606|@703
+@5751	@1764	@32	targettarget.oocFadeEnabled		@4417	@1765	@5761:ooc_fade_enabled	@1626	@4418	@4613	@1767,38,368,369,370,2567,1626,2567,1626,387,1767,235,4284,5677,32,5677,1768|@13
+@5751	@4614	@3	targettarget.hpTextMouseoverFadeIn		@4615	@4616	@5753:hp%2Emouseover%2Efadein	@162	@1369	@1590	@1767,840,168,117,2767,2567,162,117,2767,4617,4284,5677,3,5677,4618|@743
+@5751	@4614	@3	targettarget.nameTextMouseoverFadeIn		@4619	@4616	@5753:name%2Emouseover%2Efadein	@162	@1369	@1605	@1767,840,168,720,2767,2567,162,720,2767,4617,4284,5677,3,5677,4620|@743
+@5751	@4614	@3	targettarget.powerTextMouseoverFadeIn		@4621	@4616	@5753:power%2Emouseover%2Efadein	@162	@1369	@1709	@1767,840,168,128,2767,2567,162,128,2767,4617,4284,5677,3,5677,4622|@743
+@5751	@1769	@32	targettarget.fadeInOnShow		@4417	@1770	@5761:fade_in_on_show	@1626	@4418	@4419	@1767,840,396,1771,2567,1626,2567,1626,1767,840,68,65,4284,5677,32,5677,1772|@744
+@5751	@4623	@3	targettarget.hpTextMouseoverFadeOut		@4615	@4624	@5753:hp%2Emouseover%2Efadeout	@162	@1369	@1590	@1767,368,168,117,2767,2567,162,117,2767,4625,4284,5677,3,5677,4626|@745
+@5751	@4623	@3	targettarget.nameTextMouseoverFadeOut		@4619	@4624	@5753:name%2Emouseover%2Efadeout	@162	@1369	@1605	@1767,368,168,720,2767,2567,162,720,2767,4625,4284,5677,3,5677,4627|@745
+@5751	@4623	@3	targettarget.powerTextMouseoverFadeOut		@4621	@4624	@5753:power%2Emouseover%2Efadeout	@162	@1369	@1709	@1767,368,168,128,2767,2567,162,128,2767,4625,4284,5677,3,5677,4628|@745
+@5751	@1087	@18	targettarget.verticalFillBars		@4461	@1088	@5765:fill_direction	@4462			@306,748,2567,1638,2567,1638,306,748,4284,5677,18,5677,4629|@746
+@5751	@1778	@32	targettarget.portraitFillBorder		@4351	@1779	@5757:portraitfillborder	@1621	@1369	@1640	@306,8,1738,38,332,2567,1621,2567,1621,1780,4284,5677,32,5677,1780|@13
+@5751	@4630	@32	targettarget.portraitDragonFlip		@4351	@4631	@5757:portraitdragonflip	@1621	@4353	@5779	@4633,4356,308,126,307,2567,1621,2567,1621,4634,4284,5677,32,5677,4634|@13
+@5751	@4635	@32	targettarget.portraitFlip		@4351	@4636	@5757:portraitflip	@1621	@4353	@5780	@4633,1621,308,126,307,2567,1621,2567,1621,4638,4284,5677,32,5677,4638|@13
+@5751	@4639	@32	general.anchorToCooldown		@4377	@4640	@5759:cooldown_manager	@4378			@3457,37,846,137,4641,2567,113,2567,4378,138,1637,4284,5677,32,148,4642|@748
+@5751	@4643	@32	targettarget.texLayerFollowFrameAlpha		@4316	@4644	@5754:followframealpha	@4318	@4319	@5781	@3457,38,1626,2567,190,239,2567,190,239,4646,4284,5677,32,5677,4647|@749
+@5751	@4648	@32	targettarget.useBlizzardFrame		@4461	@4649	@5765:force_blizzard_frame	@4462			@4650,37,38,68,2567,1638,2567,1638,4650,37,38,4284,5677,32,5677,4651|@1145
+@5751	@1791	@3	targettarget.hpBarAlpha		@4417	@324	@5761:hpbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,1792,4284,5677,3,5677,1792|@751
+@5751	@1791	@3	targettarget.powerBarAlpha		@4417	@324	@5761:powerbaralpha	@1626	@4418	@4419	@324,2567,1626,2567,1626,4652,4284,5677,3,5677,4652|@752
+@5751	@1449	@1043			@4279	@1450	@5752:indicator%2Estatusghosttext	@4280	@4281	@4655	@1452,162,1348,922,2567,1348,922,1453,4284,5677,1043|@657
+@5751	@4656	@32	targettarget.portraitBlizzardCorner		@4351	@4657	@5757:portraitblizzardcorner	@1621	@4353	@5782	@4659,1364,4660,2567,1621,2567,1621,4661,4284,5677,32,5677,4661|@734
+@5751	@4662	@32	targettarget.texLayerGradientEnabled		@4316	@2726	@5754:gradientenabled	@4318	@4319	@5783	@2726,2567,190,239,2567,190,239,4664,4284,5677,32,5677,4665|@755
+@5751	@2723	@96			@4666	@2725	@5754:gradient_direction%2Eup	@4318	@4319	@4320	@2726,748,190,239,2726,748,2567,190,239,2726,748,1866,4284,5677,96|@13
+@5751	@1867	@3	targettarget.hpTextLayer		@4672	@1868	@5753:advanced%2Ehptextlayer	@162	@1369	@1474	@117,239,162,108,2567,162,108,4673,4284,5677,3,5677,4673|@758
+@5751	@4674	@3	targettarget.texLayerHealthThreshold		@4316	@4675	@5754:healththreshold	@4318	@4319	@5784	@117,229,2567,190,239,2567,190,239,4677,4284,5677,3,5677,4678|@759
+@5751	@1870	@18			@1588	@1871	@5753:hp%2Eslot%2Emode	@162	@1369	@1590	@117,606,117,219,2567,162,117,219,602,4284,5677,18|@760
+@5751	@4679	@18	targettarget.healthColorMode		@4461	@4680	@5765:health_color_mode	@4462			@301,227,4681,2567,1638,2567,1638,301,227,602,4284,5677,18,5677,3504|@761
+@5751	@4683	@3	targettarget.texLayerHeight		@4316	@4684	@5754:height	@4318	@4319	@5785	@347,691,985,2567,190,239,2567,190,239,347,4284,5677,3,5677,4686|@703
+@5751	@1882	@3	targettarget.portraitHeight		@4351	@1883	@5757:portraitheight	@1621	@1369	@1884	@347,1885,2567,1621,2567,1621,1886,4284,5677,3,5677,1886|@13
+@5751	@1887	@32			@1588	@1888	@5753:hp%2Eslot%2Ehide_percent	@162	@1369	@1590	@36,354,117,219,2567,162,117,219,36,355,4284,5677,32|@763
+@5751	@1887	@32			@1889	@1888	@5753:power%2Eslot%2Ehide_percent	@162	@1369	@1709	@36,354,128,219,2567,162,128,219,36,355,4284,5677,32|@763
+@5751	@4688	@32	targettarget.powerHideMissingResource		@4450	@4689	@5763:powerhidemissingresource	@4451			@36,396,104,2519,1838,2567,128,2567,128,4690,4284,5677,32,5677,4690|@20
+@5751	@4691	@32	targettarget.loadCondHideInHousing		@4692	@1905	@5786:loadcondhideinhousing	@4693			@1905,2567,2443,4138,2567,2443,4138,4695,4284,5677,32,5677,4695|@766
+@5751	@4704	@32	targettarget.loadCondHideInCombat		@4692	@4705	@5786:loadcondhideincombat	@4693			@840,370,2567,2443,4138,2567,2443,4138,4706,4284,5677,32,5677,4706|@771
+@5751	@4707	@32	targettarget.loadCondHideInGroup		@4692	@4708	@5786:loadcondhideingroup	@4693			@840,909,2567,2443,4138,2567,2443,4138,4709,4284,5677,32,5677,4709|@771
+@5751	@4710	@32	targettarget.loadCondHideInInstance		@4692	@4711	@5786:loadcondhideininstance	@4693			@840,4712,2567,2443,4138,2567,2443,4138,4713,4284,5677,32,5677,4713|@771
+@5751	@4714	@32	targettarget.loadCondHideInVehicle		@4692	@4715	@5786:loadcondhideinvehicle	@4693			@840,4716,2567,2443,4138,2567,2443,4138,4717,4284,5677,32,5677,4717|@771
+@5751	@4718	@3	targettarget.portraitInnerShadow		@4351	@4719	@5757:portraitinnershadow	@1621	@4353	@5787	@4721,50,2560,2567,1621,2567,1621,4722,4284,5677,3,5677,4722|@772
+@5751	@1948	@32	targettarget.alphaExcludePredictionBars		@4417	@1949	@5761:alpha_exclude_prediction_bars	@1626	@4418	@4419	@1950,1951,676,1267,2567,1626,2567,1626,9,1761,676,109,4284,5677,32,5677,1952|@13
+@5751	@4723	@32	targettarget.portraitDragonInInstances		@4351	@4724	@5757:portraitdragonininstances	@1621	@4353	@5788	@1950,3095,4726,840,4727,2567,1621,2567,1621,4728,4284,5677,32,5677,4728|@773
+@5751	@1958	@32	targettarget.alphaExcludeTextPortrait		@4417	@1959	@5761:alpha_exclude_text_portrait	@1626	@4418	@4419	@1950,162,1621,1267,2567,1626,2567,1626,9,1761,162,1621,4284,5677,32,5677,1960|@13
+@5751	@1123	@3	targettarget.texLayerLevel		@4316	@1124	@5754:level	@4318	@4319	@5789	@239,691,1071,2567,190,239,2567,190,239,240,4284,5677,3,5677,4734|@703
+@5751	@1962	@3	targettarget.portraitLevelOffset		@4351	@1963	@5757:portraitleveloffset	@1621	@1369	@1622	@239,486,2567,1621,2567,1621,1964,4284,5677,3,5677,1964|@316
+@5751	@4737	@32	targettarget.levelIndicatorDifficultyColor		@4738	@4739	@5752:level%2Edifficulty_color	@4280	@1369	@1370	@240,1398,263,1348,240,2567,1348,240,1398,227,4284,5677,32,5677,4740|@1146
+@5751	@1488	@1043			@4279	@1489	@5752:indicator%2Elevel	@4280	@4281	@4741	@240,162,1348,922,2567,1348,922,240,4284,5677,1043|@657
+@5751	@4753	@32	targettarget.texLayerMirrorH		@4316	@4754	@5754:mirrorh	@4318	@4319	@5790	@4444,4756,2567,190,239,2567,190,239,4757,4284,5677,32,5677,4758|@782
+@5751	@4759	@32	targettarget.texLayerMirrorV		@4316	@4760	@5754:mirrorv	@4318	@4319	@5791	@4444,4762,2567,190,239,2567,190,239,4763,4284,5677,32,5677,4764|@783
+@5751	@4765	@32	targettarget.loadCondHideMounted		@4692	@4766	@5786:loadcondhidemounted	@4693			@4766,2567,2443,4138,2567,2443,4138,4767,4284,5677,32,5677,4767|@771
+@5751	@1990	@3	targettarget.nameTextLayer		@4672	@1991	@5753:advanced%2Enametextlayer	@162	@1369	@1474	@720,239,162,108,2567,162,108,1992,4284,5677,3,5677,1992|@784
+@5751	@4770	@32	targettarget.loadCondHideNoTarget		@4692	@4771	@5786:loadcondhidenotarget	@4693			@3835,87,2567,2443,4138,2567,2443,4138,4772,4284,5677,32,5677,4772|@771
+@5751	@4781	@32	targettarget.hpTextMouseover		@1984	@4782	@5753:hp%2Emouseover	@162	@1369	@1590	@1141,65,68,2767,162,117,2567,162,117,2767,4284,5677,32,5677,4783|@790
+@5751	@4781	@32	targettarget.nameTextMouseover		@4369	@4782	@5753:name%2Emouseover	@162	@1369	@1605	@1141,65,68,2767,162,720,2567,162,720,2767,4284,5677,32,5677,4784|@790
+@5751	@4781	@32	targettarget.powerTextMouseover		@1989	@4782	@5753:power%2Emouseover	@162	@1369	@1709	@1141,65,68,2767,162,128,2567,162,128,2767,4284,5677,32,5677,4785|@790
+@5751	@1145	@3	targettarget.texLayerAlpha		@4316	@179	@5754:alpha	@4318	@4319	@5792	@179,2567,190,239,2567,190,239,9,4284,5677,3,5677,4793|@703
+@5751	@4794	@3	targettarget.texLayerHealthLowAlpha		@4316	@4795	@5754:healthlowalpha	@4318	@4319	@5793	@179,1047,229,2567,190,239,2567,190,239,4797,4284,5677,3,5677,4798|@792
+@5751	@2008	@3	targettarget.oocFadeAlpha		@4417	@2009	@5761:ooc_fade_alpha	@1626	@4418	@4613	@368,369,370,179,2567,1626,2567,1626,387,1767,9,4284,5677,3,5677,2010|@13
+@5751	@4809	@32	targettarget.loadCondHideOutOfCombat		@4692	@4810	@5786:loadcondhideoutofcombat	@4693			@368,369,370,2567,2443,4138,2567,2443,4138,4811,4284,5677,32,5677,4811|@771
+@5751	@4812	@32	targettarget.loadCondHideOutOfCombatNoTarget		@4692	@4813	@5786:loadcondhideoutofcombatnotarget	@4693			@368,369,370,956,3835,87,2567,2443,4138,2567,2443,4138,4814,4284,5677,32,5677,4814|@771
+@5751	@2011	@3	targettarget.rangeFadeAlpha		@4335	@2012	@5755:alpha	@4336			@368,369,838,2567,838,1767,2567,838,1767,9,4284,5677,3,5677,2013|@13
+@5751	@2014	@18	targettarget.portraitOverlayAlign		@4351	@2015	@5757:portraitoverlayalign	@1621	@1369	@1622	@1281,622,2567,1621,2567,1621,2016,4284,5677,18,5677,2016|@317
+@5751	@2045	@96		start_unit_custom_anchor_picker	@1671	@2046	@5759:custom%2Epick	@4378			@2046,113,271,2567,4378,271,2046,4284,5677,96,2047,2567,271,113,2048|@13
+@5751	@2049	@18	targettarget.portraitPlacement		@4351	@2050	@5757:portraitplacement	@1621	@1369	@1622	@2050,2567,1621,2567,1621,2051,4284,5677,18,5677,2051|@318
+@5751	@2055	@32			@4351	@1621	@5757:enabled	@1621			@1621,2567,1621,2567,1621,235,4284,5677,32|@798
+@5751	@2061	@18	targettarget.portraitDetachedPoint		@4351	@2062	@5757:portraitdetachedpoint	@1621	@1369	@1622	@1621,113,262,2567,1621,2567,1621,2063,4284,5677,18,5677,2063|@278
+@5751	@2064	@32	targettarget.portraitBgEnabled		@4351	@2065	@5757:portraitbgenabled	@1621	@1369	@1474	@1621,189,2567,1621,2567,1621,2066,4284,5677,32,5677,2066|@322
+@5751	@2067	@3	targettarget.portraitEdgeSoftness		@4351	@2068	@5757:portraitedgesoftness	@1621	@4353	@5794	@1621,1316,2069,2567,1621,2567,1621,2070,4284,5677,3,5677,2070|@13
+@5751	@2071	@3	targettarget.portraitAlpha		@4351	@2072	@5757:portraitalpha	@1621	@1369	@1622	@1621,179,2567,1621,2567,1621,2073,4284,5677,3,5677,2073|@323
+@5751	@2074	@3	targettarget.portraitZoom		@4351	@2075	@5757:portraitzoom	@1621	@1369	@1884	@1621,1119,2567,1621,2567,1621,2076,4284,5677,3,5677,2076|@13
+@5751	@1167	@520	targettarget.portraitMode		@4351	@868	@5757:position	@1621	@1369	@1681	@868,2567,1621,2567,1621,868,4284,5677,520,5677,2056|@324
+@5751	@2082	@32	targettarget.powerBarBorderEnabled		@4450	@2083	@5763:powerbarborderenabled	@4451			@128,302,8,2567,128,2567,128,2084,4284,5677,32,5677,2084|@41
+@5751	@4831	@3	targettarget.powerBarHeight		@4450	@4832	@5763:powerbarheight	@4451			@128,302,347,2567,128,2567,128,4833,4284,5677,3,5677,4833|@13
+@5751	@4834	@3	targettarget.powerTextLayer		@4672	@4835	@5753:advanced%2Epowertextlayer	@162	@1369	@1474	@128,162,239,162,108,2567,162,108,518,4284,5677,3,5677,518|@803
+@5751	@2088	@18			@1889	@2089	@5753:power%2Eslot%2Emode	@162	@1369	@1709	@128,606,128,219,2567,162,128,219,602,4284,5677,18|@804
+@5751	@1503	@1043			@4279	@1504	@5752:indicator%2Estatuspvp	@4280	@4281	@5255	@1506,1507,1508,602,1506,1348,922,2567,1348,922,5256,4284,5677,1043|@657
+@5751	@4836	@1043			@4279	@4837	@5752:indicator%2Eracetext	@4280	@4281	@4838	@4839,162,1348,922,2567,1348,922,4840,4284,5677,1043|@657
+@5751	@5257	@1043			@4279	@5258	@5752:indicator%2Eraidgroupname	@4280	@4281	@5259	@916,909,1348,922,2567,1348,922,5260,4284,5677,1043|@657
+@5751	@1512	@1043			@4279	@1513	@5752:indicator%2Eraidmarker	@4280	@4281	@4841	@916,420,1348,922,2567,1348,922,1515,4284,5677,1043|@657
+@5751	@4844	@18	targettarget.raidGroupNameStyle		@4845	@4846	@5752:raid_group%2Estyle	@4280	@1369	@1370	@916,909,12,1348,916,909,2567,1348,916,909,12,4284,5677,18,5677,4847|@1147
+@5751	@2101	@18	targettarget.portraitRender		@4351	@2102	@5757:portraitrender	@1621	@1369	@1681	@2102,2567,1621,2567,1621,2103,4284,5677,18,5677,2103|@326
+@5751	@4856	@96		reset_unit_status_indicator	@1368	@4857	@5752:selected%2Ereset	@4280	@1369	@1370	@874,981,1348,922,1348,981,2567,1348,981,874,4284,5677,96,874,2567,1348,922|@1148
+@5751	@4858	@32	targettarget.loadCondHideResting		@4692	@4859	@5786:loadcondhideresting	@4693			@4859,2567,2443,4138,2567,2443,4138,4860,4284,5677,32,5677,4860|@771
+@5751	@607	@32	targettarget.hpTextReverse		@1984	@608	@5753:hp%2Ereverse	@162	@1369	@1590	@309,609,162,117,2567,162,117,309,4284,5677,32,5677,2107|@809
+@5751	@4864	@32	targettarget.levelIndicatorForeverBadge		@4738	@4865	@5752:level%2Eforever_badge	@4280	@4866	@5795	@4868,240,4869,1348,240,2567,1348,240,4870,4869,4284,5677,32,5677,4871|@1149
+@5751	@2138	@3			@1588	@2139	@5753:hp%2Eslot%2Esize	@162	@1369	@1590	@981,219,57,117,219,2567,162,117,219,57,4284,5677,3|@68
+@5751	@2138	@3			@1889	@2139	@5753:power%2Eslot%2Esize	@162	@1369	@1709	@981,219,57,128,219,2567,162,128,219,57,4284,5677,3|@68
+@5751	@2144	@18	targettarget.portraitShape		@4351	@29	@5757:portraitshape	@1621	@1369	@1640	@29,2567,1621,2567,1621,2145,4284,5677,18,5677,2145|@812
+@5751	@2146	@32	targettarget.hpFullValueShort		@1984	@2147	@5753:hp%2Efull_value_short	@162	@1369	@1590	@2148,2149,162,117,2567,162,117,403,606,2148,4284,5677,32,5677,2150|@813
+@5751	@2146	@32	targettarget.powerFullValueShort		@1989	@2147	@5753:power%2Efull_value_short	@162	@1369	@1709	@2148,2149,162,128,2567,162,128,403,606,2148,4284,5677,32,5677,4872|@13
+@5751	@2151	@32	targettarget.showHP		@1984	@631	@5753:hp%2Eshow	@162	@1369	@1590	@65,117,162,162,117,2567,162,117,65,4284,5677,32,5677,4876|@816
+@5751	@2158	@32	targettarget.showName		@4369	@2159	@5753:name%2Eshow	@162	@1369	@1605	@65,720,162,720,2567,162,720,65,4284,5677,32,5677,2160|@817
+@5751	@4879	@96	targettarget.showPowerBar		@4450	@4880	@5763:enable_now	@4451			@65,128,2567,128,2567,128,842,2268,4284,5677,96,5677,4881|@20
+@5751	@2168	@32	targettarget.showPowerText		@1989	@2169	@5753:power%2Eshow	@162	@1369	@1709	@65,128,162,162,128,2567,162,128,65,4284,5677,32,5677,4882|@819
+@5751	@4887	@18	targettarget.texLayerHealthCondition		@4316	@4888	@5754:healthcondition	@4318	@4319	@5796	@65,254,301,2567,190,239,2567,190,239,4890,4284,5677,18,5677,4891|@822
+@5751	@2175	@32	targettarget.portraitCastSpellIcon		@4351	@2176	@5757:portraitcastspellicon	@1621	@1369	@1474	@65,641,716,11,840,1621,2567,1621,2567,1621,2177,4284,5677,32,5677,2177|@13
+@5751	@4904	@32	targettarget.loadCondShowWhenInjured		@4692	@4905	@5786:loadcondshowwheninjured	@4693			@65,1141,1047,4906,301,2567,2443,4138,2567,2443,4138,4907,4284,5677,32,5677,4907|@824
+@5751	@4908	@32	targettarget.showPowerBar		@4450	@2166	@5763:show	@4451			@65,128,302,2567,128,2567,128,65,4284,5677,32,5677,4881|@825
+@5751	@1226	@3	targettarget.nameFontSize		@4369	@57	@5753:name%2Esize	@162	@1369	@1605	@57,162,720,2567,162,720,57,4284,5677,3,5677,2195|@826
+@5751	@2196	@520	targettarget.portraitSizeMode		@4351	@2197	@5757:portraitsizemode	@1621	@4353	@5797	@57,602,2567,1621,2567,1621,2198,4284,5677,520,5677,2198|@334
+@5751	@2199	@3	targettarget.portraitSizeOverride		@4351	@2200	@5757:portraitsizeoverride	@1621	@1369	@1884	@57,1885,2567,1621,2567,1621,2201,4284,5677,3,5677,2201|@13
+@5751	@702	@32	targettarget.powerSmoothFill		@4450	@704	@5763:powersmoothfill	@4451			@706,306,2567,128,2567,128,711,4284,5677,32,5677,711|@20
+@5751	@702	@32	targettarget.smoothFill		@4461	@704	@5765:smooth_fill	@4462			@706,306,2567,1638,2567,1638,706,306,4284,5677,32,5677,2204|@700
+@5751	@4915	@32	targettarget.loadCondHideSolo		@4692	@1657	@5786:loadcondhidesolo	@4693			@1657,2567,2443,4138,2567,2443,4138,4916,4284,5677,32,5677,4916|@771
+@5751	@4917	@18	targettarget.texLayerColorTreatment		@4316	@4918	@5754:colortreatment	@4318	@4319	@5798	@444,227,2567,190,239,2567,190,239,4920,4284,5677,18,5677,4921|@832
+@5751	@4923	@18			@1368	@4924	@5752:selected%2Ecustomicon	@4280	@1369	@1370	@3118,11,1885,1348,981,2567,1348,981,1415,4284,5677,18|@1150
+@5751	@4931	@1551			@4932	@1553	@5752:section	@4280	@1369	@1370	@1348,1181,2567,1348,2567,1348,1551,4284,5677,1551|@13
+@5751	@4933	@18			@1368	@4934	@5752:selected%2Eanchor	@4280	@1369	@1370	@1348,922,113,1348,981,2567,1348,981,113,4284,5677,18|@1151
+@5751	@4935	@32			@1368	@4936	@5752:selected%2Eenabled	@4280	@4866	@5799	@1348,922,235,1348,981,2567,1348,981,235,4284,5677,32|@1152
+@5751	@4938	@3			@4328	@4939	@5752:placement%2Emsuf2_status_layer	@4280	@1369	@1370	@1348,922,239,1348,2050,2567,1348,2050,4330,1348,239,4284,5677,3|@1153
+@5751	@4940	@18			@4932	@4941	@5752:selector	@4280	@1369	@1370	@1348,922,696,2567,1348,2567,1348,696,4284,5677,18|@1154
+@5751	@4942	@3			@1368	@4943	@5752:selected%2Esize	@4280	@4866	@5800	@1348,922,57,1348,981,2567,1348,981,57,4284,5677,3|@1155
+@5751	@4945	@32	general.statusIconsUseMidnightStyle		@4932	@4946	@5752:midnight_style	@4280	@1369	@1370	@1348,922,12,2567,1348,2567,1348,4947,12,4284,5677,32,148,4948|@1156
+@5751	@4949	@18			@1368	@4950	@5752:selected%2Esymbol	@4280	@1369	@1370	@1348,922,357,1348,981,2567,1348,981,357,4284,5677,18|@1157
+@5751	@4951	@32			@4333	@4952	@5752:preview%2Emsuf2_status_test	@4280	@1369	@1370	@1348,922,2832,602,1348,146,2567,1348,146,4330,1348,2832,4284,5677,32|@1158
+@5751	@4953	@96			@1368	@4954	@5752:selected%2Etext_settings	@4280	@1369	@1370	@1348,162,2471,1348,981,2567,1348,981,162,2471,4284,5677,96|@1159
+@5751	@4957	@32	targettarget.loadCondHideStealthed		@4692	@4958	@5786:loadcondhidestealthed	@4693			@4958,2567,2443,4138,2567,2443,4138,4959,4284,5677,32,5677,4959|@771
+@5751	@2230	@32	targettarget.detachedPowerBarTextOnBar		@4450	@2231	@5763:detachedpowerbartextonbar	@4451			@162,68,129,302,2567,128,2567,128,542,4284,5677,32,5677,542|@13
+@5751	@4974	@18	targettarget.texLayerTexture		@4316	@4975	@5754:texture	@4318	@4319	@5801	@190,2672,2567,190,239,2567,190,239,190,4284,5677,18,5677,4977|@852
+@5751	@4978	@18	targettarget.texLayerCropMode		@4316	@4979	@5754:cropmode	@4318	@4319	@5802	@190,4981,2567,190,239,2567,190,239,4982,4284,5677,18,5677,4983|@853
+@5751	@4996	@18			@1368	@4997	@5752:selected%2Eiconstyle	@4280	@1369	@1370	@4998,12,1182,1225,922,1348,981,2567,1348,981,1470,4284,5677,18|@1160
+@5751	@764	@3	targettarget.texLayerWidth		@4316	@272	@5754:width	@4318	@4319	@5803	@272,2567,190,239,2567,190,239,272,4284,5677,3,5677,5000|@703
+@5751	@2323	@3	targettarget.portraitWidth		@4351	@2324	@5757:portraitwidth	@1621	@1369	@1884	@272,1885,2567,1621,2567,1621,2325,4284,5677,3,5677,2325|@13
+@5751	@2326	@3	targettarget.portraitPanX		@4351	@2327	@5757:portraitpanx	@1621	@1369	@1884	@1119,218,487,2567,1621,2567,1621,2328,4284,5677,3,5677,2328|@340
+@5751	@2329	@3	targettarget.portraitPanY		@4351	@2330	@5757:portraitpany	@1621	@1369	@1884	@1119,218,492,2567,1621,2567,1621,2331,4284,5677,3,5677,2331|@340
 ]==]

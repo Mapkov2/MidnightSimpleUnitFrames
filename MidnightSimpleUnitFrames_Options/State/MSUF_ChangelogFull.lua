@@ -8,25 +8,33 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A131C07C7EADB9EEABCC0A3A3D66887D4D8B395C379FE7C84C5A422CEEA1C6DB",
-    currentVersion = "7.0.4-beta4",
+    sourceSha256 = "C53881658F5D8218B2257D3FBD07A2B1CCB03374F91AE1C484BE061C9AF9EC2F",
+    currentVersion = "7.0.4-beta5",
     historyFromVersion = "6.02",
-    previousVersion = "7.0.4-beta2",
-    rangeLabel = "7.0.4-beta2 -> 7.0.4-beta4",
+    previousVersion = "7.0.4-beta4",
+    rangeLabel = "7.0.4-beta4 -> 7.0.4-beta5",
     entries = {
         {
-            version = "7.0.4-beta4",
+            version = "7.0.4-beta5",
             date = "2026-11-20",
-            title = "7.0.4 Beta 4",
+            title = "7.0.4 Beta 5",
             sections = {
                 {
-                    title = "Fixes",
+                    title = "Highlights",
                     bullets = {
-                        "Settings search. The search index uses less memory across all languages, including Russian. Search results and setting links retain their existing behavior.",
-                        "Player castbar. Fixed missing recipient names for Penance and other casts that transition to channels. Channel spells keep the correct rank where ranks are supported.",
-                        "Target range fade. On WoW Forever, hostile targets recover when the first range check has no result. Warlocks use the highest known rank of Shadow Bolt, with Drain Life as a fallback.",
-                        "Edit Mode. Fixed labels and an error in some addon-provided choice popups.",
-                        "Suite settings. Reset page can confirm the specific HUD feature being reset with a compatible Suite version.",
+                        {
+                            text = "Player castbar Force Off. Open Unit Frames > Player > Castbar and select Force Off under Castbar Provider to hide the standard Blizzard player castbar, even when the MSUF Player frame is disabled. The section header turns red and shows FORCE OFF. Use this option if Quartz or another addon supplies your player castbar.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "castbar provider",
+                                label = "Castbar provider",
+                                sectionId = "castbar",
+                                controlId = "menu2.uf_player.unit.castbar.provider",
+                                settingKey = "general.castbarPlayerBackend",
+                                prepareKind = "unitCastbarTab",
+                                prepareValue = "general",
+                            },
+                        },
                     },
                 },
             },
