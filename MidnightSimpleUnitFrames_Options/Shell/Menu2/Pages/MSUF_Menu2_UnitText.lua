@@ -455,7 +455,7 @@ function TextSection.BuildNameTab(state, ctx, unit)
         tip = { "Show Name", "Turns this frame's name text on or off. Its anchor, size and color stay saved while it is off.", { hook = true } } })
     local namePosition = TextCard(ctx, unit, nameTab, "namePosition", "text.name.position", "Position", "Move the name directly in Preview.",
         leftX, -136, cardW, 134)
-    local nameAnchor = Control(ctx, namePosition, { "dropdown", "nameAnchor", nil, { "Anchor", TEXT_ANCHORS, 210 }, { 16, -48, cardW - 32, "LEFT" },
+    local nameAnchor = Control(ctx, namePosition, { "dropdown", "nameAnchor", nil, { "Anchor", TEXT_ANCHORS, 210 }, { 16, -78, cardW - 32, "LEFT" },
         get = function() return ReadText(unit, "nameTextAnchor", "TOPLEFT") end,
         write = { call = SetText, fallback = "TOPLEFT", args = { "MSUF2_NAME_ANCHOR" },
             after = function() FocusPreviewText("name", nil, true) RefreshTextHeader() end }, --[[schema setter: UnitText.5]]
@@ -631,10 +631,10 @@ function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, c
     local ReadSlot, ReadSlotHidePercentSymbol = state.ReadSlot, state.ReadSlotHidePercentSymbol
     local ReversePreviewHealthMode = state.ReversePreviewHealthMode
     local function FullValueShortEnabled()
-        if not cfg.fullValueShortKey then return false end
-        local value = ReadText(unit, cfg.fullValueShortKey, nil)
+        local value = GetConf(unit)[cfg.fullValueShortKey]
         if value ~= nil then return value == true end
-        return type(cfg.fullValueShortDefault) == "function" and cfg.fullValueShortDefault() == true or cfg.fullValueShortDefault == true
+        local general = GetGeneral()
+        return not general or general.useShortNumbers ~= false
     end
     function controls.RefreshPreview()
         if not (controls.preview and controls.preview.SetText) then return end
@@ -695,9 +695,8 @@ function TextSection.BuildValueTextFormatting(state, ctx, unit, kind, content, c
             write = { call = SetText, boolean = true, args = { cfg.fullValueShortReason },
                 after = function() if controls.RefreshPreview then controls.RefreshPreview() end end }, --[[schema setter: UnitText.17]]
             meta = FixedSettingMeta("text." .. kind .. ".full_value_short", cfg.fullValueShortKey), scope = unit,
-            tip = { "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot " ..
-                "shows a number.",
-            TIP_TOGGLE } })
+            tip = kind == "hp" and { "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. " ..
+                "Available while a slot shows a number.", TIP_TOGGLE } or nil })
         function controls.RefreshFullValueToggle(enabled)
             local hasNumericValue = false
             for _, spec in pairs(cfg.slots or {}) do
@@ -763,10 +762,6 @@ function TextSection.BuildValueTextTabs(state, ctx, unit)
         absorbIconKey = "hpAbsorbIcon",
         absorbIconReason = "MSUF2_HP_ABSORB_ICON",
         fullValueShortKey = "hpFullValueShort",
-        fullValueShortDefault = function()
-            local general = GetGeneral()
-            return not general or general.useShortNumbers ~= false
-        end,
         fullValueShortReason = "MSUF2_HP_FULL_VALUE_SHORT",
         decimalsReason = "MSUF2_HP_TEXT_DECIMALS",
         positionTitle = "Position",
@@ -798,6 +793,8 @@ function TextSection.BuildValueTextTabs(state, ctx, unit)
         separatorKey = "powerTextSeparator",
         separatorGet = function() return ReadText(unit, "powerTextSeparator", ReadText(unit, "hpTextSeparator", "")) end,
         separatorReason = "MSUF2_POWER_TEXT_SEPARATOR",
+        fullValueShortKey = "powerFullValueShort",
+        fullValueShortReason = "MSUF2_POWER_FULL_VALUE_SHORT",
         positionTitle = "Position",
         positionSubtitle = "Move the group or selected slot directly in Preview.",
         moveReason = "MSUF2_POWER_TEXT_MOVE_MODE",
@@ -860,6 +857,7 @@ function TextSection.BindRefreshState(state, ctx, unit)
     powerTextControls[#powerTextControls + 1] = powerControls.mouseover
     if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
     if hpControls.fullValueShort then hpTextControls[#hpTextControls + 1] = hpControls.fullValueShort end
+    powerTextControls[#powerTextControls + 1] = powerControls.fullValueShort
     -- Hover reasons for the controls a Show switch or the mouseover toggle
     -- locks; each returns nothing while its switch is on.
     if W.SetControlsDisabledReason and W.TurnOnReason then
@@ -903,6 +901,7 @@ function TextSection.BindRefreshState(state, ctx, unit)
         SetControlsEnabled(mouseoverFadeControls.hp, hpOn and ReadBool(unit, "hpTextMouseover", false))
         SetControlsEnabled(mouseoverFadeControls.power, powerOn and ReadBool(unit, "powerTextMouseover", false))
         if powerControls.RefreshPercentToggles then powerControls.RefreshPercentToggles(powerOn) end
+        powerControls.RefreshFullValueToggle(powerOn)
         SetControlsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         if powerManaged then
             if powerManagedNotice then

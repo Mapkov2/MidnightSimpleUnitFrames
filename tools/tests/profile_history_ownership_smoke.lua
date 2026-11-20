@@ -11,6 +11,65 @@ local db = { general = {} }
 env.MSUF_GlobalDB = { profiles = { Default = db }, global = {} }
 env.MSUF_DB, env.MSUF_ActiveProfile = db, "Default"
 H.EnsureDB()
+do
+    -- A window drag changes one provider coordinate alongside a large, stable Core profile.
+    local data = {}
+    db.historyBudgetFixture = data
+    for section = 1, 16 do
+        local fields = {}
+        data["block" .. section] = fields
+        for i = 1, 1200 do
+            local sample = i
+            if i % 5 == 0 then sample = i % 3 == 0
+            elseif i % 11 == 0 then sample = "value-" .. i end
+            fields["setting" .. i] = sample
+        end
+        fields[0], fields[false] = false, 0
+    end
+    local windows = { positions = { CharacterFrame = { x = 10, y = 20 } } }
+    local providerKey = "workbench:suiteSkin"
+    assert(H.RegisterHistoryProvider(providerKey, function()
+        return { profile = { windowControls = windows } }
+    end, function(snapshot)
+        windows = snapshot.profile.windowControls
+        return true
+    end))
+    local function Move(x, limit)
+        local ticks = 0
+        debug.sethook(function() ticks = ticks + 1 end, "", 100)
+        local saved = H.RunWithHistory("Move Character", "suite:skin.windowControls.positions.CharacterFrame", function()
+            windows.positions.CharacterFrame.x = x
+            return true
+        end)
+        debug.sethook()
+        assert(saved and ticks * 100 <= limit, ("window move exceeded history budget: %d > %d"):format(ticks * 100, limit))
+        local diff = H.historyUndo[#H.historyUndo].diff
+        assert(#diff == 1 and diff[1].path[1] == "externalProviders" and diff[1].path[2] == providerKey
+            and diff[1].path[#diff[1].path] == "x", "window move recorded unrelated profile settings")
+    end
+    Move(15, 1550000)
+    assert(H.StartHistorySession("window-history-budget"))
+    Move(21, 725000)
+    assert(H.Undo() and windows.positions.CharacterFrame.x == 15, "window undo lost the previous coordinate")
+    assert(H.Redo() and windows.positions.CharacterFrame.x == 21, "window redo lost the saved coordinate")
+    assert(db.historyBudgetFixture.block1[false] == 0 and db.historyBudgetFixture.block1[0] == false)
+    H.EndHistorySession("window-history-budget")
+    H.UnregisterHistoryProvider(providerKey)
+    db.historyBudgetFixture = nil
+    H.ClearHistory()
+
+    -- Separately copied subtrees must share the total byte limit of one record.
+    assert(H.StartHistorySession("history-byte-budget"))
+    local text = ("x"):rep(4 * 1024 * 1024)
+    assert(H.CaptureHistory("Oversized settings", "test:history-byte-budget", function()
+        db.firstBudgetBranch, db.secondBudgetBranch = { text = text }, { text = text }
+        return true
+    end))
+    assert(H.GetHistoryState().undoCount == 0, "two copied branches bypassed the cumulative history byte budget")
+    db.firstBudgetBranch, db.secondBudgetBranch = nil, nil
+    H.EndHistorySession("history-byte-budget")
+    H.ClearHistory()
+end
 local value, full = { amount = 1, enabled = false }, true
 local calls = { root = 0, full = 0, restoreRoot = 0, restoreFull = 0 }
 F.RegisterExternal("suiteModules", {

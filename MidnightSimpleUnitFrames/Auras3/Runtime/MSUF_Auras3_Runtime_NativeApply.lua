@@ -460,6 +460,9 @@ local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
             for i = 1, #slotLanes do UpdateGroupLaneSlot(current, slotLanes[i]) end
         end
         if groupSlots.flowLane then UpdateGroupFlowLane(current, groupSlots.flowLane) end
+        if groupSlots.trailingFlowLane then
+            UpdateGroupFlowLane(current, groupSlots.trailingFlowLane, current._msufA3TrailingFlowGroup)
+        end
         SyncGroupSlotsGeometry(current, groupSlots, parentFrame)
         if current._msufA3LayoutHost then current._msufA3LayoutHost:Show() end
         current:Show()

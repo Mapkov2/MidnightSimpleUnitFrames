@@ -6,6 +6,7 @@ local GF = MSUF.GF or {}
 MSUF.GF = GF
 local UF = MSUF.UF
 local Metadata = GF.Metadata or {}
+local bars = MSUF.UFBarTextCommon
 
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
@@ -18,8 +19,6 @@ local tostring = tostring
 local type = type
 
 local eventFrame
-local freezeRaidRosterForPull = GF.SetRaidRosterFrozen
-local SelectPullRosterHandler
 local runtimeObservers = {}
 local dirtyApplyMaskCache = {}
 local appliedLayoutScaleByKind = {}
@@ -35,10 +34,8 @@ local function IsOpenWorldRosterLocation()
 end
 
 local function SyncCombatState(inCombat)
-  if inCombat == nil then inCombat = InCombat() end
-  inCombat = inCombat == true
   ExportPublic("MSUF_InCombat", inCombat)
-  return inCombat
+  bars.SetGroupRezzOutOfCombat(not inCombat and IsOpenWorldRosterLocation())
 end
 
 local IsUnitToken = UF and UF.IsUnitToken
@@ -56,10 +53,9 @@ local function SetupLiveHeader(key, kind, liveRoster)
   local setup = GF.SetupHeader
 
   GF.EnsureDB()
-  local resolve = GF.ResolveFrameScale
-  local desiredScale = tonumber(resolve(kind))
-  local width, height
-  width, height = GF.GetScaledFrameMetrics(kind)
+  local width, height, _, desiredScale = GF.GetScaledFrameMetrics(kind)
+  if desiredScale == nil then desiredScale = GF.ResolveFrameScale(kind) end
+  desiredScale = tonumber(desiredScale)
   if (desiredScale ~= nil and appliedLayoutScaleByKind[kind] ~= desiredScale)
     or (width ~= nil and (appliedLayoutWidthByKind[kind] ~= width or appliedLayoutHeightByKind[kind] ~= height)) then
     GF.InvalidateCompiledSpecs(kind)
@@ -310,7 +306,11 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
     and state.matchEvents == matchEvents and state.nameEvents == nameEvents
     and sceneEventsOn == sceneEvents and housingEventsOn == housingEvents then return end
   -- Disabled frames miss zone events, so sample the location before resubscribing.
-  if active and (not state.enabled or state.regenOnly) then SelectPullRosterHandler() end
+  if active and (not state.enabled or state.regenOnly) then
+    SyncCombatState(InCombat() == true)
+  elseif not active then
+    bars.SetGroupRezzOutOfCombat(false)
+  end
   state.enabled, state.regenOnly = enabled, regenOnly
   state.matchEvents, state.nameEvents = matchEvents, nameEvents
   sceneEventsOn, housingEventsOn = sceneEvents, housingEvents
@@ -362,10 +362,7 @@ local function WantParty()
   local conf = Conf("party")
   if not (conf and conf.enabled == true) then return false end
   local kind = LiveGroupKind()
-  if kind == "party" then return true end
-  -- "Show while solo" means solo only: a live raid scope must never surface
-  -- the party header next to the raid frames.
-  return kind == nil and conf.showSolo == true
+  return GF.IsPartyGroupContext(kind, conf) or (kind == nil and conf.showSolo == true)
 end
 
 local function WantRaid()
@@ -462,7 +459,7 @@ local function SetupWantedHeaders(kind)
   -- pass decided per block: a plot boundary, or the option changing inside
   -- (RefreshVisuals), runs the visibility pass only when that changes.
   if scope ~= "raid" and scope ~= "priority" then housingHidden.party = HiddenByEnvironment("party") end
-  if scope ~= "party" and scope ~= "priority" then housingHidden.raid = HiddenByEnvironment(raidKind) end
+  if scope ~= "priority" then housingHidden.raid = HiddenByEnvironment(raidKind) end
   if not AnyGroupFrameEnabled() then
     if not scope or scope == "party" then RetireHeader("party") end
     if not scope or scope == "raid" then RetireHeader("raid") end
@@ -473,6 +470,11 @@ local function SetupWantedHeaders(kind)
   local success = true
   local wantParty = WantParty() and not PreviewSuppressesHeader("party") and not housingHidden.party
   local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid") and not housingHidden.raid
+  local updateRaid = scope ~= "party" and scope ~= "priority"
+  -- Party visibility settings can add or remove the Raid layout in small raids.
+  if scope == "party" and (wantRaid == true) ~= (GF.headers.raid ~= nil) then
+    updateRaid = true
+  end
 
   if scope ~= "raid" and scope ~= "priority" and wantParty then
     local header, scanHandled, scanned
@@ -489,7 +491,7 @@ local function SetupWantedHeaders(kind)
     RetireHeader("party")
   end
 
-  if scope ~= "party" and scope ~= "priority" and wantRaid then
+  if updateRaid and wantRaid then
     local header, scanHandled, scanned
     header, scanHandled, scanned = SetupLiveHeader("raid", raidKind)
     GF.ShowHeaders("raid")
@@ -500,7 +502,7 @@ local function SetupWantedHeaders(kind)
       did, scanned = GF.ScanHeader("raid", raidKind)
       if scanned == false then success = false end
     end
-  elseif scope ~= "party" and scope ~= "priority" then
+  elseif updateRaid then
     RetireHeader("raid")
   end
 
@@ -675,9 +677,11 @@ local function HousingVisibilityStale()
 end
 
 function GF.RefreshHeaderLayout(kind)
-  GF.InvalidateLayoutRoster()
   local inCombat = GF._raidRosterCombatActive or InCombatLockdown()
-  if not inCombat then GF.EnsureDB() end
+  if not inCombat then
+    GF.InvalidateLayoutRoster()
+    GF.EnsureDB()
+  end
   local enabled = AnyGroupFrameEnabled()
   if inCombat then
     local result = GF.DeferGroupRuntime("layout", kind)
@@ -1049,18 +1053,21 @@ local function UsesNameList(header)
 end
 
 local function PrepareOpenWorldCombatRoster(key, kind)
-  local conf = Conf(kind)
-  if not (conf and conf.enabled == true) or PreviewSuppressesHeader(key) or HiddenByEnvironment(kind) then return end
   local header = GF.headers[key]
   if header then
     if not GF.ForEachHeader(key, UsesNameList) then return end
-    -- Keep filters that a native raid header cannot reproduce, and keep the
-    -- existing preserved block assignments when they are roster-dependent.
-    if IsInRaid() and (conf.showPlayer == false or type(conf.groupFilter) == "string") then return end
-    if header._msufRaidGroupIndex and (conf.sortRolesAcrossRaid == true or conf.collapseEmptyGroups == true
-      or tonumber(conf.maxColumns) ~= 8 or conf.hideMythicGroupsFiveToEight == true) then return end
   elseif key ~= "party" or GF.headers.raid or LiveGroupKind() ~= nil then
     return
+  end
+  local conf = Conf(kind)
+  if not (conf and conf.enabled == true) or PreviewSuppressesHeader(key) or HiddenByEnvironment(kind) then return end
+  if header then
+    -- Keep filters that a native raid header cannot reproduce, and keep the
+    -- existing preserved block assignments when they are roster-dependent.
+    if IsInRaid() and header:GetAttribute("showRaid")
+      and (conf.showPlayer == false or type(conf.groupFilter) == "string") then return end
+    if header._msufRaidGroupIndex and (conf.sortRolesAcrossRaid == true or conf.collapseEmptyGroups == true
+      or tonumber(conf.maxColumns) ~= 8 or conf.hideMythicGroupsFiveToEight == true) then return end
   end
   -- Seed an empty Party header for the first invite, or switch a fixed
   -- name list to Blizzard's live sort for this fight. Restore the saved
@@ -1070,31 +1077,48 @@ local function PrepareOpenWorldCombatRoster(key, kind)
   GF.DeferGroupRuntime("layout", kind)
 end
 
-local function StartOpenWorldRosterCombat()
-  -- A seamless transfer can leave the selected callback stale until the next zone event.
-  if not IsOpenWorldRosterLocation() then return GF.SetRaidRosterFrozen(true) end
+-- Sample the actual location at the combat edge. A zone event can arrive
+-- after an invitation or pull on either side of an instance boundary.
+local function StartGroupRosterCombat()
+  if not IsOpenWorldRosterLocation() then return GF.SetInstanceRosterFrozen(true) end
   PrepareOpenWorldCombatRoster("party", "party")
   if GF.headers.raid then PrepareOpenWorldCombatRoster("raid", GF.headers.raid._msufGFKind) end
   GF.SetOpenWorldCombatRoster(true)
-  -- Refuse protected layout as usual, while Blizzard keeps its roster events.
+  -- MSUF defers protected geometry. Blizzard can still bind new outdoor slots.
   GF._raidRosterCombatActive = true
 end
 
-SelectPullRosterHandler = function()
-  freezeRaidRosterForPull = IS_MAINLINE and IsOpenWorldRosterLocation()
-    and StartOpenWorldRosterCombat or GF.SetRaidRosterFrozen
-end
-
 local function RuntimeOnEvent(self, event, unit)
+  if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
+    GF.healthClassRosterRevision = (GF.healthClassRosterRevision or 0) + 1
+  elseif event == "PLAYER_REGEN_DISABLED" then
+    if not AnyGroupFrameEnabled() then
+      SetRuntimeEventsEnabled(false, InCombat())
+      return
+    end
+    SyncCombatState(true)
+    -- A preview retires its scope's live header (PreviewSuppressesHeader), and
+    -- combat hides every preview. Hand the block back to the live header now:
+    -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
+    -- begins the header could not come back before regen.
+    if GF.HidePreviewsForCombat() == true then
+      SetupWantedHeaders()
+    end
+    StartGroupRosterCombat()
+    return
+  end
   if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
   -- SavedVariables/config caches are only reliable at the startup event
   -- boundary. Handle it before the disabled fast-exit so a cold cache cannot
   -- unregister the very events that perform the first live header setup.
   if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
-    if event == "PLAYER_ENTERING_WORLD" then SelectPullRosterHandler() end
-    if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
+    -- A surviving outdoor pull already prepared its secure headers; an
+    -- instance-origin pull keeps its native subscriptions frozen until regen.
+    local resume = event == "PLAYER_ENTERING_WORLD" and GF._raidRosterCombatActive
+      and not GF._instanceRosterFrozen and IsOpenWorldRosterLocation() or nil
+    if GF._openWorldCombatRoster ~= resume then GF.SetOpenWorldCombatRoster(resume) end
     pendingCombatBindings = nil
-    SyncCombatState()
+    SyncCombatState(InCombat() == true)
     GF.RefreshHeaderLayout()
     if event == "PLAYER_ENTERING_WORLD" then
       startupVisualsPending = true
@@ -1109,6 +1133,8 @@ local function RuntimeOnEvent(self, event, unit)
     return
   end
   if event == "PLAYER_REGEN_ENABLED" then
+    -- The short out-of-combat rez window must expire before its sampler resumes.
+    GF.healthClassRosterRevision = (GF.healthClassRosterRevision or 0) + 1
     SyncCombatState(false)
     if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
     if pendingCombatBindings then
@@ -1116,7 +1142,7 @@ local function RuntimeOnEvent(self, event, unit)
       GF.DeferGroupRuntime("roster")
     end
     local refreshEvents = GF._pendingGroupRuntime or runtimeEventState.regenOnly
-    GF.SetRaidRosterFrozen(false)
+    GF.SetInstanceRosterFrozen(false)
     if GF._pendingGroupRuntime then FlushDeferred() end
     RefreshStartupVisuals()
     -- Priority selection is orthogonal to the broader pending reason. Catch up
@@ -1124,23 +1150,13 @@ local function RuntimeOnEvent(self, event, unit)
     if GF._pendingPriorityRefresh and not GF._pendingGroupRuntime then GF.RefreshPriorityFrames("deferred-priority") end
     GF.ForEachFrame(RefreshAggroStateFrame, false, event)
     if refreshEvents then SetRuntimeEventsEnabled(AnyGroupFrameEnabled()) end
-    return
-  elseif event == "PLAYER_REGEN_DISABLED" then
-    SyncCombatState(true)
-    -- A preview retires its scope's live header (PreviewSuppressesHeader), and
-    -- combat hides every preview. Hand the block back to the live header now:
-    -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
-    -- begins the header could not come back before regen.
-    if GF.HidePreviewsForCombat() == true then
-      SetupWantedHeaders()
-    end
-    freezeRaidRosterForPull(true)
+    if bars.groupRezzOutOfCombat then bars.ResumeGroupRezzColors() end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
-    GF.InvalidateLayoutRoster()
     local inCombat = InCombat()
-    if event == "GROUP_ROSTER_UPDATE" then
-      GF.ApplyGroupBorder(inCombat and "party" or nil)
+    if not inCombat or GF._openWorldCombatRoster then
+      GF.InvalidateLayoutRoster()
+      if event == "GROUP_ROSTER_UPDATE" then GF.ApplyGroupBorder(inCombat and "party" or nil) end
     end
     if inCombat then
       GF.DeferGroupRuntime("roster")
@@ -1191,12 +1207,16 @@ local function RuntimeOnEvent(self, event, unit)
     end
     ScheduleHeaderLayoutSettle()
   elseif event == "ZONE_CHANGED_NEW_AREA" then
-    SelectPullRosterHandler()
+    if not InCombat() then bars.SetGroupRezzOutOfCombat(IsOpenWorldRosterLocation()) end
     -- HeaderScope() is nil for this event, so an inline pass would be an exact
     -- duplicate of the settle's own RefreshHeaderLayout(). Rebuilding every raid
     -- button twice inside the post-loading-screen frame is what tripped the
     -- script watchdog; the queued pass alone repaints one frame later.
     ScheduleHeaderLayoutSettle()
+  elseif event == "PLAYER_LEAVING_WORLD" then
+    if bars.groupRezzOutOfCombat then bars.SetGroupRezzOutOfCombat(false) end
+    if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
+    pendingCombatBindings = nil
   elseif event == "HOUSE_PLOT_ENTERED" or event == "HOUSE_PLOT_EXITED"
     or event == "CLIENT_SCENE_OPENED" or event == "CLIENT_SCENE_CLOSED" then
     -- Only a scope with Hide in Housing on changes; the visibility pass waits
@@ -1205,10 +1225,6 @@ local function RuntimeOnEvent(self, event, unit)
       GF.UpdateGroupVisibility()
       if GF.RequestAdditionalGroupsRefresh then GF.RequestAdditionalGroupsRefresh() end
     end
-  elseif event == "PLAYER_LEAVING_WORLD" then
-    freezeRaidRosterForPull = GF.SetRaidRosterFrozen
-    if GF._openWorldCombatRoster then GF.SetOpenWorldCombatRoster(false) end
-    pendingCombatBindings = nil
   end
 end
 

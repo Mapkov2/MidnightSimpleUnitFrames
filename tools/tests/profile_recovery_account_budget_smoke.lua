@@ -6,6 +6,46 @@ local w = C.NewWorld(root, flavor, "Tester-Realm")
 C.Login(w, {})
 local schema, store = w.core.DefaultsSchema, w.env.MSUF_GlobalDB
 assert(type(schema.ListProfileRecovery) == "function", "account recovery budget/management missing")
+
+-- SavedVariables serializes a shared recovery payload separately at each path.
+local function ReloadedBucket(key, identity)
+    local data = { list = { false, 0, "" }, keyed = { [0] = "zero", [12345] = { enabled = false } } }
+    local bucket = { identity = identity, order = { key }, revision = 20, data = data,
+        entries = { [key] = { sequence = identity, revision = 20, data = data } } }
+    return assert(loadstring("return " .. H.Literal(bucket)))()
+end
+local function Latest(bucket)
+    return bucket.entries[bucket.order[#bucket.order]].data
+end
+local named = ReloadedBucket("named", 1)
+local archived = ReloadedBucket("archived", 2)
+local differing = ReloadedBucket("different", 3)
+differing.data.list[2] = false
+local otherRevision = ReloadedBucket("other-revision", 4)
+otherRevision.revision = 19
+store._newerRevisionBackups = { Named = named, Different = differing }
+store._profileRecoveryArchive = { _rejectedProfileBackups = { [2] = archived, [4] = otherRevision } }
+local beforeRows, beforeBytes = schema.ListProfileRecovery()
+local beforeDisk = H.Literal(store._profileRecoveryArchive)
+local beforeNamed = H.Literal(store._newerRevisionBackups)
+local beforeExport = assert(schema.ExportProfileRecovery("archived"))
+assert(named.data ~= Latest(named) and archived.data ~= Latest(archived), "fixture already shares a payload")
+schema.BeginRollbackSession(store)
+assert(rawequal(named.data, Latest(named)), "startup kept duplicate named recovery data")
+assert(rawequal(archived.data, Latest(archived)), "startup kept duplicate archived recovery data")
+assert(differing.data ~= Latest(differing) and differing.data.list[2] == false, "startup replaced differing data")
+assert(otherRevision.data ~= Latest(otherRevision), "startup replaced a differing revision")
+local afterRows, afterBytes = schema.ListProfileRecovery()
+assert(#afterRows == #beforeRows and beforeBytes == afterBytes, "sharing changed the recovery byte budget")
+assert(H.Literal(store._profileRecoveryArchive) == beforeDisk, "sharing changed the serialized archive")
+assert(H.Literal(store._newerRevisionBackups) == beforeNamed, "sharing changed the serialized named archive")
+assert(schema.ExportProfileRecovery("archived") == beforeExport, "sharing changed exported bytes")
+local restored = assert(schema.RestoreProfileBackup("Restored", "archived", "rejected"))
+assert(restored ~= archived.data and restored.keyed ~= archived.data.keyed, "restore exposes aliased mutable data")
+assert(H.Literal(restored) == H.Literal(archived.data), "shared payload cannot be restored")
+store.profiles.Restored = nil
+assert(schema.PurgeProfileRecovery("all") == #afterRows)
+
 local first, last
 for i = 1, 16 do
     local p = { _msufDefaultsRevision = 20, future = string.rep(string.char(64 + i), 120000), zero = 0, flag = false }

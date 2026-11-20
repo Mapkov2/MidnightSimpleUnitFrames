@@ -595,6 +595,8 @@ function FirstLoad:IsFirstRunPending()
 end
 
 local function ShowSuiteInstaller()
+    -- The shared setup moves to Suite through its explicit Continue action.
+    if MSUF.SuiteLink.CanContinueSetup and MSUF.SuiteLink.CanContinueSetup() then return end
     MSUF.SuiteLink.MaybeShowInstaller()
 end
 

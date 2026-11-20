@@ -48,7 +48,12 @@ local function InstallAnchoredWidths(world)
         return explicitWidth(self)
     end
 end
-local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = InstallAnchoredWidths })
+local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = InstallAnchoredWidths,
+    beforeOptions = function(world)
+        world.core.FirstLoad6:Complete("fixture")
+        world.core.UpgradeHighlights:BaselineKnownReleases()
+    end,
+})
 local M, env, core = mw.M, mw.env, mw.core
 local widgets = mw.world.widgets
 env.StaticPopup_Show = function() return nil end
@@ -279,7 +284,6 @@ end
 
 -- 4b. Real disclosure clicks must keep the visible Dashboard and viewport.
 do
-    core.FirstLoad6:Complete("fixture")
     M.InvalidatePage("home")
     M.SetMenuStateValue("dashboardChangelogOpen", false)
     M.SetMenuStateValue("dashboardScalingOpen", false)

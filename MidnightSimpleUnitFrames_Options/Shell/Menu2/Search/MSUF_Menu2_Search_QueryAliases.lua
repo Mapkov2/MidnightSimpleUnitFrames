@@ -570,6 +570,81 @@ Data.CONTROL_QUERY_TARGETS = {
 }
 
 
+-- Native search subjects share the registered Core targets. Keep each language
+-- packed until the search menu selects it; # marks the complete subject.
+Data.CONTROL_QUERY_LANGUAGES = {
+    enUS = {
+        frames = "how do I set up #|where is the # option",
+        sync = "profile sync|profile syncing",
+        mana = "mana cost preview|spell cost preview",
+        variants = "profile variants|profile variations",
+    },
+    deDE = {
+        frames = "wo finde ich die Einstellung für #|wo ist die Option für #|wo kann ich # einstellen|wie stelle ich # ein",
+        sync = "Profilsynchronisierung|Profilabgleich",
+        mana = "Manakostenvorschau|Vorschau der Manakosten",
+        variants = "Profilvarianten",
+    },
+    esES = {
+        frames = "dónde encuentro #|dónde está la opción de #|dónde se configura #|dónde puedo ajustar #|cómo configuro #|cómo cambio #|" ..
+            "dónde puedo encontrar #",
+        articles = "el|la|los|las",
+        sync = "sincronización de perfiles|sincronización del perfil",
+        mana = "vista previa del coste de maná|vista previa del costo de maná|previsualización de maná",
+        variants = "variantes de perfil|variantes del perfil",
+    },
+    frFR = {
+        frames = "où se trouve #|où trouver #|où puis-je régler #|où sont les réglages pour #|comment configurer #|comment modifier #|où est #|" ..
+            "où puis-je trouver #",
+        articles = "le|la|les|l",
+        sync = "synchronisation des profils|synchro des profils",
+        mana = "prévisualisation du coût en mana|aperçu du coût en mana",
+        variants = "variantes de profil|variantes du profil",
+    },
+    itIT = {
+        frames = "dove trovo #|dove si trova #|dove trovo la voce #|dove posso modificare #|come imposto #|come configuro #|dove posso trovare #",
+        articles = "il|lo|la|i|gli|le|l",
+        sync = "sincronizzazione dei profili|sincronizzazione profili",
+        mana = "anteprima del costo in mana|previsione del costo in mana",
+        variants = "varianti del profilo|varianti dei profili",
+    },
+    ptBR = {
+        frames = "onde encontro #|onde fica #|onde fica a opção de #|onde posso ajustar #|como configuro #|como altero #|onde posso encontrar #",
+        articles = "o|a|os|as",
+        sync = "sincronização de perfis|sincronização de perfil",
+        mana = "prévia do custo de mana|pré-visualização do custo de mana",
+        variants = "variantes de perfil|variações de perfil",
+    },
+    ruRU = {
+        frames = "где найти #|где в настройках #|где включить #|как настроить #|как изменить #|" ..
+            "где находится #",
+        sync = "синхронизацию профилей|синхронизация профилей",
+        mana = "предпросмотр затрат маны|предпросмотр стоимости маны",
+        variants = "варианты профиля|варианты профилей",
+    },
+    koKR = {
+        frames = "# 설정은 어디에 있나요|# 설정이 어디 있나요|#은 어디서 설정하나요|#는 어디서 설정하나요|" ..
+            "어디서 #을 설정하나요|어디서 #를 설정하나요|# 설정은 어디 있나요|# 설정 어디서 해요",
+        sync = "프로필 동기화|프로필 연동",
+        mana = "마나 소모량 미리보기|마나 비용 미리보기",
+        variants = "프로필 변형|프로필 변형판",
+    },
+    zhCN = {
+        frames = "#在哪里设置|#在哪里|#设置在哪|哪里可以设置#|怎么设置#|如何更改#|在哪里可以设置#|我在哪里设置#",
+        sync = "配置同步|配置文件同步",
+        mana = "法力消耗预览|蓝耗预览",
+        variants = "配置变体|配置文件变体",
+    },
+    zhTW = {
+        frames = "#在哪裡設定|#在哪裡|#設定在哪|哪裡可以設定#|怎麼設定#|如何變更#|在哪裡可以設定#|我要去哪裡設定#",
+        sync = "設定檔同步|同步設定檔",
+        mana = "法力消耗預覽|耗魔預覽",
+        variants = "設定檔變體|設定檔變化版",
+    },
+}
+Data.CONTROL_QUERY_LANGUAGES.enGB = Data.CONTROL_QUERY_LANGUAGES.enUS
+Data.CONTROL_QUERY_LANGUAGES.esMX = Data.CONTROL_QUERY_LANGUAGES.esES
+
 -- Compact native wording for common feature searches. Search routing still resolves only indexed controls/pages.
 AddAliasTerms("zielframe", "target frame|target size|target scale")
 AddAliasTerms("zielrahmen", "target frame|target size|target scale")

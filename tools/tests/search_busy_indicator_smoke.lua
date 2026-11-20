@@ -9,6 +9,9 @@ M.CreateNavSearchPalette = function(...)
     palettes[#palettes + 1] = palette
     return palette
 end
+-- This smoke targets the regular dashboard after onboarding.
+M.BuildFirstLoadDashboardScene = function() return false end
+M.BuildUpgradeHighlightDashboardScene = function() return false end
 assert(M.Open("home") ~= false)
 mw:RunTimers()
 MenuWorld.FireVisibilityScripts(M.frame)
@@ -146,7 +149,7 @@ assert(api.SearchPages("texture") ~= textureRows and bars.score == score + 120, 
 M.activeKey = originalPage
 assert(api.SearchPages("texture") == textureRows and bars.score == score, "cache reused another page's rank metadata")
 
--- A synchronous cache hit can arrive while the debounce job is between scan and sort.
+-- A synchronous cache hit can arrive while the other query has already scored some records.
 api.MarkSearchIndexDirty()
 api.GetSearchRecords()
 Drain()
@@ -155,11 +158,18 @@ local boosted = api.SearchPages("texture")
 M.activeKey = originalPage
 api.ScheduleSearchInputQuery(nil, "texture", false)
 local state = M.Search._RenderContext.SEARCH_STATE
+local function HasScoredBars()
+    local job = state.request and state.request.job
+    for _, row in ipairs(job and job.results or {}) do
+        if row.key == bars.key and row.label == bars.label then return true end
+    end
+    return false
+end
 for _ = 1, 1000 do
     mw:RunTimers(1)
-    if state.request and state.request.job and state.request.job.sortReady then break end
+    if HasScoredBars() then break end
 end
-assert(state.request and state.request.job and state.request.job.sortReady, "fixture did not pause before sort")
+assert(HasScoredBars(), "fixture did not pause after scoring the shared record")
 M.activeKey = "opt_bars"
 assert(api.SearchPages("texture") == boosted, "interleaving fixture missed the cache")
 M.activeKey = originalPage
@@ -181,6 +191,75 @@ end)
 local fresh = Query("zzzxqvvzzz")
 assert(fresh ~= empty and fresh[1] and fresh[1].key == "opt_bars", "an index change did not invalidate the cached query")
 M.RegisterSearchProvider("search-cache-test", nil)
+
+local opened = {}
+M.SearchBridge.OpenSearchTarget = function(key, query, label, _, _, exactTarget)
+    opened[#opened + 1] = { key = key, query = query, label = label, target = exactTarget }
+end
+local function EnterOpensSelection(input, suggestions)
+    input:SetText("castbar")
+    MenuWorld.FireScript(input, "OnTextChanged", true)
+    Drain()
+    assert(suggestions:MoveSelection(1), "fixture could not select a search result")
+    local selected = assert(suggestions.visibleResults[2])
+    local count = #opened
+    MenuWorld.FireScript(input, "OnEnterPressed")
+    MenuWorld.FireScript(input, "OnEnterPressed")
+    Drain()
+    local hit = opened[count + 1]
+    assert(#opened == count + 1 and hit.key == selected.key and hit.target == selected.exactTarget
+        and hit.label == (selected.anchorFallback or selected.label or selected.title),
+        "Enter did not open the selected result exactly once")
+end
+EnterOpensSelection(box, palette)
+local dashboard
+for _, item in ipairs(palettes) do
+    if item.searchBox ~= box then dashboard = item end
+end
+assert(dashboard, "dashboard suggestions were not created")
+EnterOpensSelection(dashboard.searchBox, dashboard)
+
+local debounce, after = 0.10, M.MenuTimer.After
+local waits = 0
+M.MenuTimer.After = function(delay, callback)
+    if delay == debounce then waits = waits + 1 end
+    return after(delay, callback)
+end
+local recent = Query("castbar")
+Query("font")
+local beforeRepeat = waits
+Type("castbar")
+assert(waits == beforeRepeat, "cached query still scheduled the typing pause")
+Drain()
+assert(M.searchResults == recent, "fast repeated query changed the result list")
+Type("portrait alpha")
+assert(waits == beforeRepeat + 1 and state.request and not state.request.debounced, "new input did not wait for typing")
+local pending = state.request
+MenuWorld.FireScript(box, "OnEnterPressed")
+assert(state.request == pending and pending.debounced, "Enter restarted the query or waited for typing")
+Type("font")
+MenuWorld.FireScript(box, "OnEnterPressed")
+Type("group size")
+Drain()
+assert(#opened == 2 and M.searchResultsQuery == "group size", "replacing the input opened a cancelled selection")
+M.MenuTimer.After = after
+
+local changed, label = false, "ExactZZSearch Old"
+M.RegisterSearchProvider("search-submit-test", function()
+    return { { pageKey = "opt_bars", kind = "toggle", label = label } }
+end, function()
+    local dirty = changed
+    changed = false
+    return dirty
+end)
+local rows = Query("ExactZZSearch")
+assert(rows[1] and rows[1].label == label, "provider search fixture did not match")
+label, changed = "ExactZZSearch New", true
+MenuWorld.FireScript(box, "OnEnterPressed")
+Drain()
+assert(#opened == 2 and palette.visibleResults[1] and palette.visibleResults[1].label == label,
+    "provider changes replaced the selected result without confirmation")
+M.RegisterSearchProvider("search-submit-test", nil)
 M.HideSlashMenuAndMinibar(M.frame)
 Drain()
 print("search_busy_indicator_smoke " .. flavor .. ": pending/results/cancel/close/combat/reduced-motion passed")

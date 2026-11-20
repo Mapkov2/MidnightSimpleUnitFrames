@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$RepositoryRoot,
-    [string]$ReleaseVersion
+    [string]$ReleaseVersion,
+    [switch]$ClassicOnly
 )
 
 Set-StrictMode -Version Latest
@@ -23,22 +24,21 @@ $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace 
 # would otherwise pass every TOC, contract and changelog check below without
 # reading a single file. The shared channel resolver, which the packager and the
 # publishing workflows also use, owns the accepted release formats. The
-# legacy two-component stable version keeps its two-digit decimal minor.
-# An explicit patch release uses the same bounded components as the addon
-# version comparator, which normalizes the minor as a decimal fraction.
+# legacy stable format uses a two-digit decimal minor. Classic-only
+# releases may use three digits, within the addon's version comparator limit.
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()
 if ($sourceVersion -ne $normalizedVersion) {
     throw "Classic VERSION '$sourceVersion' does not match release '$normalizedVersion'."
 }
 $releaseChannel = & (Join-Path $PSScriptRoot "resolve_classic_release_channel.ps1") -Tag $normalizedVersion
 if ($releaseChannel.Channel -ceq "release") {
-    $legacyStable = '^(?:0|[1-9][0-9]*)\.[0-9]{2}$'
+    $legacyStable = if ($ClassicOnly) { '^(?:0|[1-9][0-9]{0,2})\.[0-9]{2,3}$' } else { '^(?:0|[1-9][0-9]*)\.[0-9]{2}$' }
     $patchStable = '^(?:0|[1-9][0-9]{0,2})\.[0-9]{1,3}\.[1-9][0-9]{0,2}$'
     if ($releaseChannel.Base -cnotmatch $legacyStable -and $releaseChannel.Base -cnotmatch $patchStable) {
-        throw "Use a two-digit minor for a legacy stable version (7.00) or an explicit patch version (7.0.1), got '$normalizedVersion'."
+        throw "Use a two-digit stable minor, a three-digit minor with ClassicOnly, or an explicit patch version. Got '$normalizedVersion'."
     }
-} elseif ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]+$') {
-    throw "A prerelease names its release line as <major>.<minor> (for example 7.0-beta1), got '$normalizedVersion'."
+} elseif ($releaseChannel.Base -cnotmatch '^(?:0|[1-9][0-9]*)\.[0-9]+(?:\.[1-9][0-9]{0,2})?$') {
+    throw "A prerelease names its release line as <major>.<minor> or <major>.<minor>.<patch> (for example 7.0.3-beta1), got '$normalizedVersion'."
 }
 
 $addons = @(

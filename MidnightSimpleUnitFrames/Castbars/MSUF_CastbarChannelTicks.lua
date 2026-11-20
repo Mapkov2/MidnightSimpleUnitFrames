@@ -13,7 +13,23 @@ local Publish = PublicAPI.Publish
 -- WoW Forever and Classic Era run Classic Era spell data: one spell ID per rank
 -- and Era tick counts. TBC and Mists keep the Retail table below until their
 -- spell data has been verified.
-local HAS_ERA_SPELL_DATA = MSUF.Client.IsForever == true or MSUF.Client.IsVanilla == true
+local IS_FOREVER = MSUF.Client.IsForever == true
+local HAS_ERA_SPELL_DATA = IS_FOREVER or MSUF.Client.IsVanilla == true
+
+-- Penance requests the cast spell. The heal/damage channel uses its own ID.
+-- Preserve the individual ranks when matching cast requests to effects.
+local PENANCE_REQUEST_ID = IS_FOREVER and {
+    [402261] = 402174, [402277] = 402174,
+    [1240734] = 1240720, [1240732] = 1240720,
+    [1240736] = 1240721, [1240733] = 1240721,
+    [1316994] = 1316995, [1316992] = 1316995,
+} or ((MSUF.Client.IsRetail or MSUF.Client.IsMists) and {
+    [47757] = 47540, [47758] = 47540,
+}) or {}
+
+function ChannelTicks.GetPenanceRequestSpellID(channelSpellID)
+    return PENANCE_REQUEST_ID[channelSpellID]
+end
 
 local DEFAULT_MARKER_COUNT = 5
 local MAX_CUSTOM_MARKER_COUNT = 10
@@ -104,6 +120,14 @@ if HAS_ERA_SPELL_DATA then
             1949, 11683, 11684,                          -- Hellfire
         },
     }
+    if IS_FOREVER then
+        -- Three bolts including the one at channel start, so two periods.
+        local penanceTicks = { ticks = 2 }
+        for channelID, requestID in pairs(PENANCE_REQUEST_ID) do
+            CHANNEL_TICK_DATA[channelID] = penanceTicks
+            CHANNEL_TICK_DATA[requestID] = penanceTicks
+        end
+    end
     for ticks, spellIDs in pairs(ERA_CHANNEL_TICKS) do
         local tickData = { ticks = ticks }
         for index = 1, #spellIDs do

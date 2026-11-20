@@ -5,6 +5,7 @@
 -- Its 132px outer card adds 154px to ordinary flow and 140px where the previous
 -- style/first-view layout already retained 14px padding. With the card suppressed,
 -- all original heights still match across the complete release matrix.
+-- In Beta 2 Retail and Forever put both bar controls and the new appearance settings in Bars.
 -- Returns Expected(flavor, unit, contextualVisibility) -> function(lane, tool, slot) -> height.
 return function(flavor, unit, contextualVisibility)
     local classic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists"
@@ -12,6 +13,7 @@ return function(flavor, unit, contextualVisibility)
     local normal = {
         layout = 408, behavior = 356, filters = classic and 318 or 456, blacklist = 820,
         style = classic and 1464 or 1714,
+        bars = not classic and 892 or nil,
     }
     local custom = { setup = 722, layout = 390, behavior = 390, filters = 456, whitelist = player and 968 or 630, style = 1302 }
     local custom4 = {

@@ -14,7 +14,9 @@ local function PaintDurationBarColor(A3, Clamp01, bar, lane)
     else
         r, g, b = A3.GetDurationBarColor()
     end
-    if bar.SetStatusBarColor then bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95) end
+    if bar.SetStatusBarColor then
+        bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95)
+    end
 end
 
 MSUF.Auras3RuntimeFactories.ButtonVisuals = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
@@ -28,6 +30,7 @@ local tonumber = tonumber
 local type = type
 local ApplyAuraIconZoom = dependencies.ConfigValues.ApplyAuraIconZoom
 local ApplyFont = dependencies.DurationText.ApplyFont
+A3.ApplyAuraBarFont = ApplyFont
 local BuildAuraDurationStyle = dependencies.DurationText.BuildAuraDurationStyle
 local Clamp01 = dependencies.Platform.Clamp01
 local ClampNumber = dependencies.Platform.ClampNumber
@@ -269,11 +272,15 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     local initialAnchor = lane.initialAnchor or "TOPLEFT"
     -- maximumLineSize measures CONTENT extent; the host box (lane.width/height)
     -- already includes 2*padding, so strip it back out for the line limit.
-    ApplyContainerFlowLayout(container, initialAnchor,
-        lane.xSign or 1, lane.ySign or -1,
-        lane.verticalGrowth == true and (lane.buttonWidth or lane.size or 1)
-            or ((lane.width or lane.size or 1) - 2 * (lane.padding or 0)),
-        lane.padding)
+    local lineSize
+    if lane.combinedAuraBarFlow then
+        local axis = AnchorUtil.FlowLayoutAxis
+        container:SetFlowLayoutAxis(lane.verticalGrowth and axis.Vertical or axis.Horizontal)
+    else
+        lineSize = lane.verticalGrowth == true and (lane.buttonWidth or lane.size or 1)
+            or ((lane.width or lane.size or 1) - 2 * (lane.padding or 0))
+    end
+    ApplyContainerFlowLayout(container, initialAnchor, lane.xSign or 1, lane.ySign or -1, lineSize, lane.padding)
     container.createdButtons = lane.max
     container:SetSize(lane.buttonWidth or lane.size or 1, lane.buttonHeight or lane.size or 1)
     if parentFrame and layoutHost then
@@ -467,7 +474,8 @@ function PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
     return iconShape
 end
 
-function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
+function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar, sample)
+    local fillTexture
     if lane.showDurationBar == true then
         local bar = button._msufA3DurationBar
         if not bar then
@@ -481,7 +489,15 @@ function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicat
             bar:SetFrameLevel((visualOwner:GetFrameLevel() or 0)
                 + (FrameLayers.AURA_DURATION_BAR_LEVEL_OFFSET or 2))
         end
-        if spellIndicatorBar then
+        if lane.auraBarFill then
+            local painter, appearance = A3.MockAuraPainter, lane.auraBarAppearance
+            local dispelType = sample and sample.dispelName
+            local inputs = not sample and lane._msufA3NativeVisualInputs or nil
+            painter.LayoutAuraBar(bar, visualOwner, lane, dispelType, inputs)
+            bar:SetStatusBarColor(painter.AuraBarFillColor(lane, dispelType, inputs))
+            local mode = appearance and appearance.fillColorMode
+            if not sample and (mode == "AUTO" or mode == "DARK") then fillTexture = bar:GetStatusBarTexture() end
+        elseif spellIndicatorBar then
             -- Same proven path as the native Ebon Might bar: the StatusBar is
             -- a descendant of the CustomAuraButton and fills the complete
             -- configured Spell Indicator rectangle. Blizzard's
@@ -495,10 +511,11 @@ function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicat
                 Clamp01(color[3], 0.88),
                 Clamp01(color[4], 1))
         else
+            A3.MockAuraPainter.ClearAuraBarDecoration(bar)
             LayoutDurationBar(visualOwner, bar, lane)
             ApplyDurationBarColor(bar, lane)
         end
-        if type(bar.SetReverseFill) == "function" then
+        if not lane.auraBarFill and type(bar.SetReverseFill) == "function" then
             bar:SetReverseFill(spellIndicatorBar and lane.durationBarReverseFill == true or false)
         end
         -- Finish every script-side mutation before handing the StatusBar to
@@ -509,15 +526,47 @@ function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicat
         button:ClearDurationBar()
         if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
     end
+    return fillTexture
 end
 
 -- Cooldown text and stack text share one overlay above the swipe; it exists
 -- only while at least one text element is on.
 function PrepareStage.ResolveTextOverlay(button, lane)
-    if lane.showCooldownText == true or lane.showStacks == true then
+    if lane.showCooldownText == true or lane.showStacks == true or lane.auraBarFill then
         return EnsureAuraTextOverlay(button, lane) or button
     end
     return nil
+end
+
+function PrepareStage.PrepareAuraBarIcon(button, lane, overlay)
+    local icon = button._msufA3AuraBarIcon
+    if lane.auraBarAppearance and lane.auraBarAppearance.iconAnchor then
+        if not icon then
+            icon = PixelLayoutRegion(overlay:CreateTexture(nil, "ARTWORK"))
+            button._msufA3AuraBarIcon = icon
+        end
+        A3.MockAuraPainter.LayoutAuraBarIcon(icon, overlay, lane)
+        button:SetIcon(icon)
+    elseif icon then
+        icon:Hide()
+    end
+end
+
+function PrepareStage.PrepareAuraBarName(button, lane, overlay)
+    local name = button._msufA3AuraBarName
+    if lane.auraBarFill then
+        if not name then
+            name = PixelLayoutRegion(overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+            button._msufA3AuraBarName = name
+        end
+        ApplyFont(name, math_min(12, lane.buttonHeight - 2), lane)
+        A3.MockAuraPainter.LayoutAuraBarName(name, overlay, lane)
+        name:Show()
+        button:SetSpellName(name)
+    elseif name then
+        button:ClearSpellName()
+        name:Hide()
+    end
 end
 
 function PrepareStage.PrepareCooldownText(button, lane, textOverlay)
@@ -725,11 +774,16 @@ local function PrepareAuraButton(button, lane, index)
     local barOnly, spellIndicatorBar, icon = PrepareStage.PrepareIcon(button, lane, index, visualOwner)
     PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
     local iconShape = PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
-    PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
+    local fillTexture = PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
     local textOverlay = PrepareStage.ResolveTextOverlay(button, lane)
+    if lane.auraBarFill then
+        PrepareStage.PrepareAuraBarIcon(button, lane, textOverlay)
+        PrepareStage.PrepareAuraBarName(button, lane, textOverlay)
+    end
     PrepareStage.PrepareCooldownText(button, lane, textOverlay)
     PrepareStage.PrepareStackText(button, lane, textOverlay)
     local auraBorderBound = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, iconShape)
+    if lane.auraBarFill then A3.MockAuraPainter.BindAuraBarTints(button, button._msufA3DurationBar, lane, fillTexture) end
     PrepareStage.PrepareStealableMarker(button, lane, visualOwner, barOnly)
     PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, auraBorderBound)
     PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, iconShape)
@@ -745,8 +799,10 @@ function ButtonVisuals.PaintSample(button, lane, index, sample)
     PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
     local shape = PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
     sample.shape = shape
-    PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellBar)
+    PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellBar, sample)
     local overlay = PrepareStage.ResolveTextOverlay(button, lane)
+    PrepareStage.PrepareAuraBarIcon(button, lane, overlay)
+    PrepareStage.PrepareAuraBarName(button, lane, overlay)
     PrepareStage.PrepareCooldownText(button, lane, overlay)
     PrepareStage.PrepareStackText(button, lane, overlay)
     local border = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, shape)

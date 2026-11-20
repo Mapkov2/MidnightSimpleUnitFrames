@@ -115,7 +115,7 @@ local function BuildManagedAuraGroupOptions(container, lane)
     }
 end
 
-local function ManagedAuraGroupLayoutOptions(lane)
+local function ManagedAuraGroupLayoutOptions(lane, index)
     local size = lane.size or DEFAULT_SHARED.iconSize
     local spacing = lane.spacing or DEFAULT_SHARED.spacing
     return {
@@ -127,11 +127,13 @@ local function ManagedAuraGroupLayoutOptions(lane)
         elementHeight = lane.buttonHeight or size,
         elementSpacing = spacing,
         lineSpacing = spacing,
+        layoutIndex = index,
+        groupSpacing = index and 0 or nil,
     }
 end
 
-local function ApplyManagedAuraGroupLayout(container, groupKey, lane)
-    container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane))
+local function ApplyManagedAuraGroupLayout(container, groupKey, lane, index)
+    container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane, index))
     A3.nativeAuraRuntimeLayoutError = nil
     return true
 end
@@ -248,20 +250,7 @@ local function CreateManagedPriorityNativeLane(container, lane, parentFrame)
     return PublishNativeContainer(container)
 end
 
-local function CreateManagedNativeLane(container, lane, parentFrame)
-    if not container then return nil end
-    A3.nativeAuraRuntimeAvailable = true
-    ConfigureContainer(container, lane, parentFrame)
-    container._msufA3ManagedAuraGroups = true
-    container._msufA3ManagedGroupKey = ManagedAuraKey(lane)
-    container.createdButtons = lane.max or 0
-    ConfigureNativeAuraContainer(container, lane.unit)
-
-    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
-    container:AddAuraGroup(container._msufA3ManagedGroupKey, nativeFilter, BuildManagedAuraGroupOptions(container, lane))
-    container._msufA3FilterString = nativeFilter
-    container._msufA3CandidateFilterSignature = candidateFilterSignature
-    container._msufA3SortSignature = AuraSortSignature(lane)
+local function AttachItemEnchantments(container, lane, layoutIndex)
     -- PTR 7 item enchantments: temporary weapon enchants render as native
     -- buttons inside the player buff flow. The frames are CustomAuraButtons,
     -- so the normal initializeFrame styling pipeline applies unchanged.
@@ -284,9 +273,27 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
                 placement = placement and placement.BeforeAuraGroups or 0,
                 elementSpacing = lane.spacing or 0,
                 lineSpacing = lane.spacing or 0,
+                layoutIndex = layoutIndex,
             })
         end
     end
+end
+
+local function CreateManagedNativeLane(container, lane, parentFrame)
+    if not container then return nil end
+    A3.nativeAuraRuntimeAvailable = true
+    ConfigureContainer(container, lane, parentFrame)
+    container._msufA3ManagedAuraGroups = true
+    container._msufA3ManagedGroupKey = ManagedAuraKey(lane)
+    container.createdButtons = lane.max or 0
+    ConfigureNativeAuraContainer(container, lane.unit)
+
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
+    container:AddAuraGroup(container._msufA3ManagedGroupKey, nativeFilter, BuildManagedAuraGroupOptions(container, lane))
+    container._msufA3FilterString = nativeFilter
+    container._msufA3CandidateFilterSignature = candidateFilterSignature
+    container._msufA3SortSignature = AuraSortSignature(lane)
+    AttachItemEnchantments(container, lane)
     if not ApplyManagedAuraGroupLayout(container, container._msufA3ManagedGroupKey, lane) then
         if container.Hide then container:Hide() end
         return nil
@@ -372,12 +379,13 @@ local function CreateManagedNativeSlotLane(container, lane, parentFrame)
 end
 
 -- hot path: kept whole (perf rule)
-local function UpdateAuraGroupEffectiveFilters(container, lane)
-    if not (container and lane and container._msufA3ManagedGroupKey) then return false end
-    local groupKey = container._msufA3ManagedGroupKey
+local function UpdateAuraGroupEffectiveFilters(container, lane, state)
+    state = state or container
+    if not (container and lane and state._msufA3ManagedGroupKey) then return false end
+    local groupKey = state._msufA3ManagedGroupKey
     local nativeFilter, candidateFilters, candidateSignature = EffectiveLaneFilters(lane)
-    local oldFilter = container._msufA3FilterString
-    local oldCandidateSignature = container._msufA3CandidateFilterSignature
+    local oldFilter = state._msufA3FilterString
+    local oldCandidateSignature = state._msufA3CandidateFilterSignature
     local filterChanged = oldFilter ~= nativeFilter
     local candidatesChanged = oldCandidateSignature ~= candidateSignature
     if not filterChanged and not candidatesChanged then return false end
@@ -390,15 +398,15 @@ local function UpdateAuraGroupEffectiveFilters(container, lane)
         and candidateFilters and candidateFilters.includeSpellIDs ~= nil
     if installCandidatesFirst then
         container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
-        container._msufA3CandidateFilterSignature = candidateSignature
+        state._msufA3CandidateFilterSignature = candidateSignature
     end
     if filterChanged then
         container:SetAuraGroupFilterString(groupKey, nativeFilter)
-        container._msufA3FilterString = nativeFilter
+        state._msufA3FilterString = nativeFilter
     end
     if candidatesChanged and not installCandidatesFirst then
         container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
-        container._msufA3CandidateFilterSignature = candidateSignature
+        state._msufA3CandidateFilterSignature = candidateSignature
     end
     return true
 end
@@ -446,21 +454,21 @@ local function UpdateGroupLaneSlot(container, lane)
     return true
 end
 
-local function UpdateGroupFlowLane(container, lane)
-    if not (container and lane and container._msufA3ManagedGroupKey) then return false end
-    local groupKey = container._msufA3ManagedGroupKey
-    UpdateAuraGroupEffectiveFilters(container, lane)
-    if container._msufA3MaxFrameCount ~= lane.max then
+local function UpdateGroupFlowLane(container, lane, state)
+    state = state or container
+    if not (container and lane and state._msufA3ManagedGroupKey) then return false end
+    local groupKey = state._msufA3ManagedGroupKey
+    UpdateAuraGroupEffectiveFilters(container, lane, state)
+    if state._msufA3MaxFrameCount ~= lane.max then
         container:SetAuraGroupMaxFrameCount(groupKey, lane.max)
-        container._msufA3MaxFrameCount = lane.max
+        state._msufA3MaxFrameCount = lane.max
     end
     local sortSignature = AuraSortSignature(lane)
-    if container._msufA3SortSignature ~= sortSignature then
+    if state._msufA3SortSignature ~= sortSignature then
         local sortMethod, sortDirection = AuraSortEnums(lane)
         container:SetAuraGroupSortMethod(groupKey, sortMethod, sortDirection)
-        container._msufA3SortSignature = sortSignature
+        state._msufA3SortSignature = sortSignature
     end
-    container.createdButtons = (container._msufA3FixedButtonCount or 0) + (lane.max or 0)
     return true
 end
 
@@ -668,7 +676,7 @@ local function SyncGroupSlotsGeometry(container, groupSlots, parentFrame, forceG
     local ok = true
     local sensorRoot = groupSlots.sensorRoot
     local spellRoot = groupSlots.spellIndicatorRoot
-    local flowLane = groupSlots.flowLane
+    local flowLane = groupSlots.flowGeometry or groupSlots.flowLane
     -- Fixed AuraSlot buttons receive their final geometry in initializeFrame.
     -- Without a flow group, retain the existing full-root container geometry.
     -- With a flow group, its fixed host must win after Spell Indicator sync
@@ -703,6 +711,18 @@ local function SyncGroupSlotsGeometry(container, groupSlots, parentFrame, forceG
     -- configured 0..30 slot.
     SpellIndicatorsRuntime.RefreshFrameEffects(parentFrame)
     return ok
+end
+
+local function AddManagedFlowGroup(container, lane, state, index)
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
+    local key = ManagedAuraKey(lane)
+    container:AddAuraGroup(key, nativeFilter, BuildManagedAuraGroupOptions(container, lane))
+    state._msufA3ManagedGroupKey = key
+    state._msufA3FilterString = nativeFilter
+    state._msufA3MaxFrameCount = lane.max
+    state._msufA3CandidateFilterSignature = candidateFilterSignature
+    state._msufA3SortSignature = AuraSortSignature(lane)
+    return ApplyManagedAuraGroupLayout(container, key, lane, index)
 end
 
 local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
@@ -756,20 +776,23 @@ local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
     end
     container._msufA3FixedButtonCount = buttonIndex
     if flowLane then
-        local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(flowLane)
         container._msufA3ManagedAuraGroups = true
-        container._msufA3ManagedGroupKey = ManagedAuraKey(flowLane)
-        container:AddAuraGroup(container._msufA3ManagedGroupKey, nativeFilter,
-            BuildManagedAuraGroupOptions(container, flowLane))
-        container._msufA3FilterString = nativeFilter
-        container._msufA3MaxFrameCount = flowLane.max
-        container._msufA3CandidateFilterSignature = candidateFilterSignature
-        container._msufA3SortSignature = AuraSortSignature(flowLane)
-        if not ApplyManagedAuraGroupLayout(container, container._msufA3ManagedGroupKey, flowLane) then
+        local trailing = groupSlots.trailingFlowLane
+        if not AddManagedFlowGroup(container, flowLane, container, trailing and 1 or nil) then
             if container.Hide then container:Hide() end
             return nil
         end
         buttonIndex = buttonIndex + (flowLane.max or 0)
+        if trailing then
+            local state = {}
+            container._msufA3TrailingFlowGroup = state
+            if not AddManagedFlowGroup(container, trailing, state, 2) then
+                if container.Hide then container:Hide() end
+                return nil
+            end
+            AttachItemEnchantments(container, flowLane, 0)
+            buttonIndex = buttonIndex + trailing.max
+        end
     end
     container.createdButtons = buttonIndex
     container._msufA3NativeLaneConfig = groupSlots

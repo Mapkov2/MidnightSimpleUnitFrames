@@ -29,6 +29,7 @@ function Surface.Create(scene)
   local frames = MSUF.Castbars.Frames
   if scene.key == "player" then frames.BuildPlayerCastbarElements(frame)
   else frames.BuildCastbarFrameElements(frame) end
+  frame:Hide()
   return frame
 end
 
@@ -61,9 +62,11 @@ local function Progress(scene)
   local total = math.max(0.01, tonumber(sample.duration) or 4)
   local fraction = tonumber(sample.progress) or 0.6
   if scene.opts.animate and scene.root.animating then
-    fraction = (fraction + scene.root.elapsed / total) % 1
+    local cycle = total + (C.Config.fadeEnabled and 0.32 or 0)
+    fraction = (fraction + scene.root.elapsed / cycle) % 1
   end
   fraction = math.max(0, math.min(1, fraction))
+  fraction = C.Style.Fade.Preview(frame, fraction, total)
   local channel = sample.kind == "CHANNEL"
   local reverse = C.Utils.GetReverseFillSafe(frame, channel)
   local down = channel and C.Utils.GetCastbarCountsDown(frame, true) == true
@@ -74,6 +77,7 @@ local function Progress(scene)
   frame.statusBar:SetMinMaxValues(0, total)
   frame.statusBar:SetValue((down and (1 - fraction) or fraction) * total)
   C.Driver.UpdateCastTimeText_FromStatusBar(frame)
+  return fraction, total
 end
 
 function Surface.Paint(scene)
@@ -88,8 +92,11 @@ function Surface.Paint(scene)
   frame:ClearAllPoints()
   frame:SetPoint(opts.point or "CENTER", scene.root.parent, opts.point or "CENTER", opts.x or 0, opts.y or 0)
   if C.Empower.PlayerCastbar_ClearEmpower then C.Empower.PlayerCastbar_ClearEmpower(frame, false) end
+  frame.interrupted = sample.interrupted == true
   frame.isNotInterruptible = sample.notInterruptible == true
   frame.icon:SetTexture(sample.icon or 136048)
+  C.Utils.CapturePlayerSpellRank(frame, sample.spellID, sample.rank)
+  frame.MSUF_castActive = true
   C.Utils.CB_ApplyTexts(frame, nil, sample.name or "Frostbolt", nil)
   frame.MSUF_castActive = false
   if frame._kickReadyBorderTinted then
@@ -100,7 +107,7 @@ function Surface.Paint(scene)
   C.KickReady.KickReady_ApplyLayout(frame)
   scene.paintTarget(frame, sample)
   C.Core.ApplyCastbarFrameLayer(frame, g, scene.key)
-  Progress(scene)
+  local fraction, total = Progress(scene)
   C.Core.ApplyCastbarSparkVisual(frame, g)
   if scene.key == "player" then
     scene.paintPlayerColor(frame)
@@ -147,7 +154,7 @@ function Surface.Paint(scene)
   -- its owner, or the Options window (FULLSCREEN_DIALOG) covers it.
   local owner = scene.root.parent
   frame:SetFrameStrata(owner:GetFrameStrata())
-  frame:Show()
+  if not frame:IsShown() then C.Style.Fade.Show(frame) end
 end
 
 --- Light clock/sample tick: progress and time text only; the layout of the last full paint stands.

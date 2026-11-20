@@ -90,6 +90,8 @@ assert(loadfile(Join(CORE, "Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames",
 -- Menu pages resolve castbar providers through the same namespace as the core.
 local CastbarFixture = assert(loadfile(Join(ROOT, "tools/tests/castbar_namespace_fixture.lua")))()
 CastbarFixture.Attach(ROOT, MSUF, loadfile)
+-- The spell-rank control reads a capability owned by the real Utils module.
+assert(CastbarFixture.Loader(loadfile)(Join(CORE, "Castbars/MSUF_CastbarUtils.lua")))("MidnightSimpleUnitFrames", MSUF)
 -- The synchronization selector reads actual named profile storage. Reuse the
 -- pure shipped accessor rather than introducing a generator-only replacement.
 local ProfileSlice = require("msuf_source_slice")

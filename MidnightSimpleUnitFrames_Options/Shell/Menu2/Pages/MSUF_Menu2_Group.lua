@@ -392,9 +392,9 @@ local GF_COPY_CATEGORIES = {
             barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars
             powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight
             powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol
-            powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill
+            powerTextDelimiter powerFullValueShort powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill
             powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled
-            powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha
+            powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture fadeInOnShow oocFadeEnabled oocFadeAlpha
             healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB
             deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX
             powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX
@@ -482,6 +482,10 @@ local function CaptureGroupAuraStyle(kind)
         for i = 1, #GROUP_AURA_STYLE_LANE_KEYS do
             local key = GROUP_AURA_STYLE_LANE_KEYS[i]
             values[key] = DeepCopy(source[key])
+        end
+        if MSUF.Client.IsRetail and (lane == "buff" or lane == "debuff")
+            and values.showDurationBar == true and values.durationBarDisplay ~= "OVERLAY" then
+            values.showDurationBar = false
         end
     end
     return snapshot
@@ -702,13 +706,13 @@ local function AttachGroupSectionUX(ctx)
             "powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth", prefixes = "detachedPower" },
         range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled
             and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
-        transparency = { fields = "hpBarAlpha hpBgAlpha oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha " ..
+        transparency = { fields = "hpBarAlpha hpBgAlpha fadeInOnShow oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha " ..
             "alphaExcludeTextPortrait alphaExcludePredictionBars", summary = function(c) return Number((c.hpBarAlpha or 1) * 100) .. "%" end },
         dispel = { prefixes = "dispelOverlay" },
         dispelSymbol = { prefixes = "dispelSymbol" },
         dstripe = { prefixes = "debuffStripe" },
         layout_advanced = { fields = "growth unitsPerColumn maxColumns preserveRaidGroups collapseEmptyGroups " ..
-            "hideMythicGroupsFiveToEight centerSolo smallRaidAsParty" },
+            "hideMythicGroupsFiveToEight centerSolo smallRaidAsParty showPartyInRaid" },
         party_targets = { prefixes = "targets" },
         group_pets = { prefixes = "pets" },
         friendly_bosses = { prefixes = "friendlyBoss" },

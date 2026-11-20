@@ -327,7 +327,9 @@ function Health.Layout(frame, spec, powerEnabled)
   if not bar then return end
   spec = spec or frame.MSUFSpec
   local power = spec and spec.power
-  if powerEnabled == nil then powerEnabled = power and power.enabled == true end
+  if powerEnabled == nil then
+    powerEnabled = power and power.enabled == true and frame._msufPowerResourceMissing ~= true
+  end
   local powerInset = 0
   if powerEnabled == true and power and power.embed ~= false and power.detached ~= true then
     powerInset = tonumber(power.height) or 3
@@ -831,6 +833,10 @@ local function UpdateGroup(frame, event, unit)
   return UpdateSingle(frame, event, unit, true)
 end
 
+-- In combat this upvalue is the original sampler (or legacy group updater).
+-- Switching it at the boundary leaves compiled UNIT_HEALTH routes unchanged.
+local readGroupHealth = UnitHealthPercent
+
 -- Fold the group percent write, runtime-color gate, and steady status update
 -- into one pass. Text-free/deferred routes use it directly; the immediate
 -- percent-text wrapper below publishes its result only to that consumer.
@@ -840,7 +846,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
   local bar = frame and frame.hpBar
   if not (bar and unit) then return end
   local healthTick = event == "UNIT_HEALTH"
-  local pct = UnitHealthPercent(unit, true, SCALE_100)
+  local pct = readGroupHealth(unit, true, SCALE_100)
   local secret = issecretvalue(pct) == true
   if not secret and (type(pct) ~= "number" or pct ~= pct or (pct - pct) ~= 0) then pct = 0 end
   if bar._msufMinMax ~= 100 then
@@ -929,12 +935,40 @@ end
 -- Native API and curve availability are fixed when this module loads. Bind
 -- the supported updater once; a legacy client retains its guarded absolute
 -- route without a capability decision on every update.
-if not (UnitHealthPercent and SCALE_100) then
+local groupHealthByPhase, retryGroupHealth
+if UnitHealthPercent and SCALE_100 then
+  local function ReadGroupHealthOutOfCombat(unit, predicted, curve)
+    C.RetryGroupRezzUnit(unit)
+    return UnitHealthPercent(unit, predicted, curve)
+  end
+  groupHealthByPhase = { [false] = UnitHealthPercent, [true] = UnitHealthPercent }
+  retryGroupHealth = ReadGroupHealthOutOfCombat
+else
+  local function UpdateGroupHealthOutOfCombat(frame, event, unit)
+    if event == "UNIT_HEALTH" then C.RetryGroupRezzUnit(unit) end
+    return UpdateGroup(frame, event, unit)
+  end
+  readGroupHealth = UpdateGroup
+  groupHealthByPhase = { [false] = UpdateGroup, [true] = UpdateGroup }
+  retryGroupHealth = UpdateGroupHealthOutOfCombat
   UpdateGroupPercentLean = function(frame, event, unit)
     unit = unit or frame.MSUFUnitKey
     if not (frame and frame.hpBar and unit) then return end
-    return UpdateGroup(frame, event, unit)
+    return readGroupHealth(frame, event, unit)
   end
+end
+
+-- Healthy groups keep the original native health reader until a resurrection
+-- leaves a class color unresolved. Combat always uses the direct reader.
+function C.WatchGroupRezzHealth(watch)
+  local update = watch and retryGroupHealth or groupHealthByPhase[false]
+  groupHealthByPhase[true] = update
+  if C.groupRezzOutOfCombat then readGroupHealth = update end
+end
+
+function C.SetGroupRezzOutOfCombat(outOfCombat)
+  readGroupHealth = groupHealthByPhase[outOfCombat]
+  C.groupRezzOutOfCombat = outOfCombat
 end
 
 -- Only the synchronous percent-text route consumes this sample. Its selector

@@ -28,7 +28,8 @@ local function ChangelogData()
     return UsableHistory(MSUF.MSUF_FullChangelog) or UsableHistory(MSUF.MSUF_Changelog)
 end
 
--- The optional Suite owns its release history and exposes it from its core addon.
+-- The optional Suite owns its release history. It loads with MSUF_Suite_Options,
+-- which the Suite attaches as soon as this options addon has loaded.
 local function SuiteChangelogData()
     return UsableHistory(MSUF.SuiteLink.GetChangelog())
 end
@@ -44,15 +45,20 @@ local function SeenField(source)
     return source == "suite" and "seenSuiteChangelogVersion" or "seenChangelogVersion"
 end
 
-local function BulletParts(value)
+local function ChangelogLinkSupported(link)
+    return type(link) == "table" and (link.settingKey ~= "player.pvpIndicatorCountdownEnabled"
+        or MSUF.UF.Config.Status.SupportsPVPCountdown("player"))
+end
+
+function M.GetChangelogBullet(value)
     if type(value) == "table" then
-        return tostring(value.text or ""), type(value.link) == "table" and value.link or nil
+        return tostring(value.text or ""), ChangelogLinkSupported(value.link) and value.link or nil
     end
     return tostring(value or ""), nil
 end
 
 local function OpenMenuLink(link)
-    if type(link) ~= "table" then return false end
+    if not ChangelogLinkSupported(link) then return false end
     local pageKey = tostring(link.pageKey or "")
     local query = tostring(link.query or "")
     local label = tostring(link.label or query)
@@ -229,7 +235,7 @@ local function BuildFullChangelog(ctx)
                         AddText(sectionTitle or "", "GameFontNormal", isHighlights and T.colors.accent or T.colors.accent2,
                             34, contentWidth - 32, 8, "section")
                         for bulletIndex = 1, #section.bullets do
-                            local text, link = BulletParts(section.bullets[bulletIndex])
+                            local text, link = M.GetChangelogBullet(section.bullets[bulletIndex])
                             local dot = PixelLayoutRegion(root:CreateTexture(nil, "ARTWORK"))
                             dot:SetSize(5, 5)
                             dot:SetPoint("TOPLEFT", root, "TOPLEFT", 44, y - 6)

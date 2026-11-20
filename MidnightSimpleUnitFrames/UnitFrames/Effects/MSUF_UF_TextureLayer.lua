@@ -50,6 +50,11 @@ if not issecretvalue then
 end
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
+local UNIT_FRAME_TEXTURE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\TextureLayers\\UnitFrame.tga"
+local UNIT_FRAME_PATHS = {
+  ["msuf_suite/media/blizzardframes/unitframe"] = true,
+  ["midnightsimpleunitframes/media/texturelayers/unitframe"] = true,
+}
 local EDGE_SOFTNESS_MASK_ROOT = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\texture_layer_edge_softness_"
 local EDGE_SOFTNESS_STEP = 0.02
 local EDGE_SOFTNESS_MAX = 0.30
@@ -157,7 +162,10 @@ end
 local function ResolveLayerTexture(conf, prefix, keys)
   local custom = conf[keys and keys.CustomTexturePath or (prefix .. "CustomTexturePath")]
   local sourceMode = conf[keys and keys.SourceMode or (prefix .. "SourceMode")]
-  if sourceMode ~= "SHAREDMEDIA" and type(custom) == "string" and custom ~= "" then return custom end
+  if sourceMode ~= "SHAREDMEDIA" and type(custom) == "string" and custom ~= "" then
+    local path = custom:lower():gsub("\\", "/"):gsub("^interface/addons/", ""):gsub("%.tga$", "")
+    return UNIT_FRAME_PATHS[path] and UNIT_FRAME_TEXTURE or custom
+  end
   if sourceMode == "PACK" or sourceMode == "CUSTOM" then return WHITE8 end
   local key = conf[keys and keys.Texture or (prefix .. "Texture")]
   if type(key) == "string" and key ~= "" then

@@ -1350,6 +1350,20 @@ end
 U.IsGlobalCooldownAnchorEnabled = IsGlobalCooldownAnchorEnabled
 ExportPublic("MSUF_GlobalCooldownAnchorEnabled", IsGlobalCooldownAnchorEnabled)
 
+-- Exact critically damped spring step, shared by menu and gameplay surfaces.
+local SpringExp = math.exp
+function Util.SpringDecay(rate, elapsed)
+    return SpringExp(-rate * elapsed)
+end
+
+function Util.StepSpring(value, velocity, target, rate, elapsed, decay)
+    local offset = value - target
+    local impulse = velocity + rate * offset
+    decay = decay or SpringExp(-rate * elapsed)
+    return target + (offset + impulse * elapsed) * decay,
+        (velocity - rate * impulse * elapsed) * decay
+end
+
 local function IsGroupUnitToken(unit)
     return type(unit) == "string" and (unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil)
 end

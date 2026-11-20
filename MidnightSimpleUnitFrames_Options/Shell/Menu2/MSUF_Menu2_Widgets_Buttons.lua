@@ -312,7 +312,7 @@ end
 -- native ease-out as Suite Skin: reverse playback of a 167 ms ease-in.
 -- Drivers have no OnUpdate script once settled.
 do
-    local exp, abs = math.exp, math.abs
+    local StepSpring, abs = MSUF.Util.StepSpring, math.abs
     local SPRING_RATE, CLICK_DURATION, HOVER_DURATION = 80, 0.14, 0.12
     local TAB_RATE, TAB_DURATION = 65, 0.16
     local FOLD_DURATION = 0.150
@@ -415,13 +415,10 @@ do
         end
         driver.age = driver.age + elapsed
         local rate = driver.rate
-        local decay, settled = exp(-rate * elapsed), true
+        local settled = true
         for i = 1, #driver.channels do
             local c = driver.channels[i]
-            local offset = c.value - c.target
-            local b = c.velocity + rate * offset
-            c.value = c.target + (offset + b * elapsed) * decay
-            c.velocity = (c.velocity - rate * b * elapsed) * decay
+            c.value, c.velocity = StepSpring(c.value, c.velocity, c.target, rate, elapsed)
             if abs(c.value - c.target) > 0.01 or abs(c.velocity) > 0.1 then settled = false end
         end
         PaintMotion(driver)

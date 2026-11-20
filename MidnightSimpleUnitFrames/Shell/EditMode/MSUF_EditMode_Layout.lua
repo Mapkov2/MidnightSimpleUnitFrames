@@ -725,21 +725,8 @@ local function OnUpdate(self, elapsed)
                 if type(U.FramePositionValues) == "function" then
                     displayX, displayY = U.FramePositionValues(d.bar)
                 end
-                local fallbackX
-                if not displayX then
-                    local left = snapCX - d.halfW
-                    local right = snapCX + d.halfW
-                    local centerX = screenW * 0.5
-                    if right <= centerX then
-                        fallbackX = right - centerX
-                    elseif left >= centerX then
-                        fallbackX = left - centerX
-                    else
-                        fallbackX = 0
-                    end
-                end
                 d.mover._coordFS:SetText(format("%.0f, %.0f",
-                    displayX or round(fallbackX),
+                    displayX or round(snapCX - screenW * 0.5),
                     displayY or round(snapCY + d.halfH - screenH * 0.5)))
             end
         end
@@ -1099,9 +1086,9 @@ Kinds.Bind("group", BuildDrag, ApplyGroupDragPosition, FinishGroupDrag)
 Kinds.Bind("external", BuildDrag, ApplyExternalStrategy, FinishExternalDrag)
 
 --- A typed visual position is one complete drag transaction. Match the
---- native center-facing X edge / top Y edge, retain the real mover bounds,
+--- native center X / top Y coordinates, retain the real mover bounds,
 --- and leave pixel rounding, preview, save and rollback with the drag owner.
-function Ticker.SetExternalPosition(key, axis, value)
+function Ticker.SetExternalPosition(key, axis, value, relative)
     if IsConfigCombatLocked() or not MSUF.EditModeAPI.IsActive() or activeDrag then return false end
     if (issecretvalue and issecretvalue(value)) or (axis ~= "x" and axis ~= "y") then return false end
     value = tonumber(value)
@@ -1111,18 +1098,20 @@ function Ticker.SetExternalPosition(key, axis, value)
     if not (cfg and cfg.externalPublicElement and external and undo) then return false end
     local bar = external.GetPositionFrame(key)
     if not bar then return false end
-    local x, y = U.FramePositionValues(bar)
-    if value == (axis == "x" and x or y) then return false end
-    local left, right, top = MSUF.Geometry.EditRect(bar)
-    local uiLeft, uiRight, uiTop, uiBottom = MSUF.Geometry.EditRect(UIParent)
-    local centerX, centerY = (uiLeft + uiRight) * 0.5, (uiTop + uiBottom) * 0.5
     local dx, dy = 0, 0
-    if axis == "x" then
-        local edge = value < 0 and right or value > 0 and left
-            or (right <= centerX and right or left >= centerX and left or nil)
-        if edge then dx = centerX + value - edge end
+    if relative and axis == "x" then
+        -- Provider commits can round in the frame's own coordinate space.
+        dx = U.HorizontalScreenStep(value, MSUF.Geometry.ScaleRatio(bar, "edit"))
     else
-        dy = centerY + value - top
+        local x, y = U.FramePositionValues(bar)
+        if value == (axis == "x" and x or y) then return false end
+        local left, right, top = MSUF.Geometry.EditRect(bar)
+        local uiLeft, uiRight, uiTop, uiBottom = MSUF.Geometry.EditRect(UIParent)
+        if axis == "x" then
+            dx = (uiLeft + uiRight - left - right) * 0.5 + value
+        else
+            dy = (uiTop + uiBottom) * 0.5 + value - top
+        end
     end
     local mover = EM2.Movers.Get(key)
     if not mover then

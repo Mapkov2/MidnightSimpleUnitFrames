@@ -79,7 +79,7 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
         "cooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor)
     local rawStrata = ReadRaw(layout, nil, spec.strataKey)
     if issecretvalue(rawStrata) == true then rawStrata = nil end
-    return FinalizeLane(MSUF.AuraConfig.StampLaneGeometry({
+    local lane = MSUF.AuraConfig.StampLaneGeometry({
         kind = kind,
         appearanceKind = kind,
         rootKey = spec.rootKey,
@@ -161,7 +161,13 @@ local function CompileUnitLane(unit, laneLayout, layout, filtersRoot, kind, cand
             spec.stackYKey, "stackTextOffsetY", DEFAULT_SHARED.stackTextOffsetY, -2000, 2000),
     },
         iconShape, requestedIconShape, spacing, size + spacing, Round(perRow), cols, rows,
-        growthX, growthY, xSign, ySign, verticalGrowth == true, ButtonAnchor(xSign, ySign)))
+        growthX, growthY, xSign, ySign, verticalGrowth == true, ButtonAnchor(xSign, ySign))
+    lane.showDurationBar = lane.showDurationBar and lane.durationBarDisplay == "OVERLAY"
+    if ReadBool(laneLayout, nil, spec.showAuraBarsKey, false) then
+        local fill = ReadRaw(laneLayout, nil, spec.auraBarFillKey)
+        MSUF.AuraConfig.ApplyAuraBarGeometry(lane, fill, false, ReadRaw(laneLayout, nil, spec.auraBarStyleKey))
+    end
+    return FinalizeLane(lane)
 end
 
 local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, shared, sharedSignatures)
@@ -229,7 +235,7 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         and type(UnitIsPlayerControlledOrGroupMember) ~= "function" then
         identityCandidateMode = "assist"
     end
-    return FinalizeLane(MSUF.AuraConfig.StampLaneGeometry({
+    local lane = MSUF.AuraConfig.StampLaneGeometry({
         kind = kind,
         appearanceKind = sharedLane,
         rootKey = spec.rootKey,
@@ -278,7 +284,14 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         stackY = ClampNumber(source[spec.stackYKey] or source.stackY, 0, -2000, 2000),
     },
         iconShape, requestedIconShape, spacing, size + spacing, Round(perRow), cols, rows,
-        growthX, growthY, xSign, ySign, verticalGrowth == true, ButtonAnchor(xSign, ySign)), sharedLane, sharedSignatures)
+        growthX, growthY, xSign, ySign, verticalGrowth == true, ButtonAnchor(xSign, ySign))
+    if kind == "buff" or kind == "debuff" then
+        lane.showDurationBar = lane.showDurationBar and lane.durationBarDisplay == "OVERLAY"
+        if source[spec.showAuraBarsKey] == true then
+            MSUF.AuraConfig.ApplyAuraBarGeometry(lane, source[spec.auraBarFillKey], true, source[spec.auraBarStyleKey])
+        end
+    end
+    return FinalizeLane(lane, sharedLane, sharedSignatures)
 end
 
 return {

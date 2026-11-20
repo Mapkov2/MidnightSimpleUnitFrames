@@ -1,6 +1,7 @@
 -- menu_named_page_interfaces.lua <root> <client> [ownedBaseline] [--observe]
 local root, flavor = assert(arg[1]):gsub("\\", "/"):gsub("/$", ""), arg[2] or "Mainline"
-local observe = arg[4] == "--observe"
+local observe = arg[3] == "--observe" or arg[4] == "--observe"
+if arg[3] == "--observe" then arg[3] = nil end
 local captured = {}
 local contracts = {
     Frame = {
@@ -130,6 +131,7 @@ local portraitSegments = { ["unit/portrait/workspace_tab"] = true,
     ["unit/portrait/portraitsizemode"] = true, ["unit/portrait/position"] = true }
 local function Receipt(page, tab)
     local entry, rows = M.cache[page], {}
+    local resourcePresenceControls = 0
     for _, record in ipairs(M.RuntimeControlCatalog.GetRecords()) do
         local control = M.RuntimeControlCatalog.Get(record.controlId)
         local widget = control and control.widget
@@ -154,9 +156,17 @@ local function Receipt(page, tab)
                 assert(height == 26 or (observe and height == 24), "portrait segment height changed")
                 height = 24
             end
-            rows[#rows + 1] = Encode({ record, values, command and command.get and command.get(), low, high,
-                widget.valueStep, widget._msuf2SearchMeta, widget._msuf2ExactTargetContracts, widget:IsShown(), widget:IsEnabled(),
-                widget:GetWidth(), height })
+            -- The new resource-presence toggle is tested explicitly; retain the
+            -- positional parity receipt for every pre-existing control.
+            if setting:match("%.powerHideMissingResource$") then
+                assert(record.label == "Hide when resource is missing" and command.get() == false,
+                    "resource-presence toggle changed its identity or opt-in default")
+                resourcePresenceControls = resourcePresenceControls + 1
+            else
+                rows[#rows + 1] = Encode({ record, values, command and command.get and command.get(), low, high,
+                    widget.valueStep, widget._msuf2SearchMeta, widget._msuf2ExactTargetContracts, widget:IsShown(), widget:IsEnabled(),
+                    widget:GetWidth(), height })
+            end
         end
     end
     assert(#rows > 0, page .. " did not build portrait/power controls")
@@ -166,8 +176,11 @@ local function Receipt(page, tab)
         for i = 1, #row do a = (a + row:byte(i)) % 65521; b = (b + a) % 65521 end
     end
     local portrait, power = entry.sections.portrait, entry.sections.power_bar
+    assert(resourcePresenceControls == (power and not arg[3] and 1 or 0), "resource-presence toggle missing or duplicated")
+    -- The new opt-in row increases the owning section by exactly 24 px.
+    local powerHeight = power and power:GetHeight() - (arg[3] and 0 or 24) or "absent"
     local receipt = string.format("PARITY %s %s %s controls=%d digest=%.0f heights=%s/%s", flavor, page, tab, #rows, b * 65536 + a,
-        portrait and portrait:GetHeight() or "absent", power and power:GetHeight() or "absent")
+        portrait and portrait:GetHeight() or "absent", powerHeight)
     receipts[#receipts + 1] = receipt
     if observe then print(receipt) end
 end
@@ -200,6 +213,7 @@ local a, b = 1, 0
 local receiptText = table.concat(receipts, "\n")
 for i = 1, #receiptText do a = (a + receiptText:byte(i)) % 65521; b = (b + a) % 65521 end
 local expected = assert(expectedReceipts[flavor], "unsupported receipt client")
+if observe then print("NAMED_DIGEST " .. flavor .. " " .. #receipts .. " " .. string.format("%.0f", b * 65536 + a)) end
 assert(#receipts == expected[1] and b * 65536 + a == expected[2], "portrait/power page build changed from positional baseline")
 print("PASS named page interfaces " .. flavor .. ": " .. count .. " required fields; " .. builds .. " real sections; one binding per owner")
 

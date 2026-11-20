@@ -17,6 +17,7 @@ local pairs = pairs
 local floor = math.floor
 local table_sort = table.sort
 local table_concat = table.concat
+local IS_FOREVER = MSUF.Client.IsForever == true
 
 local function Num(value, fallback)
   value = tonumber(value)
@@ -422,6 +423,41 @@ local function NormalizeFrameEffect(frame)
   }
 end
 
+local WEAKENED_SOUL_DISPEL_TYPES = { Magic = true, Curse = true, Disease = true, Poison = true, Bleed = true }
+
+local function WeakenedSoulFilterSpellID(si)
+  local priestIDs = IS_FOREVER and si.SpellIDs and si.SpellIDs.ClassicPriest
+  return priestIDs and priestIDs.WeakenedSoul
+end
+
+function GF.SpellIndicatorUsesWeakenedSoulFilter(specKey, auraName, entry)
+  if not IS_FOREVER or not specKey or not auraName then return false end
+  local si = SpellIndicatorModule()
+  local spellID = WeakenedSoulFilterSpellID(si)
+  if not spellID then return false end
+  local ids = {}
+  return AddSpellIDsForAura(ids, nil, si, specKey, auraName, entry) == 1 and ids[spellID] == true
+end
+
+local function ResolveSpellIndicatorFilter(si, ids, onlyOwn, externalDefensive)
+  if #ids == 1 and ids[1] == WeakenedSoulFilterSpellID(si) then
+    -- Forever refuses exact spell-ID matching for secret debuffs on allies.
+    -- Use Blizzard's own candidate fields and display the matched aura's icon
+    -- and duration. Other short player-style debuffs may share these fields.
+    local candidates = {
+      maxDuration = 15.5,
+      excludeDispelTypes = WEAKENED_SOUL_DISPEL_TYPES,
+      isBossOrRoleAura = false,
+    }
+    if onlyOwn then return "HARMFUL|PLAYER|!CROWD_CONTROL", candidates, "weakened-soul:own" end
+    candidates.isFromPlayerOrPlayerPet = true
+    return "HARMFUL|!CROWD_CONTROL", candidates, "weakened-soul:any"
+  end
+  if externalDefensive then
+    return onlyOwn and "HELPFUL|EXTERNAL_DEFENSIVE|PLAYER" or "HELPFUL|EXTERNAL_DEFENSIVE"
+  end
+end
+
 local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, globalLayer, iconScale)
   if type(entry) ~= "table" or entry.enabled == false then return nil end
   local ids, hash = {}, {}
@@ -443,11 +479,8 @@ local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, gl
   end
   local externalDefensive = type(si.IsExternalDefensiveAura) == "function"
     and si.IsExternalDefensiveAura(specKey, auraName, entry) == true
-  local nativeFilter
-  if externalDefensive then
-    nativeFilter = onlyOwn and "HELPFUL|EXTERNAL_DEFENSIVE|PLAYER"
-      or "HELPFUL|EXTERNAL_DEFENSIVE"
-  end
+  local nativeFilter, candidateFilters, candidateFilterSignature =
+    ResolveSpellIndicatorFilter(si, ids, onlyOwn, externalDefensive)
   return {
     key = tostring(specKey) .. ":" .. tostring(auraName),
     specKey = specKey,
@@ -462,7 +495,9 @@ local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, gl
     externalDefensive = externalDefensive,
     nativeFilter = nativeFilter,
     spellIDs = ids,
-    includeSpellIDs = hash,
+    includeSpellIDs = not candidateFilters and hash or nil,
+    candidateFilters = candidateFilters,
+    candidateFilterSignature = candidateFilterSignature,
     spellIDSignature = SpellIDSignature(ids),
     placed = placed,
     frame = frame,
@@ -509,7 +544,7 @@ end
 
 --- Spell indicators keep the old 5.7 per-spell model, but the runtime consumes
 --- this as 12.1 CustomAuraContainer aura slots. Each item is one manually
---- anchored, exact SpellID-filtered helpful aura slot plus optional frame effect.
+--- anchored native aura slot plus an optional frame effect.
 function GF.CompileSpellIndicators(conf, kind)
   local si = SpellIndicatorModule()
   local siCfg = type(conf and conf.spellIndicators) == "table" and conf.spellIndicators or nil

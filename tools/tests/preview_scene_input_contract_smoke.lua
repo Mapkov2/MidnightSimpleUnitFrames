@@ -2,6 +2,7 @@
 local root, flavor = assert(arg[1]):gsub("\\", "/"):gsub("/$", ""), arg[2] or "Mainline"
 local MW = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local activeNative, nativeCalls = false, 0
+local liveUnits, portraitRevision = {}, 1
 local mw = MW.Open(root, flavor, { page = "home", beforeCore = function(world)
     if arg[4] == "budget" then
         for name, native in pairs(world.widgets.Methods) do
@@ -11,6 +12,34 @@ local mw = MW.Open(root, flavor, { page = "home", beforeCore = function(world)
                     return native(...)
                 end
             end
+        end
+    else
+        local methods = world.widgets.Methods
+        local setTexture = methods.SetTexture
+        function methods:SetTexture(art)
+            self.nativePortraitUnit = nil
+            setTexture(self, art)
+        end
+        local registerEvent, registerUnitEvent = methods.RegisterEvent, methods.RegisterUnitEvent
+        function methods:RegisterEvent(event)
+            self["portraitEventUnit_" .. event] = nil
+            registerEvent(self, event)
+        end
+        function methods:RegisterUnitEvent(event, unit, ...)
+            if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
+                self["portraitEventUnit_" .. event] = unit
+            end
+            registerUnitEvent(self, event, unit, ...)
+        end
+        world.env.UnitExists = function(unit) return liveUnits[unit] == true end
+        world.env.UnitIsPlayer = function(unit) return unit == "player" end
+        world.env.SetPortraitTexture = function(texture, unit, unmasked)
+            -- GetTexture exposes a render-target name, but SetTexture cannot bind it.
+            setTexture(texture, "RTPortrait1")
+            texture:SetTexCoord(0, 1, 0, 1)
+            texture.nativePortraitUnit, texture.nativePortraitRevision = unit, portraitRevision
+            texture.nativePortraitUnmasked = unmasked
+            texture.nativePortraitDraws = (texture.nativePortraitDraws or 0) + 1
         end
     end
     if not arg[3] or arg[3] == "-" then return end
@@ -135,4 +164,91 @@ cell:RefreshData()
 assert(select(1, sampleTimer:GetFont()) == path, "scene repaint discarded Options font input")
 box:Hide()
 rootScene:Deactivate()
-print("preview_scene_input_contract_smoke " .. flavor .. ": font/sample/layer inputs survive scene repaint")
+-- Open the actual Player preview with an available live portrait.
+local Preview = mw.core.UFPreview
+local player = env.MSUF_DB.player
+player.portraitMode, player.portraitRender, player.portraitShape = "LEFT", "2D", "BLIZZARD"
+player.portraitFlip = true
+liveUnits.player = true
+mw.core.UF.Config.Refresh()
+assert(mw:Select("uf_player"))
+local playerBox = assert(Preview.active)
+local playerFrame = playerBox._unitScene:Frame()
+local portrait = assert(playerFrame.portrait)
+local function CheckLivePortrait()
+    assert(playerBox:IsShown(), "player preview is hidden")
+    assert(portrait.nativePortraitUnit == "player", "native portrait never reached the visible preview texture")
+    assert(portrait.nativePortraitRevision == portraitRevision, "preview kept an old appearance")
+    assert(portrait:IsShown() and playerFrame.MSUFPortraitHolder:IsShown(), "player portrait is hidden")
+    assert(playerFrame.MSUFUnitKey == nil and playerFrame:GetAttribute("unit") == nil, "preview bound a real unit")
+    local config = playerFrame.MSUFSpec.portrait
+    assert(portrait.nativePortraitUnmasked == ((config.shape == "BLIZZARD") or nil), "preview dropped the native bust mode")
+    local left, right, top, bottom = portrait:GetTexCoord()
+    assert(left == config.texL and right == config.texR and top == config.texT and bottom == config.texB,
+        "native portrait paint discarded the configured crop")
+end
+CheckLivePortrait()
+for _, event in ipairs({ "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "PORTRAITS_UPDATED" }) do
+    portraitRevision = portraitRevision + 1
+    local draws = portrait.nativePortraitDraws
+    for _ = 1, 3 do mw:Fire(event, "player") end
+    mw:RunTimers()
+    CheckLivePortrait()
+    assert(portrait.nativePortraitDraws == draws + 1, "portrait events bypassed the preview refresh queue")
+end
+liveUnits.player = false
+Preview.Refresh(playerBox, "TEST_FALLBACK")
+assert(portrait.nativePortraitUnit == nil and portrait:GetTexture() == Preview.Model.UNIT_DATA.player.portraitTexture,
+    "missing player kept native art instead of the preview sample")
+liveUnits.player = true
+player.portraitRender, player.portraitClassStyle = "CLASS", "RONDO_COLOR"
+mw.core.UF.Config.Refresh()
+Preview.Refresh(playerBox, "TEST_CLASS")
+assert(portrait.nativePortraitUnit == nil and portrait:GetTexture() ~= "RTPortrait1", "class mode painted a live portrait")
+player.portraitRender = "2D"
+mw.core.UF.Config.Refresh()
+Preview.Refresh(playerBox, "TEST_2D")
+CheckLivePortrait()
+
+mw.world:EnterCombat()
+portraitRevision = portraitRevision + 1
+mw:Fire("UNIT_PORTRAIT_UPDATE", "player")
+mw:RunTimers()
+assert(portrait.nativePortraitRevision ~= portraitRevision, "portrait refreshed during combat")
+mw.world:LeaveCombat()
+mw:RunTimers()
+assert(M.Open("uf_player") ~= false)
+mw:RunTimers()
+playerBox = assert(Preview.active)
+playerFrame = playerBox._unitScene:Frame()
+portrait = assert(playerFrame.portrait)
+CheckLivePortrait()
+
+local playerDriver = playerBox._msufLiveStateDriver
+assert(playerDriver.portraitEventUnit_UNIT_PORTRAIT_UPDATE == "player", "player portrait event lost its unit filter")
+if mw.core.Client.SupportsUnit("targettarget") then
+    local target = env.MSUF_DB.targettarget
+    target.portraitMode, target.portraitRender = "LEFT", "2D"
+    liveUnits.targettarget = true
+    mw.core.UF.Config.Refresh()
+    assert(mw:Select("uf_targettarget"))
+    local dependentBox = assert(Preview.active)
+    assert(dependentBox.key == "targettarget", "dependent preview did not open")
+    local driver = dependentBox._msufLiveStateDriver
+    assert(driver:IsEventRegistered("UNIT_MODEL_CHANGED") and driver.portraitEventUnit_UNIT_MODEL_CHANGED == nil,
+        "dependent preview filtered its model event by unit")
+    local image = assert(dependentBox._unitScene:Frame().portrait)
+    portraitRevision = portraitRevision + 1
+    mw:Fire("UNIT_MODEL_CHANGED", "target")
+    mw:RunTimers()
+    assert(image.nativePortraitUnit == "targettarget" and image.nativePortraitRevision == portraitRevision,
+        "dependent preview did not repaint its bound portrait")
+end
+
+local activeBox = Preview.active
+local activeDriver = activeBox._msufLiveStateDriver
+MW.FireVisibilityScripts(activeBox)
+activeBox:Hide()
+assert(not activeDriver:IsEventRegistered("PORTRAITS_UPDATED"), "hidden preview retained its portrait events")
+
+print("preview_scene_input_contract_smoke " .. flavor .. ": font/sample/layer inputs and native portrait refresh")

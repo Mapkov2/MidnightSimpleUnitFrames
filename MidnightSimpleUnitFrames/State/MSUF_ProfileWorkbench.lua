@@ -5,6 +5,93 @@ MSUF.ProfileWorkbench = W
 local providers = {}
 local MAX_POINTS, MAX_BYTES = 12, 8 * 1024 * 1024
 local MAX_ID = 9007199254740990
+local MAX_SNAPSHOT_FIELDS, MAX_SNAPSHOT_DEPTH = 131072, 32
+local shared = setmetatable({}, { __mode = "k" })
+local published = setmetatable({}, { __mode = "k" })
+local IsSecret = MSUF.Util.IsSecret
+
+local function PlainTable(value)
+    return type(value) == "table" and not IsSecret(value) and getmetatable(value) == nil
+end
+
+local function Stored()
+    local global = MSUF_GlobalDB
+    local meta = PlainTable(global) and global.global
+    local saved = PlainTable(meta) and meta.profileWorkbench
+    if PlainTable(saved) and not IsSecret(saved.version) and saved.version == 1 and PlainTable(saved.points) then
+        return saved
+    end
+end
+
+-- Share exact subtrees at the same position in two saved snapshots.
+-- A field that differs is still independent, including a missing key.
+local function ShareTable(current, previous, depth, budget)
+    if depth >= MAX_SNAPSHOT_DEPTH or not PlainTable(current) or not PlainTable(previous) then return false end
+    if current == previous then return true end
+    local equal, fields = true, 0
+    for key, value in pairs(current) do
+        if budget.remaining == 0 then return false end
+        budget.remaining = budget.remaining - 1
+        fields = fields + 1
+        local keyType = type(key)
+        if IsSecret(key) or (keyType ~= "string" and keyType ~= "number" and keyType ~= "boolean") then return false end
+        local older = previous[key]
+        local kind = type(value)
+        if kind ~= type(older) then
+            equal = false
+        elseif kind == "table" then
+            if ShareTable(value, older, depth + 1, budget) then
+                current[key] = older
+                budget.shared = true
+            else
+                equal = false
+            end
+        elseif kind ~= "string" and kind ~= "number" and kind ~= "boolean" then
+            equal = false
+        elseif IsSecret(value) or IsSecret(older) or value ~= older
+            or (kind == "number" and value == 0 and 1 / value ~= 1 / older) then
+            equal = false
+        end
+    end
+    if not equal then return false end
+    for _ in pairs(previous) do
+        fields = fields - 1
+        if fields < 0 then return false end
+    end
+    return fields == 0
+end
+
+local function SharePoint(point, previous, budget)
+    budget.shared = false
+    if ShareTable(point.snapshot, previous.snapshot, 0, budget) then
+        point.snapshot = previous.snapshot
+        budget.shared = true
+    end
+    if budget.shared then shared[point], shared[previous] = true, true end
+end
+
+local function PrivatePoint(point)
+    return PlainTable(point) and not published[point] and PlainTable(point.snapshot) and PlainTable(point.snapshot.core)
+end
+
+function W.CompactStoredPoints()
+    local saved = Stored()
+    if not saved then return end
+    local points = saved.points
+    -- Current snapshots already have an 8 MiB budget. Bound the work here
+    -- as well because older SavedVariables may contain malformed points.
+    local budget = { remaining = MAX_SNAPSHOT_FIELDS }
+    local previous
+    for i = math.min(#points, MAX_POINTS), 1, -1 do
+        if budget.remaining == 0 then break end
+        local point = points[i]
+        if PrivatePoint(point) then
+            if previous then SharePoint(point, previous, budget) end
+            previous = point
+        end
+    end
+end
+
 local function Whole(value, maximum)
     return type(value) == "number" and value >= 0 and value <= maximum and value == math.floor(value)
 end
@@ -14,10 +101,8 @@ end
 -- Called before a new owner is published, or after a rename is accepted.
 -- Do not initialize profiles here: lifecycle callers may still be binding one.
 function W.RenameOrDeleteProfilePoints(source, destination)
-    local global = MSUF_GlobalDB
-    local meta = type(global) == "table" and global.global
-    local saved = type(meta) == "table" and meta.profileWorkbench
-    if type(saved) ~= "table" or saved.version ~= 1 or type(saved.points) ~= "table" then return end
+    local saved = Stored()
+    if not saved then return end
     for i = #saved.points, 1, -1 do
         local point = saved.points[i]
         if type(point) == "table" then
@@ -113,7 +198,7 @@ function W.Snapshot()
             for root in pairs(provider.OwnsRoots or {}) do core[root] = nil end
         end
     end
-    local budget = { maxBytes = MAX_BYTES, count = 0, limit = 131072, maxDepth = 32 }
+    local budget = { maxBytes = MAX_BYTES, count = 0, limit = MAX_SNAPSHOT_FIELDS, maxDepth = MAX_SNAPSHOT_DEPTH }
     local copy, valid = Fields.CopySnapshot({ core = core, providers = extra }, budget)
     if not valid then return nil, "Restore point exceeds the storage limit." end
     local bytes = (budget.bytes or 0) + (budget.count or 0) * 64
@@ -132,6 +217,12 @@ function W.Checkpoint(label, automatic)
     saved.serial = (tonumber(saved.serial) or 0) + 1
     local point = { id = saved.serial, profile = ProfileName(), label = tostring(label or "Restore point"):sub(1, 96),
         automatic = automatic == true, snapshot = snapshot, bytes = bytes, time = GetServerTime() }
+    for _, previous in ipairs(saved.points) do
+        if PrivatePoint(previous) then
+            SharePoint(point, previous, { remaining = MAX_SNAPSHOT_FIELDS })
+            break
+        end
+    end
     table.insert(saved.points, 1, point)
     local total = 0
     for i = #saved.points, MAX_POINTS + 1, -1 do table.remove(saved.points, i) end
@@ -142,10 +233,25 @@ function W.Checkpoint(label, automatic)
     end
     return true, point.id
 end
-function W.Points()
+function W.Points(metadataOnly)
     local result = {}
-    for _, point in ipairs(Storage().points) do
-        if point.profile == ProfileName() then result[#result + 1] = point end
+    local points = Storage().points
+    local name = ProfileName()
+    for _, point in ipairs(points) do
+        if point.profile == name then
+            if metadataOnly == true then
+                result[#result + 1] = { id = point.id, label = point.label, automatic = point.automatic, time = point.time }
+            else
+                -- Preserve the writable snapshot for callers that ask for it.
+                -- A published point must never donate shared children.
+                if shared[point] then
+                    point.snapshot = MSUF.Util.DeepCopy(point.snapshot)
+                    shared[point] = nil
+                end
+                published[point] = true
+                result[#result + 1] = point
+            end
+        end
     end
     return result
 end
@@ -240,8 +346,12 @@ function W.ApplySnapshot(snapshot, label)
     return true
 end
 function W.Restore(id)
-    for _, point in ipairs(W.Points()) do
-        if point.id == id then return W.ApplySnapshot(point.snapshot, "Before restoring a version") end
+    local points = Storage().points
+    local name = ProfileName()
+    for _, point in ipairs(points) do
+        if point.id == id and point.profile == name then
+            return W.ApplySnapshot(point.snapshot, "Before restoring a version")
+        end
     end
     return false, "Restore point unavailable."
 end

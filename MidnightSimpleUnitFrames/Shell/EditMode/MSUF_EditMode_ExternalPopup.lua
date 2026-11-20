@@ -15,8 +15,20 @@ local function Blocked()
     return Quick.BlockConfigCombatLocked and Quick.BlockConfigCombatLocked() or false
 end
 
+-- Quick buttons come in two looks: the plain one keeps its caption in _label,
+-- the menu-styled one (Quick.Button with Menu2Style.Button) in _msuf2Label and
+-- sets it through its own SetText.
+local function ButtonLabel(button)
+    return button and (button._label or button._msuf2Label) or nil
+end
+
 local function SetButtonText(button, text)
-    if button and button._label and button._label.SetText then button._label:SetText(text or "") end
+    if not button then return end
+    if button._label then
+        if button._label.SetText then button._label:SetText(text or "") end
+    elseif button._msuf2Label and button.SetText then
+        button:SetText(text or "", true)
+    end
 end
 
 local function SetButtonEnabled(button, enabled)
@@ -36,8 +48,16 @@ end
 
 local function ApplyPosition(axis, box)
     if Blocked() or not (frame and frame._key) or frame._syncing then return end
-    EM2.Ticker.SetExternalPosition(frame._key, axis, box:GetText())
+    local applied = EM2.Ticker.SetExternalPosition(frame._key, axis, box:GetText())
     Popup.Sync()
+    return applied
+end
+
+local function StepX(amount)
+    if Blocked() or not (frame and frame._key) or frame._syncing then return false end
+    local applied = EM2.Ticker.SetExternalPosition(frame._key, "x", amount, true)
+    Popup.Sync(frame.xBox)
+    return applied
 end
 
 local function OpenSettings()
@@ -58,11 +78,20 @@ local CONTROLS_TOP, CONTROL_ROW_H, BUTTONS_TOP, BASE_HEIGHT = -144, 40, -150, 26
 --- owner without the readout (sizeSummary = false) lifts every row by it.
 local POSITION_TOP, SUMMARY_LIFT = -104, 28
 
-local function ApplyNumberControl(id, box)
-    if Blocked() or not (frame and frame._key) or frame._syncing then return end
-    local fallback = tonumber(External.GetControlValue(frame._key, id)) or 0
-    External.ApplyControl(frame._key, id, Quick.San(box:GetText(), fallback))
-    Popup.Sync()
+local function ApplyNumberControl(id, box, step)
+    if Blocked() or not (frame and frame._key) or frame._syncing then return false end
+    local current = External.GetControlValue(frame._key, id)
+    if issecretvalue and issecretvalue(current) then return false end
+    local fallback = tonumber(current) or 0
+    local value = step and (fallback + step) or Quick.San(box:GetText(), fallback)
+    local applied = External.ApplyControl(frame._key, id, value)
+    Popup.Sync(step and box)
+    return applied
+end
+
+local function NumberStepper(spec, holder, field)
+    if spec.positionAxis ~= "x" then return nil end
+    return function(amount) return ApplyNumberControl(spec.id, holder[field], amount) end
 end
 
 local function ApplyToggleControl(id, checked)
@@ -108,13 +137,74 @@ local function LabelWidth(text)
     return (frame._labelProbe:GetStringWidth() or 0) * 1.08
 end
 
+-- Anchor registries can be long. Clip only these owned menus and scroll
+-- their existing rows; the shared quick-popup menu keeps its old behavior.
+local function ScrollChoices(menu)
+    local rows, width = menu._items or {}, menu:GetWidth()
+    if not menu._choiceScroll then
+        local scroll = CreateFrame("ScrollFrame", nil, menu)
+        scroll:SetPoint("TOPLEFT", 2, -3)
+        scroll:SetPoint("BOTTOMRIGHT", -2, 3)
+        local content = CreateFrame("Frame", nil, scroll)
+        scroll:SetScrollChild(content)
+        menu._choiceScroll, menu._choiceContent = scroll, content
+        menu:EnableMouseWheel(true)
+        menu:SetScript("OnMouseWheel", function(_, delta)
+            local limit = math.max(0, content:GetHeight() - scroll:GetHeight())
+            scroll:SetVerticalScroll(math.max(0, math.min(limit, scroll:GetVerticalScroll() - delta * 48)))
+        end)
+    end
+    local count = 0
+    for i, item in ipairs(rows) do
+        item:SetParent(menu._choiceContent)
+        item:ClearAllPoints()
+        item:SetPoint("TOPLEFT", 0, -(i - 1) * 24)
+        if item:IsShown() then count = i end
+    end
+    menu._choiceContent:SetSize(width - 4, math.max(1, count * 24))
+    menu:SetHeight(math.min(12, count) * 24 + 8)
+    menu._choiceScroll:SetVerticalScroll(0)
+end
+
+local function ChoiceButton(spec, y, set)
+    local openedKey
+    local choice = { id = spec.id, label = spec.label }
+    local function Entries()
+        openedKey = frame._key
+        choice.key = nil
+        local values = External.GetControlChoices(openedKey, spec.id) or {}
+        local rows, current = {}, External.GetControlValue(openedKey, spec.id)
+        if issecretvalue and issecretvalue(current) then return rows end
+        for i, value in ipairs(values) do
+            rows[i] = { label = value.text, value = value.value, highlight = current == value.value }
+        end
+        return rows
+    end
+    local button, menu = Quick.MenuButtonAt(frame, spec.label, 20, y, 380, 32, Entries, function(row)
+        if Blocked() or frame._key ~= openedKey then return end
+        External.ApplyControl(openedKey, spec.id, row.value)
+        Popup.Sync()
+    end, { flashSelection = false })
+    local label = ButtonLabel(button)
+    if label then
+        label:SetWidth(356)
+        label:SetMaxLines(1)
+    end
+    menu:HookScript("OnShow", function() ScrollChoices(menu) end)
+    choice.btn = button
+    set.choices[#set.choices + 1] = choice
+    set.rows[#set.rows + 1] = button
+end
+
 local function BuildControlSet(controls, lift)
-    local set = { rows = {}, numbers = {}, toggles = {}, height = 0 }
+    local set = { rows = {}, numbers = {}, toggles = {}, choices = {}, height = 0 }
     local top = CONTROLS_TOP + lift + (OwnerPositionControls(controls) and CONTROL_ROW_H or 0)
-    local numbers, toggles = {}, {}
+    local numbers, toggles, choices = {}, {}, {}
     for i = 1, #controls do
         local spec = controls[i]
-        if spec.kind == "number" then numbers[#numbers + 1] = spec else toggles[#toggles + 1] = spec end
+        if spec.kind == "number" then numbers[#numbers + 1] = spec
+        elseif spec.kind == "choice" then choices[#choices + 1] = spec
+        else toggles[#toggles + 1] = spec end
     end
     local rowIndex = 0
     local index = 1
@@ -130,7 +220,8 @@ local function BuildControlSet(controls, lift)
             row = Quick.ValuePairAt(holder, frame, 20, y,
                 first.label, "boxA", function() ApplyNumberControl(first.id, holder.boxA) end,
                 second.label, "boxB", function() ApplyNumberControl(second.id, holder.boxB) end,
-                { boxWidth = 48 })
+                { boxWidth = 48, onStepFirst = NumberStepper(first, holder, "boxA"),
+                    onStepSecond = NumberStepper(second, holder, "boxB") })
             holder.boxA._msufStep = tonumber(first.step)
             holder.boxB._msufStep = tonumber(second.step)
             set.numbers[#set.numbers + 1] = { id = first.id, box = holder.boxA }
@@ -139,7 +230,7 @@ local function BuildControlSet(controls, lift)
         else
             row = Quick.SingleValueAt(holder, frame, 20, y,
                 first.label, "boxA", function() ApplyNumberControl(first.id, holder.boxA) end,
-                { boxWidth = 48 })
+                { boxWidth = 48, onStep = NumberStepper(first, holder, "boxA") })
             holder.boxA._msufStep = tonumber(first.step)
             set.numbers[#set.numbers + 1] = { id = first.id, box = holder.boxA }
             index = index + 1
@@ -164,6 +255,10 @@ local function BuildControlSet(controls, lift)
             set.rows[#set.rows + 1] = btnB
         end
         index = index + 2
+    end
+    for _, spec in ipairs(choices) do
+        rowIndex = rowIndex + 1
+        ChoiceButton(spec, top - (rowIndex - 1) * CONTROL_ROW_H, set)
     end
     set.height = rowIndex * CONTROL_ROW_H
     return set
@@ -196,11 +291,24 @@ local function LayoutControls(key, lift)
     return set
 end
 
-local function SyncControlValues(set, key)
+local function SyncControlValues(set, key, committedBox)
     if not set then return end
+    for _, choice in ipairs(set.choices) do
+        local value = External.GetControlValue(key, choice.id)
+        if issecretvalue and issecretvalue(value) then value = nil end
+        if choice.key ~= key or choice.value ~= value then
+            local text = "Unavailable"
+            for _, row in ipairs(External.GetControlChoices(key, choice.id) or {}) do
+                if row.value == value then text = row.text break end
+            end
+            local tr = Quick.Tr or tostring
+            SetButtonText(choice.btn, tr("%s: %s"):format(tr(choice.label), tr(text)))
+            choice.key, choice.value = key, value
+        end
+    end
     for i = 1, #set.numbers do
         local value = External.GetControlValue(key, set.numbers[i].id)
-        Quick.SetBoxText(set.numbers[i].box, value ~= nil and value or "")
+        Quick.SetBoxText(set.numbers[i].box, value ~= nil and value or "", set.numbers[i].box == committedBox)
     end
     for i = 1, #set.toggles do
         set.toggles[i].btn:SetCheckedVisual(External.GetControlValue(key, set.toggles[i].id) == true)
@@ -232,7 +340,7 @@ local function Build()
     frame._positionRow = Quick.ValuePairAt(frame, frame, 20, POSITION_TOP,
         "X", "xBox", function() ApplyPosition("x", frame.xBox) end,
         "Y", "yBox", function() ApplyPosition("y", frame.yBox) end,
-        { boxWidth = 48 })
+        { boxWidth = 48, onStepFirst = StepX })
 
     frame._settingsBtn = Quick.ButtonAt(frame, "Open settings", 20, BUTTONS_TOP, 252, 36, OpenSettings, {
         variant = "primary", hoverWash = true,
@@ -245,7 +353,7 @@ local function Build()
     return frame
 end
 
-function Popup.Sync()
+function Popup.Sync(committedBox)
     if not (frame and frame._key) then return false end
     local label, group, settingsLabel, canSettings, canReset = External.GetDisplayInfo(frame._key)
     if not label then
@@ -261,7 +369,7 @@ function Popup.Sync()
     frame._summaryFS:SetShown(summary)
     frame._positionRow:ClearAllPoints()
     frame._positionRow:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, POSITION_TOP + lift)
-    Quick.SetBoxText(frame.xBox, x ~= nil and x or "")
+    Quick.SetBoxText(frame.xBox, x ~= nil and x or "", frame.xBox == committedBox)
     Quick.SetBoxText(frame.yBox, y ~= nil and y or "")
     local ownedPosition = OwnerPositionControls(External.GetControls(frame._key))
     frame._positionRow:SetShown(not ownedPosition)
@@ -276,7 +384,7 @@ function Popup.Sync()
         frame.yBox:ClearFocus()
     end
     local set = LayoutControls(frame._key, lift)
-    SyncControlValues(set, frame._key)
+    SyncControlValues(set, frame._key, committedBox)
     local extra = (set and set.height or 0) - (ownedPosition and CONTROL_ROW_H or 0) - lift
     frame._settingsBtn:ClearAllPoints()
     frame._settingsBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, BUTTONS_TOP - extra)

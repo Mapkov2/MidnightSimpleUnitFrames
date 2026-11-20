@@ -39,7 +39,8 @@ env.UnitLevel = function() return 60 end
 env.AbbreviateLargeNumbers = tostring
 env.AbbreviateNumbers = tostring
 env.BreakUpLargeNumbers = tostring
-env.GetPhysicalScreenSize = function() return 2560, 1440 end
+local physicalHeight = 1440
+env.GetPhysicalScreenSize = function() return 2560, physicalHeight end
 env.C_PetInfo = { GetPetHappiness = function() return 3, 1.25, 0 end }
 world:Boot()
 local failure = world:FirstFailure()
@@ -763,6 +764,170 @@ do
     Check(registry.getFrame()._msufGFLiveAnchor == live, "raid popup did not switch to live bounds")
     CheckRaidSteps("live raid", live)
     Public("MSUF_EM2_HideGFPopup")("raid")
+end
+
+-- Drive the real popup button handlers. The frame spans screen center in both
+-- directions, so its X readout must move through zero with the frame.
+do
+    env.IsControlKeyDown, env.IsShiftKeyDown, env.IsAltKeyDown = function() return false end,
+        function() return false end, function() return false end
+    local function SetScale(uiScale, unitScale)
+        db.general.msufUiScale = unitScale
+        db.general.UIScale = { Enabled = true, Scale = uiScale }
+        ui:SetScale(uiScale)
+    end
+    SetScale(768 / physicalHeight, 1)
+
+    local function Popup(name)
+        for _, widget in ipairs(world.widgets.frames) do
+            if widget.frameName == name then return widget end
+        end
+        error("missing popup: " .. name)
+    end
+
+    local function Click(box, amount)
+        local point, adjacent = box:GetPoint()
+        local button = adjacent
+        if (point == "RIGHT") ~= (amount > 0) then
+            button = nil
+            for _, widget in ipairs({ box:GetParent():GetChildren() }) do
+                local _, relative = widget:GetPoint()
+                if relative == box and widget:GetScript("OnClick") then button = widget end
+            end
+        end
+        assert(button and button:GetScript("OnClick"), "missing X step button")(button)
+        world.widgets:RunTimers()
+    end
+
+    local function CrossZero(label, popup, region)
+        Check(tonumber(popup.xBox:GetText()) == -1, label .. ": initial X is not the frame center")
+        for _, step in ipairs({ { 1, 0 }, { 1, 1 }, { -1, 0 }, { -1, -1 } }) do
+            local x, y = CenterUI(region)
+            Click(popup.xBox, step[1])
+            local nextX, nextY = CenterUI(region)
+            Check(math.abs(nextX - x - step[1]) < 0.001 and nextY == y
+                and tonumber(popup.xBox:GetText()) == step[2], label .. ": X step did not move smoothly through zero")
+        end
+    end
+
+    local unit = core.UF.frames.player
+    local settings = db.player
+    local function ResetUnit(unitScale, point, x, y)
+        unit:SetScale(unitScale)
+        settings.point, settings.relativePoint, settings.anchorToUnitframe = point, "CENTER", "GLOBAL"
+        settings.anchorFrameName, settings.screenPositionMode = nil, nil
+        settings.width, settings.height, settings.offsetX, settings.offsetY = 275, 40, x, y
+        core.UF.Config.RefreshUnit("player")
+        assert(core.UF.Apply("player"))
+        EM2.Movers.SyncKey("player")
+        assert(EM2.UnitPopup.Open("player", EM2.Movers.Get("player")))
+        world.widgets:RunTimers()
+        EM2.UnitPopup.Sync()
+        return Popup("MSUF_EM2_UnitPopup")
+    end
+    local p = ResetUnit(1, "CENTER", -1, -86)
+    CrossZero("player frame", p, unit)
+    p.xBox.focused = true
+    p.xBox:SetText("7")
+    Click(p.xBox, 1)
+    Check(tonumber(p.xBox:GetText()) == 8 and settings.offsetX == 8,
+        "player frame: +/- failed to commit a pending X draft before stepping")
+    p.xBox:ClearFocus()
+    EM2.UnitPopup.Close()
+
+    p = ResetUnit(1, "LEFT", -250, -86)
+    local oldLeft, oldY = unit:GetLeft(), settings.offsetY
+    p.wBox:SetText("301")
+    p.wBox:GetScript("OnEnterPressed")(p.wBox)
+    world.widgets:RunTimers()
+    Check(settings.width == 301 and settings.height == 40 and settings.offsetY == oldY
+        and unit:GetLeft() == oldLeft, "legacy left anchor shifted on resize")
+    EM2.UnitPopup.Close()
+
+    physicalHeight = 900
+    SetScale(0.3, 0.8)
+    p = ResetUnit(0.8, "RIGHT", -53, -103)
+    local scalePixel = 768 / physicalHeight / 0.3
+    local x, y = CenterUI(unit)
+    Click(p.xBox, 1)
+    local newX, newY = CenterUI(unit)
+    Check(math.abs(newX - x - scalePixel) < 0.001 and newY == y, "scaled player: plus was swallowed")
+    Click(p.xBox, -1)
+    newX, newY = CenterUI(unit)
+    Check(math.abs(newX - x) < 0.001 and newY == y, "scaled player: minus was swallowed")
+    EM2.UnitPopup.Close()
+    physicalHeight = 1440
+    SetScale(768 / physicalHeight, 1)
+
+    -- A preview may exist with no live target castbar. Its reanchor must
+    -- still apply the same saved X as the normal live path.
+    db.general.castbarTargetDetached, db.general.showTargetCastbar = true, true
+    db.general.castbarTargetOffsetX, db.general.castbarTargetOffsetY = -1, -100
+    assert(EM2.CastPopup.Open("target"))
+    local cast = core.Castbars
+    local bar = assert(cast.Frames and cast.Frames.Get("targetPreview") or env.MSUF_TargetCastbarPreview)
+    NativeGeometry(bar)
+    EM2.CastPopup.Sync()
+    CrossZero("target castbar preview", Popup("MSUF_EM2_CastPopup"), bar)
+    EM2.CastPopup.Close()
+
+    -- Supply a lane rect and a synchronous renderer. The popup and layout
+    -- mutations still use the real aura owner and undo route.
+    local auras = core.MSUF_Auras3
+    local lane = env.CreateFrame("Frame", nil, ui)
+    NativeGeometry(lane)
+    lane:SetSize(200, 26)
+    local profile = db.auras3
+    profile.perUnit = profile.perUnit or {}
+    local layout = { buffGroupOffsetX = -1, buffGroupOffsetY = 25 }
+    profile.perUnit.player = { overrideLayout = true, layout = layout }
+    auras.EditMode.groups = auras.EditMode.groups or {}
+    auras.EditMode.groups.player = { buff = lane }
+    core.ExportPublic("MSUF_EM2_ActiveAuraGroup", "buff")
+    local function PaintLane()
+        lane:ClearAllPoints()
+        lane:SetPoint("CENTER", ui, "CENTER", layout.buffGroupOffsetX, layout.buffGroupOffsetY)
+    end
+    auras.RequestScope, auras.RefreshEditPreview = PaintLane, PaintLane
+    PaintLane()
+    assert(EM2.AuraPopup.Open("player", lane))
+    CrossZero("buff lane", Popup("MSUF_EM2_AuraPopup"), lane)
+    EM2.AuraPopup.Close()
+
+    local target = env.CreateFrame("Frame", nil, ui)
+    NativeGeometry(target)
+    target:SetSize(150, 40)
+    local state = { x = -1, y = 120 }
+    local function PlaceTarget(x, y)
+        target:ClearAllPoints()
+        target:SetPoint("CENTER", ui, "CENTER", x, y)
+    end
+    PlaceTarget(state.x, state.y)
+    assert(core.EditModeAPI.RegisterElement("StepTest", {
+        id = "generic", label = "External position test", getFrame = function() return target end,
+        captureState = function() return { x = state.x, y = state.y } end,
+        restoreState = function(saved)
+            state.x, state.y = saved.x, saved.y
+            PlaceTarget(state.x, state.y)
+            return true
+        end,
+        movePosition = function(request)
+            local x, y = request.state.x + request.deltaX, request.state.y + request.deltaY
+            PlaceTarget(x, y)
+            if request.phase == "commit" then state.x, state.y = x, y end
+            return true
+        end,
+    }))
+    EM2.Movers.SyncAll()
+    NativeGeometry(assert(EM2.Movers.Get("external:steptest:generic")))
+    assert(EM2.ExternalPopup.Open("external:steptest:generic"))
+    local external = Popup("MSUF_EM2_ExternalPopup")
+    CrossZero("generic Suite mover", external, target)
+    external.xBox:SetText("9")
+    external.xBox:GetScript("OnEnterPressed")(external.xBox)
+    Check(state.x == 9 and state.y == 120, "generic Suite mover: typed X target changed")
+    EM2.ExternalPopup.Close()
+
 end
 assert(#failures==0,"unitframe_editmode_movement_smoke failed:\n"..table.concat(failures,"\n"))
 print("unitframe_editmode_movement_smoke: PASS ("..checks.." checks)")

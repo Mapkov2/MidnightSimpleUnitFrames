@@ -911,7 +911,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
     local base = {}
     if type(existing) == "table" and (plan.foreignAura or existing[AuraTransfer.StorageKey]
         or not MSUF_ProfileIO_ImportVariants or not MSUF_ProfileIO_ImportBlizzardEM) then
-        base = existing
+        base = MSUF.ProfileNormalize.ResolveStoredProfile(existing)
         if isActive and Variants and type(MSUF_DB) == "table" then
             local why
             base, why = Variants.BaseSnapshot(MSUF_DB, true)
@@ -960,6 +960,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
             existing[k] = v
         end
         MSUF_GlobalDB.profiles[profileKey] = existing
+        MSUF.DefaultsSchema.CompactInactiveProfile(MSUF_GlobalDB, profileKey)
         MSUF_ProfileIO_ReportImportWarnings()
         ImportTx.ReportKeptVariants(plan)
         MSUF.ProfileIOCompleteFirstLoadImport()
@@ -969,6 +970,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
         MSUF.ProfileWorkbench.RenameOrDeleteProfilePoints(profileKey)
     end
     MSUF_GlobalDB.profiles[profileKey] = newTable
+    MSUF.DefaultsSchema.CompactInactiveProfile(MSUF_GlobalDB, profileKey)
     MSUF_ProfileIO_ReportImportWarnings()
     MSUF.ProfileIOCompleteFirstLoadImport()
     return true

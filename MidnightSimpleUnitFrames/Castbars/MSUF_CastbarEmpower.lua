@@ -7,6 +7,7 @@
 local _, MSUF = ...
 local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarEmpower.lua").Castbars
 local Config = Castbars.Config
+local Fade = Castbars.Style.Fade
 local Empower = Castbars.Empower
 local Engine = Castbars.Engine
 local Manager = Castbars.Manager
@@ -526,6 +527,7 @@ end
 
 local function PlayerCastbarEmpowerStart(frame)
     if not frame or not frame.statusBar then return end
+    if frame._msufFadeDriver then Fade.Begin(frame) end
 
     frame.isEmpower = true
     frame.interruptFeedbackEndTime = nil
@@ -541,6 +543,7 @@ local function PlayerCastbarEmpowerStart(frame)
         if not spellName then spellName, _, icon = UnitChannelInfo("player") end
     end
 
+    Utils.CapturePlayerSpellRank(frame, nil)
     if frame.icon and icon then
         frame.icon:SetTexture(icon)
     end
@@ -602,8 +605,9 @@ local function PlayerCastbarEmpowerStart(frame)
         end)
     end
 
+    Player.UpdateTargetText(frame)
     frame:SetScript("OnUpdate", nil)
-    frame:Show()
+    if Config.fadeEnabled or frame._msufFadeDriver then Fade.Show(frame) else frame:Show() end
     -- Castbars/MSUF_Castbars.lua (loads after this file) owns the manager.
     Manager.RegisterCastbar(frame)
     Manager.UpdateCastbarFrame(frame, 0)

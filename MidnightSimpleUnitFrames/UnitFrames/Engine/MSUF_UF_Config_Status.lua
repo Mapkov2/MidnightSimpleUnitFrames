@@ -225,6 +225,10 @@ end
 local IS_FOREVER = MSUF.Client.IsForever == true
 local PVP_CONTEXT_GATED = IS_FOREVER or MSUF.Client.Family == "Classic"
 
+local function SupportsPVPCountdown(unit)
+  return IS_FOREVER and unit == "player"
+end
+
 -- Classic and Forever follow the player's PvP flag. Keep configured indicators
 -- ready so a flag change in combat only updates textures.
 if PVP_CONTEXT_GATED then
@@ -636,6 +640,7 @@ local function CompileUnitStatus(out, conf, general, key)
 
   local pvp = status.pvp
   pvp.configuredEnabled = pvp.enabled
+  pvp.countdownEnabled = SupportsPVPCountdown(key) and StatusBool(conf, nil, "pvpIndicatorCountdownEnabled", true)
   if SupportsPVPFactionBadge(key) then
     pvp.followsTarget = true
     pvp.showOpenWorldFaction = conf and conf.pvpIndicatorShowOpenWorldFaction == true
@@ -661,4 +666,5 @@ Config.Status = {
   ClampLayer = ClampStatusLayer,
   CompileUnit = CompileUnitStatus,
   SupportsPVPFactionBadge = SupportsPVPFactionBadge,
+  SupportsPVPCountdown = SupportsPVPCountdown,
 }

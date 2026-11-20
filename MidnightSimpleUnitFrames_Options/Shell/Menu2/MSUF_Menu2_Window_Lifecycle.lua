@@ -294,6 +294,7 @@ function M.Open(pageKey)
     EnsurePersistentMenuState()
     M.ApplyLocaleSelection()
     local f = BuildWindow()
+    if not f:IsShown() then M.resumeUnitFrameSetupOnImport = nil end
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     f._msuf2Minimized = nil
     ApplyMenuFrameScale(f)

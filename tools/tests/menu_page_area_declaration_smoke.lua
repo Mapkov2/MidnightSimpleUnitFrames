@@ -46,7 +46,18 @@ if mode == "declarations" then
         end
         assert(declaration.sectionUX and declaration.sectionUX.sections, "area lost its section UX declaration")
     end
-    assert(#entry.pageAreas.auras.declaration.values == 34 and #entry.pageAreas.texture.declaration.values == 3)
+    local hasBars = flavor == "Mainline" or flavor == "Forever"
+    assert(#entry.pageAreas.auras.declaration.values == (hasBars and 36 or 34))
+    assert(#entry.pageAreas.texture.declaration.values == 3)
+    local control = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.spacing"
+    assert(not entry.sections.auras._msuf2CollapsibleEntry.open and not entry.guidedRegions.unit_aura_tools
+        and not M.RuntimeControlCatalog.Get(control), "closed aura workspace constructed its controls")
+    local _, found, exact = M.Search._CoreAPI.OpenSearchTarget("uf_target", "Spacing", nil, nil, nil, {
+        sectionId = "auras", controlId = control, prepareKind = "unitAuraWorkspace", prepareValue = "buff_layout",
+    })
+    assert(found and exact and entry.sections.auras._msuf2CollapsibleEntry.open
+        and entry.guidedRegions.unit_aura_tools and M.RuntimeControlCatalog.Get(control),
+        "exact search did not build and open the closed aura workspace")
 elseif mode == "normalize" then
     for id, area in pairs(entry.pageAreas) do
         local selector = area.select
@@ -85,5 +96,6 @@ else
         if record and record.settingKey == "target.texLayerCustomTexturePath" then found = true end
     end
     assert(found, "forced eager build left the closed texture section unbuilt")
+    assert(entry.guidedRegions.unit_aura_tools, "eager projection missed the aura workspace")
 end
 print("menu_page_area_declaration_smoke " .. flavor .. " " .. mode .. ": ok")

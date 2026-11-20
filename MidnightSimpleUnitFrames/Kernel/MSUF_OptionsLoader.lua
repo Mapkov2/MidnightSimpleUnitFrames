@@ -1,5 +1,6 @@
 --- Zero-idle LoadOnDemand facade for MidnightSimpleUnitFrames_Options.
---- This file deliberately creates no frame, event, hook, ticker, or timer.
+--- This file deliberately creates no frame, event, hook, or ticker. Only a
+--- menu-bound /msuf queues one-shot C_Timer.After(0) callbacks, on demand.
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -252,6 +253,43 @@ end
 
 RegisterDeferredOptionCommands()
 
+--- Same cold-open boundary as MSUF.OpenOptionsFromLauncher (Kernel/MSUF_Keybinds.lua).
+--- A /msuf action-bar macro runs inside the secure UseAction click, whose script
+--- budget cannot cover the Options load plus the first skinned window build
+--- ("script ran too long"). The click only stores the message; the load and the
+--- dispatch each run in their own later frame. Last message within a frame wins.
+local queuedSlash
+local RunQueuedSlash
+
+local function QueueSlashFrame()
+    local timer = C_Timer
+    if not (timer and timer.After) then return false end
+    timer.After(0, RunQueuedSlash)
+    return true
+end
+
+RunQueuedSlash = function()
+    local msg = queuedSlash
+    if msg == nil then return end
+    if not IsReady() then
+        if not EnsureOptionsLoaded("slash:/msuf") then
+            queuedSlash = nil
+            return
+        end
+        if QueueSlashFrame() then return end
+    end
+    queuedSlash = nil
+    return MSUF.SlashCommands.Dispatch(msg)
+end
+
+local function QueueSlash(msg)
+    local scheduled = queuedSlash ~= nil
+    queuedSlash = msg
+    if scheduled or QueueSlashFrame() then return true end
+    queuedSlash = nil
+    return DispatchSlashAfterLoad(msg)
+end
+
 local function DispatchSlash(msg)
     msg = tostring(msg or "")
     local word = msg:match("^%s*(%S+)")
@@ -260,16 +298,18 @@ local function DispatchSlash(msg)
     --- Core-owned commands do not need the options UI. Keep them genuinely
     --- lightweight; `help` is the exception because its established output
     --- includes Menu2-owned commands after the Options module registers them.
-    if entry and tostring(word):lower() ~= "help" then
+    --- Cold Options stubs (edit, search, tour, ...) load the UI, so they queue.
+    if entry and entry._msufOptionsLODDeferred ~= true and tostring(word):lower() ~= "help" then
         return commands.Dispatch(msg)
     end
-    --- Preserve already-loaded core diagnostics in combat without attempting a
-    --- new addon load. Menu/page/search/edit commands still use the established
-    --- configuration-lock message.
-    if ConfigurationLocked() and entry then
-        return commands.Dispatch(msg)
+    --- In combat nothing loads or builds: preserve already-loaded core
+    --- diagnostics and answer menu/page/search/edit commands immediately with
+    --- the established configuration-lock message.
+    if ConfigurationLocked() then
+        if entry then return commands.Dispatch(msg) end
+        return DispatchSlashAfterLoad(msg)
     end
-    return DispatchSlashAfterLoad(msg)
+    return QueueSlash(msg)
 end
 
 if _G.SlashCmdList == nil then

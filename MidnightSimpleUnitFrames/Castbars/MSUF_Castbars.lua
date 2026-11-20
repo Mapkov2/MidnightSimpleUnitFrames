@@ -141,6 +141,13 @@ end
 
 local function SetPlayerCastbarEventsRegistered(frame, enabled)
     if not frame then return end
+    local sent = enabled and Config.Read("player").showTargetName == true
+    if frame._msufPlayerSentRegistered ~= sent then
+        frame._msufPlayerSentRegistered = sent
+        if sent then frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player", "vehicle")
+        else frame:UnregisterEvent("UNIT_SPELLCAST_SENT") end
+    end
+    Player.SyncSuccessEvent(frame, enabled)
 
     if enabled then
         if frame._msufPlayerEventsRegistered then return end
@@ -270,6 +277,11 @@ local function BuildPlayerCastbarElements(frame)
     timeText:SetJustifyH("RIGHT")
     timeText:SetText("")
     frame.timeText = timeText
+    frame.castTargetText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
+    frame.CastTargetNameText = frame.castTargetText
+    frame.castTargetText:SetFont(fontPath, 10, fontFlags)
+    frame.castTargetText:SetText("")
+    frame.castTargetText:Hide()
 
     local latencyBar = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY"))
     latencyBar:SetColorTexture(1, 0, 0, 0.25)
@@ -316,7 +328,7 @@ Frames.BuildPlayerCastbarElements = BuildPlayerCastbarElements
 local function CreatePlayerCastbarFrame()
     local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent))
     BuildPlayerCastbarElements(frame)
-    SetPlayerCastbarEventsRegistered(frame, true)
+    SetPlayerCastbarEventsRegistered(frame, Bridge.IsCastbarEnabledForUnit("player"))
     local runtime = Castbars.Runtime
     if runtime and runtime.PrewarmNativeTimeText then
         runtime:PrewarmNativeTimeText(frame)
@@ -488,7 +500,7 @@ local function UpdateFastTextFrame(frame, elapsed)
     frame._msufRemaining = remaining
 
     if remaining <= 0.001 then
-        if frame.SetSucceeded then frame:SetSucceeded() else frame:Hide() end
+        if frame.SetSucceeded then frame:SetSucceeded() else Runtime.CB_ResetStateOnStop(frame, "STOPPED") end
         return true
     end
 
@@ -1008,8 +1020,7 @@ local function CompleteOrHideFrame(frame)
     if frame.SetSucceeded then
         frame:SetSucceeded()
     else
-        UnregisterCastbar(frame)
-        if frame.Hide then frame:Hide() end
+        Runtime.CB_ResetStateOnStop(frame, "STOPPED")
     end
 end
 
@@ -1153,7 +1164,7 @@ local function CheckChannelHardStop(frame, sampleTime)
 
     local threshold = frame._msufHardStopChanThresh or HARD_STOP_CHANNEL_THRESHOLD
     if (sampleTime - noChannelSince) >= threshold then
-        if frame.SetSucceeded then frame:SetSucceeded() else frame:Hide() end
+        if frame.SetSucceeded then frame:SetSucceeded() else Runtime.CB_ResetStateOnStop(frame, "STOPPED") end
         return true
     end
 

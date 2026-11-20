@@ -7,6 +7,7 @@ local CooldownAnchorDecision = Parts.CooldownAnchorDecision
 local CooldownAnchorSupported = Parts.CooldownAnchorSupported
 local CurrentStage = Parts.CurrentStage
 local EditDone = Parts.EditDone
+local IsQuickPlacement = Parts.IsQuickPlacement
 local EditModeStatus = Parts.EditModeStatus
 local Gfx = Parts.Gfx
 local Invoke = Parts.Invoke
@@ -167,7 +168,7 @@ local function BuildChapterPage(ctx, T, W, stage)
         Header(b, all and "Part 1 of 3 - Unitframes" or "Unitframes", "Build Player once. Copy it when it feels right.")
         InfoCard(b, T, "Move the whole frame", "Edit Mode: drag the Player mover to place the frame on screen.", "uf_player", 76)
         InfoCard(b, T, "Change its size", "Click the mover in Edit Mode: its popup contains Width, Height, and other frame details.", "uf_player", 82)
-        InfoCard(b, T, "Then Copy To", "Tune Player in the Live Preview, select All, and copy the result to another Unitframe.", "uf_target", 82)
+        InfoCard(b, T, "Copy To Settings", "Tune Player in the Live Preview, select All, and copy the result to another Unitframe.", "uf_target", 82)
     elseif stage.id == "group_intro" then
         if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("gfScope", "party") else M.gfScope = "party" end
         Header(b, all and "Part 2 of 3 - Group Frames" or "Group Frames", "Build Party once. Copy it to Raid or Mythic Raid.")
@@ -226,6 +227,71 @@ local function CreateEditModeAction(b, T, height, labelTop)
     if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
     if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(button) end
     return stateLabel, stateCopy, button
+end
+
+local function BuildQuickScale(b, ctx, T)
+    local card = b:Section("MSUF Frame Scale", 98)
+    local smaller = T.Button(card, "-", 32, 26)
+    smaller:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -31)
+    local percent = T.Font(card, "GameFontNormal", "", T.colors.text)
+    percent:SetWidth(62)
+    percent:SetPoint("LEFT", smaller, "RIGHT", 0, 0)
+    local larger = T.Button(card, "+", 32, 26)
+    larger:SetPoint("LEFT", percent, "RIGHT", 0, 0)
+    local reset = T.Button(card, "", 176, 24)
+    reset:SetPoint("TOPLEFT", smaller, "BOTTOMLEFT", 0, -5)
+    local getScale = MSUF.Require("MSUF_GetSavedMsufScale", "Quick Setup")
+    local function OriginalScale()
+        local value = Preference("quickFrameScaleBefore")
+        if type(value) == "number" and value >= 0.25 and value <= 2 then return value end
+    end
+    local function Refresh()
+        local scale = getScale()
+        local original = OriginalScale()
+        percent:SetText(M.Format("%d%%", floor(scale * 100 + 0.5)))
+        local editable = not ProfileMismatch() and not EditModeStatus().combatLocked
+        SetButtonEnabled(smaller, editable and scale > 0.25)
+        SetButtonEnabled(larger, editable and scale < 2)
+        SetButtonEnabled(reset, editable)
+        reset:SetShown(original ~= nil and math.abs(scale - original) > 0.00001)
+        if original then SetButtonText(reset, M.Format("Back to %d%%", floor(original * 100 + 0.5))) end
+    end
+    local function Apply(step)
+        if BlockedByCombat() or ProfileMismatch() then return end
+        local current = getScale()
+        local original = OriginalScale()
+        if original == nil then Invoke(Tour(), "SetPreference", "quickFrameScaleBefore", current) end
+        local value = step and min(2, max(0.25, current + step)) or original
+        if value then M.ApplyUnitFrameScaleSetting(value) end
+        Refresh()
+    end
+    smaller:SetScript("OnClick", function() Apply(-0.05) end)
+    larger:SetScript("OnClick", function() Apply(0.05) end)
+    reset:SetScript("OnClick", function() Apply(nil) end)
+    ctx:AddRefresher(Refresh)
+    Refresh()
+end
+
+local function BuildQuickPlacementPage(ctx, T, W, stage)
+    local b = W.PageBuilder(ctx)
+    local player = stage.id == "edit_mode"
+    Header(b, player and "Size and position" or "Party Frames", "Continue to keep your current positions.")
+    if player then BuildQuickScale(b, ctx, T) end
+    local action = b:Section("", 84)
+    local button = T.Button(action, "Edit positions", 176, 26)
+    button:SetPoint("TOPLEFT", action, "TOPLEFT", 16, -10)
+    local help = W.Text(action, player and "Drag Player to move it. Click Player to open the popup for Width and Height."
+        or "Drag Party Frames to move the group. Click it for Width, Height, and Spacing.", 16, -44, b.width - 32, T.colors.muted)
+    local function Refresh()
+        local status = EditModeStatus()
+        SetButtonText(button, status.active and "Exit and keep changes" or "Edit positions")
+        SetButtonEnabled(button, not status.combatLocked and not ProfileMismatch())
+        help:SetShown(status.active == true)
+    end
+    button:SetScript("OnClick", CreateEditModeClick(Refresh))
+    ctx:AddRefresher(Refresh)
+    Refresh()
+    return math.abs(b.y) + 34
 end
 
 local function BuildEditModePage(ctx, T, W)
@@ -518,6 +584,7 @@ function M.BuildGuidedSetupPage(ctx)
     local stage = CurrentStage()
     local builder = BuildMenuBasicsPage
     if stage.id == "unit_intro" or stage.id == "group_intro" or stage.id == "class_intro" then builder = BuildChapterPage
+    elseif IsQuickPlacement(stage.id) then builder = BuildQuickPlacementPage
     elseif stage.id == "edit_mode" then builder = BuildEditModePage
     elseif stage.id == "group_edit_mode" then builder = BuildGroupEditModePage
     elseif stage.id == "power_moves" then builder = BuildPowerMovesPage
@@ -540,6 +607,8 @@ M.RegisterPage("guided_setup", { title = "Guided Setup", build = M.BuildGuidedSe
         local key = stage.special and stage.id or "menu_basics"
         if key == "unit_intro" or key == "group_intro" or key == "class_intro" then
             key = key .. (SelectedSetupArea() == "all" and ":all" or ":single")
+        elseif IsQuickPlacement(key) then
+            key = key .. ":standalone-quick"
         elseif key == "final_review" then
             local point = select(2, Invoke(Tour(), "GetRestorePoint"))
             local suite = M.GetSuiteOverview()

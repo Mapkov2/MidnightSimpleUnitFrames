@@ -392,6 +392,24 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         return nil
     end
 
+    function Model.ReadLaneAuraBars(unit, kind)
+        return Model.ReadBool(unit, A3.LaneKeySchema.LANE_SPECS[kind].showAuraBarsKey, false)
+    end
+
+    function Model.WriteLaneAuraBars(unit, kind, value)
+        Model.WriteBool(unit, A3.LaneKeySchema.LANE_SPECS[kind].showAuraBarsKey, value)
+    end
+
+    function Model.ReadLaneAuraBarFill(unit, kind)
+        local spec = A3.LaneKeySchema.LANE_SPECS[kind]
+        return MSUF.AuraConfig.NormalizeAuraBarFill(Model.ReadValue(unit, spec.auraBarFillKey))
+    end
+
+    function Model.WriteLaneAuraBarFill(unit, kind, value)
+        local spec = A3.LaneKeySchema.LANE_SPECS[kind]
+        Model.WriteValue(unit, spec.auraBarFillKey, MSUF.AuraConfig.NormalizeAuraBarFill(value))
+    end
+
     function Model.ReadLaneStyleBool(unit, kind, key, defaultValue)
         local value = ReadLaneStyleRaw(unit, kind, key)
         if value == nil then return defaultValue and true or false end

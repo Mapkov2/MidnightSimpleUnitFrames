@@ -19,6 +19,7 @@ local UI_DEFAULTS = {
         meleeSpellPerClass = false, meleeSpellPerSpec = false, combatStateEnterText = "+Combat", combatStateLeaveText = "-Combat",
     },
     unit = {
+        fadeInOnShow = false,
         hpBarAlpha = 1, hpBgAlpha = 0.85, powerBarAlpha = 1, powerBarBgAlpha = 0.85,
         alphaExcludeTextPortrait = false, alphaExcludePredictionBars = false, oocFadeEnabled = false, oocFadeAlpha = 0.5,
         rangeFadeEnabled = true, rangeFadeAlpha = 0.4, rangeFadeUpdateRate = 0, rangeFadeLayerMode = "frame",
@@ -375,6 +376,9 @@ local function StatusResetTargets(group, scope)
     if not group and MSUF.UF.Config.Status.SupportsPVPFactionBadge(roots[1]) then
         names[#names + 1] = "pvpIndicatorShowOpenWorldFaction"
     end
+    if not group and MSUF.UF.Config.Status.SupportsPVPCountdown(roots[1]) then
+        names[#names + 1] = "pvpIndicatorCountdownEnabled"
+    end
     for _, selected in ipairs(specs) do
         for _, field in ipairs(fields) do
             if selected[field] then names[#names + 1] = selected[field] end
@@ -603,7 +607,7 @@ end
 function Schema.Setter(spec)
     local write = assert(spec.write, "schema write policy missing")
     local args = write.args or {}
-    return function(value)
+    return function(value, ...)
         if write.accept and not write.accept(value) then return write.refused end
         local selected = write.selected and write.selected.get()
         if write.selected and not (selected and selected[write.selected.key]) then
@@ -611,7 +615,10 @@ function Schema.Setter(spec)
             return
         end
         local root, key = TargetParts(spec)
-        if write.convert then value = write.convert(value) end
+        if write.convert then
+            if spec.kind == "color" then value = write.convert(value, ...)
+            else value = write.convert(value) end
+        end
         if write.validNumber then
             value = tonumber(value)
             if value == nil then return false end
@@ -765,7 +772,7 @@ function Schema.Owned(widget, scope, domain)
             return (widget._msuf2CommandAction or record.command).set(...)
         end,
         values = widget.GetValues and function() return widget:GetValues() end,
-        action = widget.GetScript and widget:GetScript("OnClick") and Schema.ButtonAction(widget), owner = widget,
+        action = widget.Click and widget.GetScript and widget:GetScript("OnClick") and Schema.ButtonAction(widget), owner = widget,
     }
     if command and command.write then
         Declare(spec)

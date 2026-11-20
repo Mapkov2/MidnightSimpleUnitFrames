@@ -263,9 +263,11 @@ local function GroupFilterValues(groupKey)
     )
 end
 local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey, key, defaultValue, mode, afterSet)
+    local iconTimer = key == "showDurationBar" and MSUF.Client.IsRetail and (groupKey == "buff" or groupKey == "debuff")
     return BoundAura(ctx, parent, { "switch", nil, nil, { label, x, y, width },
         get = function()
             local group = GFReadGroup(scope, groupKey)
+            if iconTimer and group.durationBarDisplay ~= "OVERLAY" then return false end
             local value = group[key]
             if value == nil and key == "showTooltip" then
                 local root = GFReadRoot(scope)
@@ -275,7 +277,11 @@ local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey,
             return value and true or false
         end,
         customSetReason = "Writes the selected aura lane to paired Raid scopes and activates their renderer.", set = function(v)
-            GFWriteGroupValue(scope, groupKey, key, v and true or false, mode or "visual")
+            if iconTimer and v then
+                GFWriteGroupValues(scope, groupKey, { showDurationBar = true, durationBarDisplay = "OVERLAY" }, mode)
+            else
+                GFWriteGroupValue(scope, groupKey, key, v and true or false, mode or "visual")
+            end
             if afterSet then afterSet(v and true or false) end
         end,
         meta = AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key)) })
@@ -468,39 +474,59 @@ local function BuildGroupStyleDurationBar(G)
     local ctx, b, scope, lane, baseId, RefreshStylePreview, BodyWidth = G.ctx, G.b, G.scope, G.lane, G.baseId, G.RefreshStylePreview, G.BodyWidth
     local refreshDurationBarSummary
     local durationInline = (b.width or 720) >= 520
+    local iconTimerOnly = MSUF.Client.IsRetail and (lane == "buff" or lane == "debuff")
     local durationBar = GroupSection(b, baseId .. "_duration_bar", "Duration Bar", durationInline and 220 or 332, false)
     AurasPage.AttachDurationBarColor(durationBar, lane)
     local dbw = BodyWidth(durationBar)
     local durationChoiceWidth = durationInline and floor(((dbw - 48) - 20) / 3) or (dbw - 48)
+    local iconTimer, height, positionControl, fillMode
     refreshDurationBarSummary = function()
-        if not W.SetCollapsibleBadges then return end
         local group = GFReadGroup(scope, lane)
-        local enabled = group.showDurationBar == true
         local display = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+        local enabled = group.showDurationBar == true and (not iconTimerOnly or display == "OVERLAY")
+        local asBars = iconTimerOnly and group.showAuraBars == true
+        if iconTimerOnly and fillMode then
+            W.SetControlEnabled(iconTimer, not asBars)
+            W.SetControlEnabled(height, enabled and not asBars)
+            W.SetControlEnabled(positionControl, enabled and not asBars)
+            W.SetControlEnabled(fillMode, enabled or asBars)
+        end
+        if not W.SetCollapsibleBadges then return end
         local position = group.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
+        local label = enabled and M.Format("%d px / %s / %s", Round(tonumber(group.durationBarHeight) or 2),
+            ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, display, "Bar Only"),
+            ChoiceLabel(DURATION_BAR_POSITION_VALUES, position, "Bottom")) or "Off"
         W.SetCollapsibleBadges(durationBar, {{
-            text = enabled and (M.Format("%d px / %s / %s", Round(tonumber(group.durationBarHeight) or 2),
-                ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, display, "Bar Only"), ChoiceLabel(DURATION_BAR_POSITION_VALUES, position, "Bottom"))) or "Off",
-            kind = enabled and "accent" or "muted", showWhenClosed = true,
+            text = asBars and "Bars" or label, kind = (enabled or asBars) and "accent" or "muted", showWhenClosed = true,
         }})
     end
     local function RefreshDurationBarPreviewAndSummary()
         RefreshStylePreview()
         refreshDurationBarSummary()
     end
-    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -48, dbw - 48, scope, lane, "showDurationBar", false, "visual",
+    iconTimer = BindGroupSwitch(ctx, durationBar, iconTimerOnly and "Show Timer on Icon" or "Show Duration Bar", 24, -48, dbw - 48,
+        scope, lane, "showDurationBar", false, "auras", RefreshDurationBarPreviewAndSummary)
+    height = BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual",
         RefreshDurationBarPreviewAndSummary)
-    BindGroupSlider(ctx, durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual",
-        RefreshDurationBarPreviewAndSummary)
-    AddTooltip(BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, durationChoiceWidth, scope, lane, "durationBarDisplay",
-        "BAR_ONLY", "visual", RefreshDurationBarPreviewAndSummary),
-        "Duration bar display", "Bar Only hides the aura icon. Icon + Bar keeps the icon and draws the duration bar on it.")
-    AddTooltip(BindGroupDropdown(ctx, durationBar, "Position", durationInline and (34 + durationChoiceWidth) or 24, durationInline and -162 or -220,
-        DURATION_BAR_POSITION_VALUES, durationChoiceWidth, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshDurationBarPreviewAndSummary),
-        "Duration bar position", "Places the duration bar at the top or bottom edge of the aura slot.")
-    AddTooltip(BindGroupDropdown(ctx, durationBar, "Fill Mode", durationInline and (44 + (durationChoiceWidth * 2)) or 24, durationInline and -162 or -278,
-        DURATION_BAR_DIRECTION_VALUES, durationChoiceWidth, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshDurationBarPreviewAndSummary),
-        "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
+    if iconTimerOnly then
+        local path = "group-style.lane." .. AuraCatalogToken(lane) .. ".durationbardisplay"
+        M.AuraControls.AddAuraBarLayoutShortcut(ctx, durationBar, path, "groups", durationChoiceWidth, function()
+            GP.OpenAuraBarWorkspace(ctx, lane)
+        end)
+    else
+        AddTooltip(BindGroupDropdown(ctx, durationBar, "Display", 24, -162, DURATION_BAR_DISPLAY_VALUES, durationChoiceWidth,
+            scope, lane, "durationBarDisplay", "BAR_ONLY", "visual", RefreshDurationBarPreviewAndSummary),
+            "Duration bar display", "Bar Only hides the aura icon. Icon + Bar keeps the icon and draws the duration bar on it.")
+    end
+    local positionX = durationInline and (34 + durationChoiceWidth) or 24
+    local fillX = durationInline and (44 + 2 * durationChoiceWidth) or 24
+    positionControl = BindGroupDropdown(ctx, durationBar, "Position", positionX, durationInline and -162 or -220,
+        DURATION_BAR_POSITION_VALUES, durationChoiceWidth, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshDurationBarPreviewAndSummary)
+    AddTooltip(positionControl, "Duration bar position", "Places the duration bar at the top or bottom edge of the aura slot.")
+    fillMode = BindGroupDropdown(ctx, durationBar, "Fill Mode", fillX, durationInline and -162 or -278,
+        DURATION_BAR_DIRECTION_VALUES, durationChoiceWidth, scope, lane, "durationBarDirection", "REMAINING", "auras", RefreshDurationBarPreviewAndSummary)
+    AddTooltip(fillMode, "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
+    refreshDurationBarSummary()
     return durationBar, refreshDurationBarSummary
 end
 local function BuildGroupStyleStack(G)

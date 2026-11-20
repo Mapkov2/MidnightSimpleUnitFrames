@@ -4,20 +4,24 @@ local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local mw = MenuWorld.Open(root, flavor, { page = "home", locale = locale })
 local M, api = mw.M, mw.M.Search._CoreAPI
 assert(mw.core.FinalizeLocale() == locale)
-local function Ready()
-    api.GetSearchRecords()
+local function DrainTimers()
     for _ = 1, 1000 do
         if #mw.world.widgets.timers == 0 then return end
         mw:RunTimers(1000)
     end
     error("search timers did not drain")
 end
-Ready()
-local byId = {}
-for _, row in ipairs(api.GetSearchRecords()) do
-    local id = M.Search.StaticIndex.TargetField(row, "controlId")
-    if id then byId[id] = row end
+local function ReadIndexById()
+    api.GetSearchRecords()
+    DrainTimers()
+    local byId = {}
+    for _, row in ipairs(api.GetSearchRecords()) do
+        local id = M.Search.StaticIndex.TargetField(row, "controlId")
+        if id then byId[id] = row end
+    end
+    return byId
 end
+local byId = ReadIndexById()
 local count, failures = 0, {}
 local function Check(ok, message)
     if not ok then failures[#failures + 1] = message end
@@ -89,7 +93,7 @@ for _, case in ipairs(cases) do
     local before = warmed[viewKey] and Snapshot(nil, mw.env.MSUF_DB)
     local wrapper = warmed[viewKey] and M.cache[row.key].wrapper
     local opened, anchor, matched = api.OpenSearchTarget(row.key, case.query, row.label, nil, nil, exact)
-    Ready()
+    DrainTimers()
     Check(opened and anchor and matched, "exact route failed " .. exact.controlId)
     if case.unit then
         Check(M.unitStatusSelection[case.unit] == case.value and M.unitStatusTabSelection[case.unit] == "basic",
@@ -104,6 +108,13 @@ for _, case in ipairs(cases) do
     end
     warmed[viewKey] = true
     count = count + 1
+end
+-- All clicks use their original cold result. Request the index again once the
+-- destination pages are built and check that every choice is still indexed.
+local warmById = ReadIndexById()
+for _, case in ipairs(cases) do
+    local id = case.row.exactTarget.controlId
+    Check(warmById[id] ~= nil, "missing choice in warm index " .. id)
 end
 for _, message in ipairs(failures) do print("FAIL: " .. message) end
 assert(#failures == 0, #failures .. " status choice regressions")

@@ -12,6 +12,7 @@ local Schema = M.ControlSchema
 local ROW_OPTIONS = Schema.UnitOptions()
 local UP = M.UnitPage or {}
 local SupportsPVPFactionBadge = MSUF.UF.Config.Status.SupportsPVPFactionBadge
+local SupportsPVPCountdown = MSUF.UF.Config.Status.SupportsPVPCountdown
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
 local RestingFlipbook = MSUF.UFRestingFlipbook or {}
@@ -673,6 +674,15 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
             help = "Show the faction symbol for unflagged players in the open world.",
         })
     end
+    if SupportsPVPCountdown(unit) then
+        state.pvpCountdown = StatusSection.OptionToggle(state, ctx, unit, {
+            path = "status.pvp.countdown", label = "Show PvP countdown", y = -165,
+            key = "pvpIndicatorCountdownEnabled", reason = "MSUF2_STATUS_PVP_COUNTDOWN", exact = "statusPvp",
+            get = function() return ReadBool(unit, "pvpIndicatorCountdownEnabled", true) end,
+            searchLabel = "Show PvP countdown", keywords = { "pvp timer", "flag duration", "countdown" },
+            help = "Show the remaining time next to your PvP flag.",
+        })
+    end
     StatusSection.BuildLevelOptions(state, ctx, unit, enabled)
     state.previewLabel, state.midnight, state.identityRestrictionWarning = previewLabel, midnight, identityRestrictionWarning
 end
@@ -905,8 +915,9 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
             end
             if spec.value == "statusThreat" then
                 conf.threatIndicatorColorCurve, conf.threatIndicatorBackground = nil, nil
-            elseif spec.value == "statusPvp" and SupportsPVPFactionBadge(unit) then
-                conf.pvpIndicatorShowOpenWorldFaction = nil
+            elseif spec.value == "statusPvp" then
+                if SupportsPVPFactionBadge(unit) then conf.pvpIndicatorShowOpenWorldFaction = nil end
+                if SupportsPVPCountdown(unit) then conf.pvpIndicatorCountdownEnabled = nil end
             end
             if spec.colorPrefix then
                 conf[spec.colorPrefix .. "ColorR"] = nil
@@ -1117,11 +1128,10 @@ function StatusSection.BindRefreshState(state, ctx, unit)
             ShowControl(threatBackground, spec and spec.value == "statusThreat")
             SetControlEnabled(threatBackground, spec and spec.value == "statusThreat" and isEnabled)
         end
-        if state.pvpFaction then
-            local isPvP = spec and spec.value == "statusPvp"
-            ShowControl(state.pvpFaction, isPvP)
-            SetControlEnabled(state.pvpFaction, isPvP and isEnabled)
-        end
+        local isPvP = spec and spec.value == "statusPvp"
+        ShowControls(isPvP, state.pvpFaction, state.pvpCountdown)
+        if state.pvpFaction then SetControlEnabled(state.pvpFaction, isPvP and isEnabled) end
+        if state.pvpCountdown then SetControlEnabled(state.pvpCountdown, isPvP and isEnabled) end
         ShowControl(raidGroupStyle, inlineName)
         if petXPWidth then ShowControl(petXPWidth, spec and spec.value == "statusPetXP") end
         ShowControl(test, showTestMode)

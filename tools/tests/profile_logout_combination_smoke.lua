@@ -33,7 +33,7 @@ local function Saved(env)
     chunk()
     return disk
 end
-local seedWorld, seedEnv = Login()
+local seedWorld, seedEnv, seedCore = Login()
 local active = seedEnv.MSUF_ActiveProfile
 local seed = Copy(seedEnv.MSUF_GlobalDB)
 seed.profiles = { [active] = Copy(seedEnv.MSUF_DB), Plain = Copy(seedEnv.MSUF_DB), Local = Copy(seedEnv.MSUF_DB) }
@@ -53,16 +53,25 @@ seed.global.profileSyncGroups = {
     { name = "Logout", members = { [active] = true, Plain = true, Local = true },
         modules = { unitframes = true }, exclude = { { "player", "offsetX" } } },
 }
-seedWorld, seedEnv = nil, nil
+local coldSeed = Copy(seed)
+assert(seedCore.DefaultsSchema.Persist(coldSeed))
+assert(coldSeed.profiles.Plain._msufSparseDefaultsV2, "cold test did not store sparse targets")
+seedWorld, seedEnv, seedCore = nil, nil, nil
 local cases = 0
 for _, mode in ipairs({ "sparse", "compat" }) do
     for _, recording in ipairs({ false, true }) do
-        local world, env, ns = Login({ MSUF_GlobalDB = Copy(seed) })
+        local entry = mode == "sparse" and coldSeed or seed
+        local world, env, ns = Login({ MSUF_GlobalDB = Copy(entry) })
         local db, pool = env.MSUF_DB, env.MSUF_GlobalDB.profiles
         local variants, sync = ns.ProfileVariants, ns.ProfileSync
         assert(env.MSUF_ActiveProfile == active and variants.IsMaterialized(db) and db.player.width == 401,
             "source variant was not active at login")
         local expected = Copy(pool)
+        if mode == "sparse" then
+            assert(ns.DefaultsSchema.IsValidSparseProfile(pool.Plain), "sync fixture expanded the cold target")
+            expected.Plain = ns.ProfileNormalize.ResolveStoredProfile(expected.Plain)
+            expected.Local = ns.ProfileNormalize.ResolveStoredProfile(expected.Local)
+        end
         expected[active].player.width = 311
         -- Edit the overlaid field and three ordinary fields. Only eligible base
         -- edits may reach members; source/target patches and exclusions stay local.
@@ -77,11 +86,13 @@ for _, mode in ipairs({ "sparse", "compat" }) do
             -- pending edits below are unsaved recording work and must be discarded.
             assert(variants.BeginRecording("Always"))
             assert(variants.IsRecording() and variants.RecordingName() == "Always")
-            assert(pool.Plain.player.height == 61, "recording start did not flush preceding edits")
+            assert(ns.ProfileNormalize.ResolveStoredProfile(pool.Plain).player.height == 61,
+                "recording start did not flush preceding edits")
             db.player.width, db.player.height, db.player.offsetX, db.player.offsetY = 777, 78, 88, 98
             local ok, why = sync.Flush()
             assert(not ok and why == "finish editing the variant first", "sync accepted an active recording")
-            assert(pool.Plain.player.height == 61, "recording leaked to sync target")
+            assert(ns.ProfileNormalize.ResolveStoredProfile(pool.Plain).player.height == 61,
+                "recording leaked to sync target")
         end
         if mode == "compat" then ns.SlashCommands.Dispatch("compatsave") end
         local bindings, groups = H.Literal(env.MSUF_GlobalDB.char), H.Literal(sync.GetGroups())
@@ -120,6 +131,13 @@ for _, mode in ipairs({ "sparse", "compat" }) do
         local base = assert(fresh.ProfileVariants.BaseSnapshot(again.MSUF_DB, true))
         assert(base.player.width == 311, "variant or recording overwrote the remembered base")
         local actual = Copy(again.MSUF_GlobalDB.profiles)
+        for name, target in pairs(actual) do
+            if name ~= active then
+                local cold = fresh.DefaultsSchema.IsValidSparseProfile(target)
+                assert(cold == (mode == "sparse"), "reload used the wrong inactive representation")
+                actual[name] = fresh.ProfileNormalize.ResolveStoredProfile(target)
+            end
+        end
         actual[active] = base
         assert(H.Literal(actual) == H.Literal(expected), "fresh login changed base values, targets or variant patches")
         Healthy(reloaded, mode .. " reload")

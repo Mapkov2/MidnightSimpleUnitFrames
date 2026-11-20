@@ -11,8 +11,10 @@ function manager.UnregisterCastbar() native = native + 1 end
 local function SetText(_, _) native = native + 1 end
 local u = Read("MSUF_CastbarUtils.lua")
 local body = assert(u:match("local function ClearEmpowerState.-\nend\nUtils.ClearEmpowerState = ClearEmpowerState"))
-local env = setmetatable({ Utils = utils, Manager = manager, Castbars = { Manager = manager }, SetTextIfChanged = SetText }, { __index = _G })
-local fn = assert(loadstring(body, "@empower-reset")) setfenv(fn, env)()
+local scalarBody = u:match("local function ClearEmpowerRuntime.-\nend\nUtils.ClearEmpowerRuntime = ClearEmpowerRuntime") or ""
+local env = setmetatable({ Utils = utils, Manager = manager, Config = { fadeEnabled = false },
+    Castbars = { Manager = manager }, SetTextIfChanged = SetText }, { __index = _G })
+local fn = assert(loadstring(scalarBody .. "\n" .. body, "@empower-reset")) setfenv(fn, env)()
 local e = Read("MSUF_CastbarEmpower.lua")
 local playerBody = e:match("local function PlayerCastbarClearEmpower.-\nend\n")
 if playerBody then

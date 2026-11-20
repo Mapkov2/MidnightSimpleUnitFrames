@@ -4,7 +4,8 @@ local flavor, unit = arg[2] or "Mainline", arg[3] or "target"
 local Open = assert(loadfile(root .. "/tools/tests/menu_entry_view_world.lua"))()
 local mw = Open(root, flavor, { page = "home", clientScriptBindings = true })
 local M, key = mw.M, "uf_" .. unit
-local FRAME_BUDGET = 4500 -- Entire unit page, all 34 aura subviews and three texture subviews.
+local FRAME_BUDGET = 4500 -- Entire unit page, all aura subviews and three texture subviews.
+local hasBars = flavor == "Mainline" or flavor == "Forever"
 local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit, true)
 -- The selected-tab style increases the workspace header from 24 to 26 px.
 local AURA_TAB_HEIGHT_DELTA = 2
@@ -105,7 +106,8 @@ for slot = 1, 3 do db[unit]["texLayer" .. (slot == 1 and "" or slot) .. "CustomT
 mw.env.MSUF_GlobalDB.profiles[mw.env.MSUF_ActiveProfile], mw.env.MSUF_DB = db, db
 conf = db[unit]
 M.MarkMenuDataDirty()
-assert(combinations == (unit == "pet" and 84 or 102), "did not walk full selection product")
+local expectedCombinations = (unit == "pet" and 84 or 102) + (hasBars and 6 or 0)
+assert(combinations == expectedCombinations, "did not walk full selection product")
 assert(Walk() == combinations)
 assert(mw:Frames() == frames, "second product walk created " .. (mw:Frames() - frames) .. " frames")
 local afterRegions = 0

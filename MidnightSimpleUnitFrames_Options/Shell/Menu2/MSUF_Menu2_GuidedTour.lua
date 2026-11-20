@@ -231,6 +231,13 @@ local function SelectedSetupMode()
     return VALID.setupMode[value] and value or "complete"
 end
 
+local function IsQuickPlacement(stageId)
+    return (stageId == "edit_mode" or stageId == "group_edit_mode")
+        and SelectedSetupMode() == "quick" and not MSUF.SuiteLink.IsLoaded()
+end
+Parts.IsQuickPlacement = IsQuickPlacement
+M.IsQuickTourPlacement = IsQuickPlacement
+
 local function EffectiveStageControlLimit(stage)
     if SelectedSetupMode() == "quick" then
         return QUICK_STAGE_CONTROL_LIMITS[stage and stage.id] or 0
@@ -414,6 +421,7 @@ local function PreferenceLabel(value)
 end
 
 local function PersonalizedTitle(stage)
+    if stage.id == "edit_mode" and IsQuickPlacement(stage.id) then return Tr("Size and position") end
     if stage.id == "menu_basics" then return format(Tr("Welcome, %s"), PlayerDisplayName()) end
     if stage.id == "final_review" then return format(Tr("%s, your setup is ready"), PlayerDisplayName()) end
     if SelectedSetupArea() ~= "all" then
@@ -518,6 +526,7 @@ local function StageCue(stage, position, touched)
         end
         return Tr("YOUR MOVE - Choose what you want to set up.")
     end
+    if IsQuickPlacement(stage.id) then return Tr("Continue to keep your current positions.") end
     if stage.id == "unit_intro" then return Tr("PART 1 - Build Player once, then copy the finished setup to the other Unitframes.") end
     if stage.id == "edit_mode" then
         local decision = CooldownAnchorDecision()
@@ -548,7 +557,9 @@ local function StageCue(stage, position, touched)
     if stage.id == "uf_player" then return Tr("PLAYER IS THE MASTER - Change the highlighted frame basics; the Live Preview updates immediately.") end
     if stage.id == "uf_player_auras" then return Tr("AURA WORKSPACE - Choose Buffs, Debuffs, or a Custom lane, then choose Layout, Filters, or Blacklist.") end
     if stage.id:match("^uf_player_") then return Tr("PLAYER CORE - Change the new green setting and watch the same Player Preview update.") end
-    if stage.id:match("^unit_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then apply the Player setup to another Unitframe.") end
+    if stage.id:match("^unit_copy_") then
+        return Tr("COPY FLOW - Open Copy To Settings, select All categories, then apply the Player setup to another Unitframe.")
+    end
     if stage.id == "gf_spell_icons" then
         return Tr("MISSION BRIEF - Build Spell Icons from scope and spec through placement, cooldowns, and frame effects.")
     end
@@ -611,7 +622,7 @@ end
 
 local function ShouldShowEditModeOpenCue()
     if not TourIsActive() or CurrentStage().id ~= "edit_mode" then return false end
-    if not CooldownAnchorDecisionComplete() or EditDone.placement() then return false end
+    if IsQuickPlacement("edit_mode") or not CooldownAnchorDecisionComplete() or EditDone.placement() then return false end
     local status = EditModeStatus()
     return status.active ~= true and status.combatLocked ~= true
 end

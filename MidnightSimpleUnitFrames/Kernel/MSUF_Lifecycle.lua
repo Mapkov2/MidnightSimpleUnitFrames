@@ -46,6 +46,7 @@ bus:Register("ADDON_LOADED", "MSUF_LIFECYCLE_BIND", function(_, loadedName)
     startup = nil
     Lifecycle.Bound = true
     Lifecycle.Phase = "ready"
+    MSUF.ProfileWorkbench.CompactStoredPoints()
 end)
 -- Separate bus subscribers preserve native error isolation between login
 -- steps. Their registration still comes from this one ordered list.

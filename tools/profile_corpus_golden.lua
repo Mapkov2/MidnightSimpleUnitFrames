@@ -2,7 +2,7 @@
 -- corpus entry through the real State pipeline and compare the effective
 -- settings with the golden files.
 --
---   lua tools/profile_corpus_golden.lua <repo root> <flavor|all> [--write] [--entry <id>] [--verbose]
+--   lua tools/profile_corpus_golden.lua <repo root> <flavor|all> [--write] [--keep-references] [--entry <id>] [--verbose]
 --
 -- Check mode (the default) runs the entries that list <flavor> and fails with
 -- the first differing paths per entry. --write regenerates the golden files;
@@ -151,12 +151,9 @@ Corpus.HARNESS_ERRORS = {
     -- Mainline's UnitPowerMax is not modelled, so the class-power module's
     -- maximum-slot floor sees the generic native-API stub table.
     { "module ClassPower", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)", MIDNIGHT },
-    { "PLAYER_LOGIN", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "timer", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "timer", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
     { "Highlight.Refresh", "MSUF_UF_Highlight.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ApplyModules", "MSUF_UF_RoundedSurface.lua", "'for' initial value must be a number", ALL_CLIENTS },
-    { "MSUF_GF_RebuildAll", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ClassPower_Apply", "MSUF_CP_Controller.lua", "bad argument #1 to 'math_floor' (number expected, got table)",
         MIDNIGHT },
     -- Classic profiles authored on Era can resolve an unmodelled native unit
@@ -166,8 +163,6 @@ Corpus.HARNESS_ERRORS = {
     { "MSUF_Castbars_OnSettingsChanged", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_ApplyAllCastbarsAndSync", "MSUF_CastbarAnchors.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
     { "MSUF_Auras3.RefreshAll", "MSUF_UF_Text_Runtime.lua", NUMBER_WITH_TABLE, CLASSIC_CLIENTS },
-    { "GF.Rebuild", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
-    { "GF.RefreshVisuals", "MSUF_UF_Group_Headers.lua", NUMBER_WITH_TABLE, ALL_CLIENTS },
 }
 
 local function ErrorText(caught)
@@ -1261,7 +1256,13 @@ local function Never() return false end
 -- Write one entry's golden file from the runs of all its clients. A subtree
 -- whose reference has a choice uses the candidate that lists fewer lines over
 -- all clients.
-function Corpus.WriteGolden(root, entry, runs)
+function Corpus.WriteGolden(root, entry, runs, options)
+    local fixedChoices
+    if options and options.keepReferences then
+        local _, problem, choices = ReadGolden(root, entry.id, entry.clients[1])
+        assert(not problem, problem)
+        fixedChoices = choices
+    end
     local byFirst, bySecond, order, seenName = {}, {}, {}, {}
     for _, client in ipairs(entry.clients) do
         local run = assert(runs[client], entry.id .. ": no run for " .. client)
@@ -1284,12 +1285,17 @@ function Corpus.WriteGolden(root, entry, runs)
             firstSize = firstSize + ((byFirst[client][name] or {}).size or 0)
             secondSize = secondSize + ((bySecond[client][name] or {}).size or 0)
         end
-        local useSecond = secondSize < firstSize
+        local useSecond
+        if fixedChoices then useSecond = fixedChoices[name] == true
+        else useSecond = secondSize < firstSize end
         if useSecond then choices[#choices + 1] = "@overlay " .. name end
         for _, client in ipairs(entry.clients) do
             local source = useSecond and bySecond[client][name] or byFirst[client][name]
             deltas[client][name] = source and source.delta or {}
         end
+    end
+    for name in pairs(fixedChoices or {}) do
+        assert(seenName[name], "kept reference has no current subtree: " .. name)
     end
     local commonLines, clientLines = {}, {}
     for _, client in ipairs(entry.clients) do clientLines[client] = {} end
@@ -1441,13 +1447,13 @@ function Corpus.WriteAll(root, options)
             for index = 1, math.min(#refusals, 40) do print("    " .. refusals[index]) end
             error(entry.id .. ": fix these, or except or allow them on purpose, before writing", 0)
         end
-        local common, counts = Corpus.WriteGolden(root, entry, runs)
+        local common, counts = Corpus.WriteGolden(root, entry, runs, options)
         print(string.format("  wrote %-28s common %d; %s", entry.id, common, counts))
     end
 end
 
 local function Main(arguments)
-    local root = assert(arguments[1], "usage: profile_corpus_golden.lua <repo root> <flavor|all> [--write] [--entry <id>] [--verbose]")
+    local root = assert(arguments[1], "usage: profile_corpus_golden.lua <repo root> <flavor|all> [--write] [--keep-references] [--entry <id>] [--verbose]")
     root = root:gsub("\\", "/"):gsub("/$", "")
     local flavor = assert(arguments[2], "flavor required (a matrix client, Forever, or all)")
     local options = {}
@@ -1455,6 +1461,7 @@ local function Main(arguments)
     while arguments[index] do
         local flag = arguments[index]
         if flag == "--write" then options.write = true
+        elseif flag == "--keep-references" then options.keepReferences = true
         elseif flag == "--verbose" then options.verbose = true
         elseif flag == "--entry" then
             index = index + 1
@@ -1462,6 +1469,7 @@ local function Main(arguments)
         else error("unknown argument " .. flag) end
         index = index + 1
     end
+    assert(not options.keepReferences or options.write, "--keep-references requires --write")
     if options.write then
         assert(flavor == "all", "--write regenerates every client of an entry; pass all")
         Corpus.WriteAll(root, options)

@@ -276,3 +276,137 @@ end
 Style.GetCastbarOutlineInset = function(frame, general)
     return Style:OutlineInset(frame, general)
 end
+
+-- Owned visibility motion. The cast manager releases timing immediately;
+-- this short-lived child driver retains only the last painted surface.
+do
+    local Fade = {}
+    Style.Fade = Fade
+    local StepSpring = ns.Util.StepSpring
+    local ApplyRangeAlpha = ns.Require("MSUF_UF_ApplyCastbarRangeAlpha", "Castbars/MSUF_CastbarStyle.lua")
+    local abs, min, max = math.abs, math.min, math.max
+
+    function Fade.Enabled()
+        return Config.fadeEnabled == true
+    end
+
+    local function Paint(frame, alpha)
+        frame._msufCastbarFadeAlpha = alpha ~= 1 and alpha or nil
+        if frame._msufFocusKickSuppressed then return end
+        if frame.unit == "player" or frame._msufIsPreview or not ApplyRangeAlpha(frame, nil, true) then frame:SetAlpha(alpha) end
+    end
+
+    local function FinishContent(driver)
+        local cleanup = driver.cleanup
+        driver.cleanup = nil
+        if cleanup then cleanup(driver.owner) end
+    end
+
+    function Fade.Begin(frame)
+        local driver = frame._msufFadeDriver
+        if driver then FinishContent(driver) end
+    end
+
+    local function Reset(driver)
+        FinishContent(driver)
+        driver:SetScript("OnUpdate", nil)
+        driver.value, driver.velocity, driver.target, driver.age = 1, 0, 1, 0
+        driver.active, driver.preview = false, false
+        driver.owner._msufFadeProgress = nil
+        Paint(driver.owner, 1)
+    end
+
+    local function Step(driver, elapsed)
+        if not Fade.Enabled() then
+            local hide = driver.target == 0 and not driver.preview
+            Reset(driver)
+            if hide then driver.owner:Hide() end
+            return
+        end
+        driver.age = driver.age + elapsed
+        driver.value, driver.velocity = StepSpring(driver.value, driver.velocity, driver.target, driver.rate, elapsed)
+        Paint(driver.owner, max(0, min(1, driver.value)))
+        if (abs(driver.value - driver.target) < 0.002 and abs(driver.velocity) < 0.02) or driver.age >= 0.35 then
+            driver.value, driver.velocity, driver.active = driver.target, 0, false
+            driver:SetScript("OnUpdate", nil)
+            Paint(driver.owner, driver.target)
+            if driver.target == 0 and not driver.preview then driver.owner:Hide() end
+        end
+    end
+
+    local function OwnerHide(frame)
+        local driver = frame._msufFadeDriver
+        if not driver then return end
+        local finish = driver.target == 0 and not driver.preview
+        Reset(driver)
+        if finish and frame:IsShown() then frame:Hide() end
+    end
+
+    local function Driver(frame)
+        local driver = frame._msufFadeDriver
+        if not driver then
+            driver = CreateFrame("Frame", nil, frame)
+            driver.owner = frame
+            driver.value, driver.velocity, driver.target, driver.age = 1, 0, 1, 0
+            frame._msufFadeDriver = driver
+            frame:HookScript("OnHide", OwnerHide)
+        end
+        return driver
+    end
+
+    local function Retarget(driver, target)
+        if driver.target == target and (driver.active or driver.value == target) then return end
+        driver.target, driver.rate, driver.age, driver.active = target, target == 1 and 50 or 40, 0, true
+        driver:SetScript("OnUpdate", Step)
+    end
+
+    function Fade.Cancel(frame)
+        local driver = frame._msufFadeDriver
+        if driver then Reset(driver) end
+    end
+
+    function Fade.Show(frame)
+        if not Config.fadeEnabled then
+            if frame._msufFadeDriver then Fade.Cancel(frame) end
+            frame:Show()
+            return
+        end
+        local driver = Driver(frame)
+        if not frame:IsShown() then
+            driver.value, driver.velocity, driver.target = 0, 0, 0
+            Paint(frame, 0)
+        end
+        driver.preview = frame._msufIsPreview == true
+        Retarget(driver, 1)
+        frame:Show()
+    end
+
+    function Fade.Hide(frame, cleanup)
+        if not Config.fadeEnabled or not frame:IsShown() or not frame:IsVisible() then return false end
+        local driver = Driver(frame)
+        driver.preview, driver.cleanup = false, cleanup
+        Retarget(driver, 0)
+        return true
+    end
+
+    function Fade.IsFadingOut(frame)
+        local driver = frame._msufFadeDriver
+        return driver ~= nil and driver.target == 0 and not driver.preview
+    end
+
+    function Fade.Preview(frame, progress, duration)
+        if not Config.fadeEnabled then
+            if frame._msufFadeDriver then Fade.Cancel(frame) end
+            return progress
+        end
+        local driver = Driver(frame)
+        driver.preview = true
+        local previous = frame._msufFadeProgress
+        frame._msufFadeProgress = progress
+        local seconds = progress * (duration + 0.32)
+        local target = seconds >= duration and 0 or 1
+        if previous and progress < previous then target = 1 end
+        Retarget(driver, target)
+        return min(1, seconds / max(0.01, duration))
+    end
+end

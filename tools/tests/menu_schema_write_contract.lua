@@ -67,6 +67,7 @@ assert(S.MatchesWrite(spec, "gf_raid.roleIconSize") and not S.MatchesWrite(spec,
 M.UnitPage = { STATUS_CONTROLS = { { x = "restingX", colorPrefix = "threatIndicator" } } }
 namespace.UF = { Config = { Status = {
     SupportsPVPFactionBadge = function(unit) return unit == "target" or unit == "focus" end,
+    SupportsPVPCountdown = function(unit) return namespace.Client.IsForever and unit == "player" end,
 } } }
 for _, unit in ipairs({ "player", "target", "focus" }) do
     S.Custom(widget, { id = "contract.unit.reset", kind = "button", scope = "uf_" .. unit, applyDomain = "unit",
@@ -77,6 +78,15 @@ for _, unit in ipairs({ "player", "target", "focus" }) do
         "unit status reset escaped its finite physical fields")
     assert(S.MatchesWrite(spec, unit .. ".pvpIndicatorShowOpenWorldFaction") == (unit ~= "player"),
         "unit status reset must cover the faction switch only on target and focus")
+end
+for _, forever in ipairs({ false, true }) do
+    namespace.Client.IsForever = forever
+    for _, unit in ipairs({ "player", "target" }) do
+        S.Custom(widget, { id = "contract.unit.reset", kind = "button", scope = "uf_" .. unit, applyDomain = "unit",
+            actionKey = "reset_unit_status_indicator" })
+        assert(S.MatchesWrite(widget._msuf2ControlSchema, unit .. ".pvpIndicatorCountdownEnabled") == (forever and unit == "player"),
+            "unit status reset must cover the countdown only for the Forever player")
+    end
 end
 local calls = 0
 local refuse = S.Setter({ id = "contract.refusal", setting = "general.selection", write = {

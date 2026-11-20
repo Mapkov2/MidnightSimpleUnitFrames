@@ -272,7 +272,8 @@ for _, flavor in ipairs(arg[2] and { arg[2] } or { "Mainline", "Forever", "Vanil
         if frame.frameName == "MSUF_EM2_UnitPopup" then popup = frame end
     end
     assert(popup, "unit popup frame missing")
-    popup.xBox:SetText(tostring(initial + 19))
+    local centerX = bar:GetLeft() + bar:GetWidth() * 0.5 - env.UIParent:GetWidth() * 0.5
+    popup.xBox:SetText(tostring(centerX + 2))
     assert(popup.xBox:GetScript("OnEnterPressed"))(popup.xBox)
     world.widgets:RunTimers(100)
     em.UnitPopup.Close()

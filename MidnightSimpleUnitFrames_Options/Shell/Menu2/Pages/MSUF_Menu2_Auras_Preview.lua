@@ -103,8 +103,26 @@ local function FitMiniAuraPreview(cfg, width, height)
     cfg.durationBarDirection = cfg.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
     return cfg
 end
--- Read on every preview refresh (a style slider tick), so the group and unit
--- readers stay inline in this one function instead of costing extra calls.
+local function ApplyMiniAuraBarPresentation(cfg, scope, lane, group, runtimePreview)
+    if not MSUF.Client.IsRetail or (lane ~= "buff" and lane ~= "debuff") then return end
+    cfg.showDurationBar = cfg.showDurationBar and cfg.durationBarDisplay == "OVERLAY"
+    if group then
+        if group.showAuraBars == true then
+            cfg.auraBarFill = MSUF.AuraConfig.NormalizeAuraBarFill(group.auraBarFill)
+            cfg.compactAuraBars = true
+            cfg.auraBarStyle = group.auraBarStyle
+        end
+    else
+        local metrics = runtimePreview and runtimePreview[lane .. "Metrics"]
+        cfg.auraBar = metrics and metrics.auraBar
+        if not cfg.auraBar and Model.ReadLaneAuraBars(scope, lane) then
+            cfg.auraBarFill = Model.ReadLaneAuraBarFill(scope, lane)
+            cfg.auraBarStyle = Model.ReadLaneAuraBarStyle(scope, lane)
+        end
+    end
+end
+
+-- Read on every preview refresh, including a style slider tick.
 local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     local isGroup = IsGroupScope(scope)
     local cfg = {
@@ -151,6 +169,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.durationBarDisplay = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
         cfg.durationBarPosition = group.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
         cfg.durationBarDirection = group.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
+        ApplyMiniAuraBarPresentation(cfg, scope, lane, group)
         if lane == "debuff" then cfg.debuffBorderMode = ReadGroupDebuffTypeBorderMode(scope, "debuff") end
     else
         local readScope = scope or "shared"
@@ -250,6 +269,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
                 cfg.debuffBorderMode = Model.ReadLaneStyleBool(readScope, "debuff", "useDebuffTypeBorders", false) and "SYMBOL" or "OFF"
             end
         end
+        ApplyMiniAuraBarPresentation(cfg, readScope, lane, nil, runtimePreview)
     end
     return FitMiniAuraPreview(cfg, width, height)
 end

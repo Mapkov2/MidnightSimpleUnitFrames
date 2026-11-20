@@ -430,6 +430,7 @@ function M.SelectPage(key)
     -- leave an empty content area. Removed legacy pages and typos safely land
     -- on the Dashboard instead.
     if not (M.pages and M.pages[key]) then key = "home" end
+    if key ~= "profiles" then M.resumeUnitFrameSetupOnImport = nil end
     local restoreExpandedFixedPreview = M.ConsumeFixedPreviewExpansionForSelection(key)
     if M.activeKey and key ~= M.activeKey then M.ClearPendingFixedPreviewExpansion() end
     local req = MSUF.PublicGlobals.MSUF_EM2_MenuFocusRequest

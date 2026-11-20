@@ -75,7 +75,8 @@ end
 
 local function SetReadableSize(fontObject, size)
     if not (fontObject and fontObject.SetFont) then return fontObject end
-    local path, _, flags = fontObject.GetFont and fontObject:GetFont()
+    local path, _, flags
+    if fontObject.GetFont then path, _, flags = fontObject:GetFont() end
     fontObject:SetFont(path or FONT, tonumber(size) or 13, flags or "")
     return fontObject
 end
@@ -528,7 +529,7 @@ function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2,
     b1:SetPoint("LEFT", m1, "RIGHT", 4)
     local p1 = Quick.Button(row, "+", 32, 32, nil, opts)
     p1:SetPoint("LEFT", b1, "RIGHT", 4)
-    Quick.WireStepper(m1, b1, p1, cb1)
+    Quick.WireStepper(m1, b1, p1, cb1, opts and opts.onStepFirst)
     owner[key1] = b1
 
     local l2 = SetReadableSize(FS(row, "caption", c.white), 13)
@@ -541,7 +542,7 @@ function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2,
     b2:SetPoint("LEFT", m2, "RIGHT", 4)
     local p2 = Quick.Button(row, "+", 32, 32, nil, opts)
     p2:SetPoint("LEFT", b2, "RIGHT", 4)
-    Quick.WireStepper(m2, b2, p2, cb2)
+    Quick.WireStepper(m2, b2, p2, cb2, opts and opts.onStepSecond)
     owner[key2] = b2
 
     return row
@@ -565,7 +566,7 @@ function Quick.SingleValue(owner, parent, y, label, key, cb, opts)
     b:SetPoint("LEFT", m, "RIGHT", 4)
     local p = Quick.Button(row, "+", 32, 32, nil, opts)
     p:SetPoint("LEFT", b, "RIGHT", 4)
-    Quick.WireStepper(m, b, p, cb)
+    Quick.WireStepper(m, b, p, cb, opts and opts.onStep)
     owner[key] = b
     return row
 end

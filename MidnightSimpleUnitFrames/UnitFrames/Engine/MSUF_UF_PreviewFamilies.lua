@@ -371,7 +371,8 @@ local function BuildFrameOperations(kind, forcedKey, paint, clear, trinkets)
       local frame = frames and frames[unit]
       if frame and active and UnitExistsPlain(unit) ~= true then
         frame:Show()
-        if frame.SetAlpha then frame:SetAlpha(1) end
+        if frame._msufAppearance then MSUF.UFVisuals.SetFrameAlpha(frame, 1)
+        elseif frame.SetAlpha then frame:SetAlpha(1) end
         if frame.EnableMouse then frame:EnableMouse(true) end
         paint(frame, i)
       elseif frame then

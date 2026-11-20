@@ -405,6 +405,25 @@ local function PaintSelectedButton(btn, fill, edge, textOnlyHover, selected)
     PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, moving and 0.12 or 0.16, moving and -0.20 or -0.15, moving and 0.95 or 1)
     PaintStoredNavIcon(btn, 1.00)
 end
+local function CreateButtonParts(btn, hidden)
+    local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Btn", 2, "BACKGROUND", "BORDER")
+    btn._msuf2Fill, btn._msuf2Edge = fill, edge
+    if hidden then
+        SetSuperellipsePartsShown(fill, false)
+        SetSuperellipsePartsShown(edge, false)
+    end
+    return fill, edge
+end
+local function ShowButtonParts(btn, fill, edge)
+    if not fill then
+        fill, edge = CreateButtonParts(btn)
+    elseif fill.Layout then
+        fill.Layout()
+    end
+    SetSuperellipsePartsShown(fill, true)
+    SetSuperellipsePartsShown(edge, true)
+    return fill, edge
+end
 local function ButtonVisual(btn, active, hover)
     local skinned = MenuSkin.Button(btn, active, hover, ButtonVisual)
     local enabled = not (btn.IsEnabled and not btn:IsEnabled())
@@ -423,6 +442,7 @@ local function ButtonVisual(btn, active, hover)
     local fill = btn._msuf2Fill
     local edge = btn._msuf2Edge
     if btn._msuf2SegmentChoice and not T.classicAtlas and not btn._msuf2TabRim then
+        if not fill then fill, edge = CreateButtonParts(btn, true) end
         -- The outer silhouette is solid. Let the inset fill cover its center.
         edge.L:SetDrawLayer("BACKGROUND", -1)
         edge.M:SetDrawLayer("BACKGROUND", -1)
@@ -438,6 +458,7 @@ local function ButtonVisual(btn, active, hover)
     local textOnlyHover = hover and btn._msuf2HoverTextAccent
     local roleLit = (active and not btn._msuf2SelectionMotion) or (hover and not textOnlyHover)
     if not enabled then
+        if not fill then fill, edge = CreateButtonParts(btn, true) end
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
         SetFillGradient(fill, { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.55 }, 0.08, -0.14)
@@ -457,6 +478,7 @@ local function ButtonVisual(btn, active, hover)
     local rolePaint = btn._msuf2Danger and ROLE_PAINT.danger or btn._msuf2Primary and ROLE_PAINT.primary
         or btn._msuf2Success and ROLE_PAINT.success
     if rolePaint then
+        if not fill then fill, edge = CreateButtonParts(btn, true) end
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
         local label = btn._msuf2Label
@@ -479,9 +501,7 @@ local function ButtonVisual(btn, active, hover)
                 SetNavActiveFX(btn, false)
                 SetLabelColor(btn._msuf2Label, tx)
             else
-                SetSuperellipsePartsShown(fill, true)
-                SetSuperellipsePartsShown(edge, true)
-                if fill and fill.Layout then fill.Layout() end
+                fill, edge = ShowButtonParts(btn, fill, edge)
                 PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.24, -0.18)
                 SetNavActiveFX(btn, not hover, false)
             end
@@ -492,9 +512,7 @@ local function ButtonVisual(btn, active, hover)
             if SetNavPillArt(btn, "hover", bg, 0.14, -0.22) then
                 SetLabelColor(btn._msuf2Label, c.navHeaderHover or tx, 1)
             else
-                SetSuperellipsePartsShown(fill, true)
-                SetSuperellipsePartsShown(edge, true)
-                if fill and fill.Layout then fill.Layout() end
+                fill, edge = ShowButtonParts(btn, fill, edge)
                 PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.14, -0.18, 1)
             end
             PaintStoredNavIcon(btn, 0.88)
@@ -650,9 +668,16 @@ function T.Button(parent, text, width, height, opts)
     btn._msuf2HistoryCheckpoint = history == true
     btn:SetSize(width or 120, height or 24)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
-    local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Btn", 2, "BACKGROUND", "BORDER")
-    btn._msuf2Fill = fill
-    btn._msuf2Edge = edge
+    -- Navigation uses its own art. Create the standard pill only if its
+    -- painter later needs the procedural fallback or the disabled state.
+    local nav = opts and opts.nav
+    if nav == "item" then
+        btn._msuf2NavItem = true
+    elseif nav == "header" then
+        btn._msuf2NavHeader = true
+    else
+        CreateButtonParts(btn)
+    end
     local label = T.Font(btn, "GameFontHighlightSmall", text or "", T.colors.muted)
     label:SetPoint("LEFT", 12, 0)
     label:SetPoint("RIGHT", -12, 0)

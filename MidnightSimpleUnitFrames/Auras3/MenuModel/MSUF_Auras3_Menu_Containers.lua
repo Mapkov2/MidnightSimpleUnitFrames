@@ -457,6 +457,14 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
             layoutShared = SelectedCopy(sourceRecord and sourceRecord.layoutShared, STYLE_SHARED_LAYOUT_KEYS),
             custom = {},
         }
+        if MSUF.Client.IsRetail then
+            local style = snapshot.layoutShared
+            for _, spec in pairs(A3.LaneKeySchema.LANE_SPECS) do
+                if style[spec.showDurationBarKey] == true and style[spec.durationBarDisplayKey] ~= "OVERLAY" then
+                    style[spec.showDurationBarKey] = false
+                end
+            end
+        end
         for index = 1, CUSTOM_CONTAINER_MAX do
             local item = Model.CustomContainer(unit, index, true)
             local placed = type(item) == "table" and type(item.placed) == "table" and item.placed or nil

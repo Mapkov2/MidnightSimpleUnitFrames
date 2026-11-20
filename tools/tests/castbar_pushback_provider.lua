@@ -36,7 +36,8 @@ local function Load(value)
         GetCastbarReverseFillForFrame = realUtils.GetCastbarReverseFillForFrame,
         GetCastbarCountsDown = realUtils.GetCastbarCountsDown, CB_ApplyTexts = realUtils.CB_ApplyTexts }
     local ns = { Scheduler = {}, Castbars = { Config = { Read = function() return { general = {} } end },
-        Driver = {}, Engine = {}, Manager = {}, PublicAPI = {}, Runtime = {}, Utils = utils } }
+        Driver = {}, Engine = {}, Manager = {}, PublicAPI = {}, Runtime = {}, Utils = utils,
+        Style = ProviderWorld.core.Castbars.Style } }
     ns.Require = function(name, context, ...)
         if select("#", ...) > 0 then return ProviderWorld.core.Require(name, context, ...) end
         if name == "MSUF" then return ns end

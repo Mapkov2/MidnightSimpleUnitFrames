@@ -3,6 +3,19 @@ local root, flavor, locale = assert(arg[1]), arg[2] or "Mainline", arg[3] or "en
 local World = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local mw = World.Open(root, flavor, { page = "home", locale = locale })
 local M, api = mw.M, mw.M.Search._CoreAPI
+assert(mw.core.FinalizeLocale() == locale)
+-- Radius two counts a swap plus a missing character consistently across scripts.
+-- Alternate lengths to catch stale edges in reused edit-distance rows.
+local within = M.Search._RoutingContext.SearchEditDistanceWithin
+for _, case in ipairs({
+    {"portrait", "portriatx", 2, true}, {"portrait", "portriatx", 1, false},
+    {"separator", "seapraor", 2, true}, {"Schriftart", "Scrhiftrt", 2, true},
+    {"écriture", "écirturex", 2, true}, {"abcdef", "zyxdef", 2, false},
+    {"", "xy", 2, true}, {"longstring", "", 2, false}, {"ab", "ba", 0, false},
+}) do
+    assert(within(case[1], case[2], case[3]) == case[4], case[1] .. " vs " .. case[2])
+    assert(within(case[2], case[1], case[3]) == case[4], case[2] .. " vs " .. case[1])
+end
 local general = M.EnsureDB().general
 general.classPowerPreviewGuidesEnabled, general.classPowerPreviewAnimate = false, false
 local function Ready()
@@ -28,6 +41,13 @@ local function Ranked(row)
         if result.exactTarget and result.exactTarget.controlId == wanted then return true end
     end
     return false
+end
+if flavor == "Mainline" then
+    local query = locale == "deDE" and "klsasenressouce" or "seapraor"
+    local setting = locale == "deDE" and "bars.showClassPower" or "bars.classPowerTickWidth"
+    Ready()
+    local first = api.SearchPages(query)[1]
+    assert(first and first.exactTarget and first.exactTarget.settingKey == setting, "whole-label typo: " .. query)
 end
 local keys = { "general.classPowerPreviewGuidesEnabled", "general.classPowerPreviewAnimate" }
 for _, key in ipairs(keys) do local row=assert(Find(key), "cold setting missing: "..key); assert(Ranked(row), "cold query rank: "..key) end

@@ -1456,7 +1456,11 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
     ClearDirectTextLayout(text)
     text.directNameWidth = nil
   end
-  text.shortNumbers = general.useShortNumbers ~= false
+  if conf.powerFullValueShort ~= nil then
+    text.shortNumbers = conf.powerFullValueShort == true
+  else
+    text.shortNumbers = general.useShortNumbers ~= false
+  end
   text.hidePercentSymbol = general.hidePercentSymbol == true
 end
 
@@ -1540,6 +1544,7 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health, glo
   local power = out.power or {}
   out.power = power
   power.enabled = PowerEnabled(unit, key, conf, bars)
+  power.hideMissingResource = conf.powerHideMissingResource == true
   power.height = Number(conf.powerBarHeight or bars.powerBarHeight, 3)
   power.texture = PowerTextureFromScope(conf, bars, out.texture)
   power.backgroundTexture = PowerBackgroundTextureFromScope(conf, bars, out.backgroundTexture)

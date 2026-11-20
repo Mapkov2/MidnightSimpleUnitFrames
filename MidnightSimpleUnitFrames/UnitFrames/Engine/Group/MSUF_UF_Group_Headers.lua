@@ -49,7 +49,7 @@ GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 local BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
 local IsUnitToken = UF and UF.IsUnitToken
-local raidNameObserver
+local rosterNameObserver
 
 local LiveGroupKind = GF.GetLiveGroupKind
 
@@ -110,12 +110,15 @@ end
 -- Stop native roster rebuilds while the slots are frozen. One owned listener
 -- retains name-only catch-up without replacing the secure header's scripts.
 -- Unit consumers stay live when a raidN token acquires another occupant.
-local function DeferRaidNameUpdate(header, event, unit)
-  local reasons = GF._pendingGroupRuntimeReasons
-  local kind = GF._pendingGroupRuntimeKind
-  if reasons and reasons.roster and (kind == false or kind == "raid" or kind == "mythicraid") then return end
-  if event ~= "UNIT_NAME_UPDATE" or not IsUnitToken(unit) then return end
-  if unit == "player" or unit:match("^raid%d+$") then GF.DeferGroupRuntime("roster", "raid") end
+local function DeferRosterNameUpdate(observer, _, unit)
+  if not IsUnitToken(unit) then return end
+  local raid = GF.headers.raid
+  -- Small raids may be displayed by the party header.
+  if unit ~= "player" and not unit:match("^raid%d+$") and (raid or not unit:match("^party[1-4]$")) then return end
+  observer:UnregisterEvent("UNIT_NAME_UPDATE")
+  local reasons, kind = GF._pendingGroupRuntimeReasons, GF._pendingGroupRuntimeKind
+  if reasons and reasons.roster and (kind == false or (raid and (kind == "raid" or kind == "mythicraid"))) then return end
+  GF.DeferGroupRuntime("roster", raid and "raid" or nil)
 end
 
 local function FreezeRaidRoster(header)
@@ -155,19 +158,30 @@ local function RetireHeader(header)
   ResumeRaidRoster(header)
 end
 
-function GF.SetRaidRosterFrozen(frozen)
-  -- Keep refusal through the pre-lockdown edge until Runtime handles regen.
+function GF.SetInstanceRosterFrozen(frozen)
+  -- Refuse protected writes from the pre-lockdown edge until regen. An outdoor
+  -- pull leaves native subscriptions alone, so its regen has nothing to resume.
   GF._raidRosterCombatActive = frozen and true or nil
-  local changed = GF.ForEachHeader("raid", frozen and FreezeRaidRoster or ResumeRaidRoster)
-  if raidNameObserver then
-    if frozen and GF.headers.raid then
-      raidNameObserver:RegisterEvent("UNIT_NAME_UPDATE")
+  if not frozen and not GF._instanceRosterFrozen then return false end
+  GF._instanceRosterFrozen = frozen
+  local apply = frozen and FreezeRaidRoster or ResumeRaidRoster
+  local changed = GF.ForEachHeader("raid", apply)
+  local party, priority = GF.headers.party, GF.headers.priority
+  if party then changed = apply(party) or changed end
+  if priority then changed = apply(priority) or changed end
+  if rosterNameObserver then
+    -- One public flag serves every header, including preserved raid subgroups.
+    rosterNameObserver:SetAttribute("msufRosterFrozen", frozen or nil)
+    if frozen and (GF.headers.raid or party or priority) then
+      rosterNameObserver:RegisterEvent("UNIT_NAME_UPDATE")
     else
-      raidNameObserver:UnregisterEvent("UNIT_NAME_UPDATE")
+      rosterNameObserver:UnregisterEvent("UNIT_NAME_UPDATE")
     end
   end
   return changed
 end
+
+GF.SetRaidRosterFrozen = GF.SetInstanceRosterFrozen
 
 function GF.ShowHeaders(key)
   local shown = false
@@ -282,6 +296,13 @@ local function UnknownRaidLayoutCount(kind)
   return UNKNOWN_RAID_LAYOUT_COUNT
 end
 
+local function PartyCompanionCount()
+  if not GetNumSubgroupMembers then return nil end
+  local count = GetNumSubgroupMembers()
+  if issecretvalue(count) == true or type(count) ~= "number" then return nil end
+  return count
+end
+
 --- Header size estimates use live roster counts when available, otherwise the
 --- last known count. This keeps preview/mover geometry stable during login.
 local function ConfiguredCount(kind, conf)
@@ -292,11 +313,14 @@ local function ConfiguredCount(kind, conf)
   end
   if kind == "party" then
     if GetNumSubgroupMembers then
-      local n = GetNumSubgroupMembers() or 0
+      local n = PartyCompanionCount() or 0
       if n > 0 and conf.showPlayer ~= false then
         n = n + 1
-      elseif n == 0 and conf.showSolo == true and conf.showPlayer ~= false then
-        n = 1
+      elseif n == 0 then
+        if conf.showPartyInRaid == true and IsInRaid() then
+          return RememberLayoutCount(kind, conf.showPlayer ~= false and 1 or 0)
+        end
+        if conf.showSolo == true and conf.showPlayer ~= false then n = 1 end
       end
       if n > 0 then return RememberLayoutCount(kind, n) end
     end
@@ -315,16 +339,16 @@ function GF.GetLiveLayoutCount(kind)
 end
 
 local function LayoutParts(kind, conf, configuredCount, preservedGroupCount)
-  local w, h, spacing = 80, 32, 1
-  if GF.GetScaledFrameMetrics then
-    w, h, spacing = GF.GetScaledFrameMetrics(kind)
-  else
-    w, h, spacing = conf.width or w, conf.height or h, conf.spacing or spacing
-  end
   local count = configuredCount or ConfiguredCount(kind, conf)
-  local dx, dy, totalW, totalH = 0, 0, w, h
+  local dx, dy, totalW, totalH, w, h, spacing
   if GF.GetGridMetrics then
-    dx, dy, totalW, totalH = GF.GetGridMetrics(kind, count, preservedGroupCount)
+    dx, dy, totalW, totalH, w, h, spacing = GF.GetGridMetrics(kind, count, preservedGroupCount)
+  end
+  -- Party metrics are independent of count. Raid buttons use live-tier metrics
+  -- even when the estimated grid has a different configured count.
+  if kind ~= "party" or not w or not h or spacing == nil then
+    if GF.GetScaledFrameMetrics then w, h, spacing = GF.GetScaledFrameMetrics(kind)
+    else w, h, spacing = conf.width or 80, conf.height or 32, conf.spacing or 1 end
   end
   return w, h, spacing, dx or 0, dy or 0, totalW or w, totalH or h, count
 end
@@ -752,8 +776,8 @@ local function ArenaPartyExpectedCompanionCount()
   end
 
   local known = false
-  local count = GetNumSubgroupMembers and GetNumSubgroupMembers() or nil
-  if issecretvalue(count) ~= true and type(count) == "number" then
+  local count = PartyCompanionCount()
+  if count ~= nil then
     count = floor(count + 0.5)
     if count < 0 then count = 0 elseif count > 4 then count = 4 end
     -- A transient subgroup count can itself be partial during a Shuffle swap;
@@ -813,25 +837,28 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
   local entries = {}
   if kind == "party" then
     local liveKind = LiveGroupKind()
-    if liveKind == "party" then
+    if GF.IsPartyGroupContext(liveKind, conf) then
       local expectedCompanions = ArenaPartyExpectedCompanionCount()
+      if IsRaidLikeKind(liveKind) then
+        local count = PartyCompanionCount()
+        if count == nil then return nil end
+        expectedCompanions = ClampInt(count, 0, 0, 4)
+      end
       if expectedCompanions == false then return nil end
-      local arenaRosterComplete = true
+      local rosterComplete = true
       if conf.showPlayer ~= false then
         if AddNameListEntry(entries, "player", 0, conf) ~= true then
-          arenaRosterComplete = false
+          rosterComplete = false
         end
       end
       local companionLimit = expectedCompanions ~= nil and expectedCompanions or 4
       for i = 1, companionLimit do
         if AddNameListEntry(entries, "party" .. i, i, conf) ~= true then
-          arenaRosterComplete = false
+          rosterComplete = false
         end
       end
-      -- In Arena only, never publish a partial list: Blizzard treats nameList
-      -- as a hard filter and would hide the newly assigned Shuffle teammate.
-      -- PvE keeps its established four-token scan byte-for-byte in behavior.
-      if expectedCompanions ~= nil and arenaRosterComplete ~= true then return nil end
+      -- A partial name list would hide members while Arena or raid subgroup tokens settle.
+      if expectedCompanions ~= nil and rosterComplete ~= true then return nil end
     elseif liveKind == nil and conf.showSolo == true and conf.showPlayer ~= false then
       AddNameListEntry(entries, "player", 0, conf)
     end
@@ -1245,7 +1272,7 @@ end
 
 --- One birth path for every MSUF SecureGroupHeader (party, raid, preserved raid
 --- groups, priority).
-local function CreateSecureHeader(name, parent, raid)
+local function CreateSecureHeader(name, parent)
   local header = PixelLayoutRegion(CreateFrame("Frame", name, parent, "SecureGroupHeaderTemplate"))
   -- 12.1.5 keeps the header rect on whole pixels in native code, which is
   -- what the secure template anchors its managed children against.
@@ -1253,15 +1280,13 @@ local function CreateSecureHeader(name, parent, raid)
   -- creation and never from a refresh path.
   Dep("MSUF_SetRoundLayoutToNearestPixel")(header, true)
   header[CHILD_INIT_METHOD] = OnHeaderChildInit
-  if raid then
-    -- Keep native handlers inside Blizzard's secure wrapper storage; never
-    -- round-trip them through addon fields or SetScript at combat boundaries.
-    SecureHandlerWrapScript(header, "OnShow", header, "if self:GetAttribute('_ignore') then return false end")
-    if not raidNameObserver then
-      raidNameObserver = CreateFrame("Frame")
-      raidNameObserver:SetScript("OnEvent", DeferRaidNameUpdate)
-    end
+  if not rosterNameObserver then
+    rosterNameObserver = CreateFrame("Frame", nil, nil, "SecureFrameTemplate")
+    rosterNameObserver:SetScript("OnEvent", DeferRosterNameUpdate)
   end
+  -- Native OnShow also runs when an ancestor reappears. Blizzard's restricted
+  -- handles cannot read its private _ignore attribute.
+  SecureHandlerWrapScript(header, "OnShow", rosterNameObserver, "if control:GetAttribute('msufRosterFrozen') then return false end")
   return header
 end
 
@@ -1342,7 +1367,9 @@ local function GroupBorderScopeActive(anchorKind, conf)
   if hiddenInHousing and hiddenInHousing(anchorKind) then return false end
   local liveKind = LiveGroupKind()
   if anchorKind == "party" then
-    if liveKind == "party" then return true end
+    if GF.IsPartyGroupContext(liveKind, conf) then
+      return liveKind == "party" or conf.showPlayer ~= false or (PartyCompanionCount() or 0) > 0
+    end
     return liveKind == nil and conf.showSolo == true
   end
   if anchorKind == "raid" or anchorKind == "mythicraid" then
@@ -1643,7 +1670,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
   for groupIndex = 1, groupCount do
     local header = headers[groupIndex]
     if not header then
-      header = CreateSecureHeader(HeaderName("raid"), anchor, true)
+      header = CreateSecureHeader(HeaderName("raid"), anchor)
       headers[groupIndex] = header
     end
 
@@ -1913,7 +1940,7 @@ function GF.SetupHeader(key, kind, liveRoster)
   end
 
   if not header then
-    header = CreateSecureHeader(HeaderName(key), anchor, key == "raid")
+    header = CreateSecureHeader(HeaderName(key), anchor)
     GF.headers[key] = header
     newHeader = true
   end

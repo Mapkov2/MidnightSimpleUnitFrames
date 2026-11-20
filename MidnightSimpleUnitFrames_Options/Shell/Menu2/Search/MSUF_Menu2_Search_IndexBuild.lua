@@ -55,7 +55,6 @@ local SearchProviders = Parts.SearchProviders
 local SearchResultSpecificityBoost = Parts.SearchResultSpecificityBoost
 local SearchSupportQuestionBoost = Parts.SearchSupportQuestionBoost
 local SearchText = Parts.SearchText
-local SearchTokenCharCounts = Parts.SearchTokenCharCounts
 local ShortLabel = Parts.ShortLabel
 local T = Parts.T
 local TrimText = Parts.TrimText
@@ -165,9 +164,8 @@ SearchIndexBuild.PHASES = {
         if deadline and staticIndex and staticIndex.Advance and not staticIndex.Advance(deadline) then return false end
         return AddStaticIndexSearchRecords(job, deadline)
     end,
-    function(job)
-        if job.provided then SearchProviders.Append(job.records, job.provided) end
-        return true
+    function(job, deadline)
+        return not job.provided or SearchProviders.Append(job.records, job.provided, job, deadline)
     end,
     function(job, deadline)
         local records, seenRecords = job.records, job.seenRecords
@@ -281,7 +279,6 @@ function SearchIndexBuild.WarmTokens(job, deadline)
         if not rec.tokens or rec.tokensLexicon ~= generation then
             rec.tokens, rec.tokensLexicon = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit), generation
         end
-        SearchTokenCharCounts(rec, rec.tokens)
         if deadline and SearchIndexBuild.Due(deadline) then
             job.index = i + 1
             return false
@@ -309,18 +306,27 @@ function SearchIndexBuild.Advance(deadline)
     if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
         if not (job and job.phase <= #SearchIndexBuild.PHASES) then job = SearchIndexBuild.New() end
         SEARCH_STATE.indexQueue = job
-        if not SearchIndexBuild.Step(job, deadline) then
-            job.serial = SEARCH_STATE.dirtySerial
+        local serial = SEARCH_STATE.dirtySerial
+        local finished = SearchIndexBuild.Step(job, deadline)
+        if serial ~= SEARCH_STATE.dirtySerial then
+            SEARCH_STATE.indexQueue = nil
             return false
         end
-        local serial = SEARCH_STATE.dirtySerial
+        if not finished then
+            job.serial = serial
+            return false
+        end
         RefreshProviderContexts()
         if SEARCH_STATE.dirtySerial ~= serial then
             SEARCH_STATE.indexQueue = nil
             return false
         end
         SEARCH_STATE.records, SEARCH_STATE.recordsDirty = job.records, false
-    elseif not job or job.records ~= SEARCH_STATE.records then
+        -- All build phases finished. Keep only the cursor used to warm the
+        -- published records, releasing the deduplication and page lookups.
+        job = nil
+    end
+    if not job or job.records ~= SEARCH_STATE.records then
         job = { records = SEARCH_STATE.records, index = 1, phase = #SearchIndexBuild.PHASES + 1 }
         SEARCH_STATE.indexQueue = job
     end
@@ -348,8 +354,11 @@ function SearchIndexBuild.Pump()
     SEARCH_STATE.readyCallbacks = nil
     for i = 1, #(callbacks or EMPTY_SEARCH_RECORDS) do callbacks[i]() end
     local request = SEARCH_STATE.request
-    if not request or not request.debounced or request.serial ~= SEARCH_STATE.inputSerial then return end
-    if request.box and TrimText(request.box:GetText() or "") ~= request.query then return end
+    if not request or not request.debounced then return end
+    if request.serial ~= SEARCH_STATE.inputSerial or (request.box and TrimText(request.box:GetText() or "") ~= request.query) then
+        CancelSearchBackgroundIndex()
+        return
+    end
     if SearchIndexBuild.Due(deadline) then SearchIndexBuild.Queue() return end
     local queryJob = request.job
     if queryJob and (queryJob.serial ~= SEARCH_STATE.dirtySerial or queryJob.records ~= SEARCH_STATE.records
@@ -371,34 +380,98 @@ function SearchIndexBuild.Queue()
     SEARCH_STATE.sliceTask = C_Timer.After(0, SearchIndexBuild.Pump)
 end
 
-local function CurateSearchResults(results, supportQuestion)
-    -- An exact query target is pinned on top by its bonus; the floor comes
-    -- from the best other result, so that bonus never empties the list.
-    local topScore = 0
-    for i = 1, #results do
-        if not results[i].exactQueryHit then
-            topScore = tonumber(results[i].score) or 0
-            break
+-- An exact option in a visited dropdown can fill an empty palette slot.
+-- The labels were captured when the widget registered; never call its getter here.
+local function HasChoiceLabel(rec, normalized)
+    local choices = rawget(rec, "choiceLabels")
+    if choices then
+        for i = 1, #choices do
+            if type(choices[i]) == "string" and NormalizeSearchText(choices[i]) == normalized then return true end
         end
     end
-    local floorScore = SEARCH_MIN_RESULT_SCORE
-    if topScore >= 600 then
-        floorScore = math.max(floorScore, topScore * (supportQuestion and 0.70 or 0.42))
-    elseif topScore >= 300 then
-        floorScore = math.max(floorScore, topScore * 0.30)
-    end
+    return false
+end
 
-    local function SpecificControlMatch(rec)
-        local clauseCount = tonumber(rec and rec.queryClauseCount) or 0
-        if clauseCount < 2 then return false end
-        if rec.kind == "page" or rec.kind == "faq" or rec.kind == "easteregg" then return false end
-        return (tonumber(rec.missedClauses) or 0) == 0 and (tonumber(rec.matchedClauses) or 0) == clauseCount
-    end
+local function BetterSearchResult(a, b)
+    if a.score ~= b.score then return a.score > b.score end
+    if (a.hint or "") ~= (b.hint or "") then return tostring(a.hint or "") < tostring(b.hint or "") end
+    if (a.order or 0) ~= (b.order or 0) then return (a.order or 0) < (b.order or 0) end
+    return tostring(a.label) < tostring(b.label)
+end
 
-    local curated = {}
+local function ResultFloor(top, support)
+    if top >= 600 then return math.max(SEARCH_MIN_RESULT_SCORE, top * (support and 0.70 or 0.42)) end
+    if top >= 300 then return math.max(SEARCH_MIN_RESULT_SCORE, top * 0.30) end
+    return SEARCH_MIN_RESULT_SCORE
+end
+
+local function EligibleResult(rec, floor)
+    if rec.exactQueryHit or rec.score >= floor then return true end
+    local count = rec.queryClauseCount
+    return count >= 2 and rec.kind ~= "page" and rec.kind ~= "faq" and rec.kind ~= "easteregg"
+        and rec.missedClauses == 0 and rec.matchedClauses == count
+end
+
+-- Between compactions the cutoff still denotes a row with at least limit
+-- equally good or better candidates in the buffer.
+local function KeepBest(rows, limit, rec)
+    if rows.cutoff and not BetterSearchResult(rec, rows.cutoff) then return end
+    rows[#rows + 1] = rec
+    if #rows == 2 * limit then
+        table.sort(rows, BetterSearchResult)
+        rows.cutoff = rows[limit]
+        for i = limit + 1, #rows do rows[i] = nil end
+    end
+end
+
+local function CurateSearchResults(results, support, normalized, job, deadline)
+    local selection = job and job.selection
+    local top = selection and selection.top or 0
+    if #results > SEARCH_MAX_RESULTS * 2 then
+        if not selection then
+            selection = { index = 1, regular = {}, choices = {} }
+            if job then job.selection = selection end
+        end
+        if not selection.floor then
+            for i = selection.index, #results do
+                local rec = results[i]
+                if not rec.exactQueryHit and rec.score > top then top = rec.score end
+                if deadline and i % 32 == 0 and SearchIndexBuild.Due(deadline) then
+                    selection.index, selection.top = i + 1, top
+                    return nil
+                end
+            end
+            selection.floor, selection.index = ResultFloor(top, support), 1
+        end
+        local regular, choices, floor = selection.regular, selection.choices, selection.floor
+        for i = selection.index, #results do
+            local rec = results[i]
+            if EligibleResult(rec, floor) then
+                KeepBest(regular, SEARCH_MAX_RESULTS, rec)
+            elseif rec.kind == "dropdown" and HasChoiceLabel(rec, normalized) then
+                KeepBest(choices, 6, rec)
+            end
+            if deadline and i % 16 == 0 and SearchIndexBuild.Due(deadline) then
+                selection.index = i + 1
+                return nil
+            end
+        end
+        -- An unconditional hit after the best 24, and a conditional choice
+        -- after the best six choices, cannot reach any of their allowed slots.
+        -- Replay the original admission order on the two bounded buffers.
+        for i = 1, #choices do regular[#regular + 1] = choices[i] end
+        results = regular
+    end
+    table.sort(results, BetterSearchResult)
+    if not selection then
+        for i = 1, #results do
+            if not results[i].exactQueryHit then top = results[i].score break end
+        end
+    end
+    local floor, curated = selection and selection.floor or ResultFloor(top, support), {}
     for i = 1, #results do
         local rec = results[i]
-        if rec and (rec.exactQueryHit or (tonumber(rec.score) or 0) >= floorScore or SpecificControlMatch(rec)) then
+        if EligibleResult(rec, floor) or (#curated < 6 and rec.kind == "dropdown" and HasChoiceLabel(rec, normalized)) then
             curated[#curated + 1] = rec
             if #curated >= SEARCH_MAX_RESULTS then break end
         end
@@ -406,16 +479,132 @@ local function CurateSearchResults(results, supportQuestion)
     return curated
 end
 
-local exactQueryTargets
-local function ExactQueryTarget(normalized)
-    if not exactQueryTargets then
-        exactQueryTargets = {}
-        for phrase, target in pairs(SearchData.CONTROL_QUERY_TARGETS or {}) do
-            exactQueryTargets[NormalizeSearchText(phrase)] = target
+
+local exactQueryTargets, queryFrames, queryLocale
+-- These two sets of question frames have historically worked across menu languages.
+local COMMON_FRAMES = "could you #|could you show me #|can you #|can you show me #|please #|show me #|" ..
+    "where is #|where do I find #|where can I find #|how do I #|how do I change #|how can I change #|" ..
+    "kannst du #|könntest du #|bitte #|zeig mir #|zeige mir #|wo ist #|wo finde ich #|wie ändere ich #|wie stelle ich # ein"
+local COMMON_ARTICLES = "the|der|die|das|den|dem"
+local QUERY_TRAILING = { please = true, thanks = true, bitte = true, danke = true, setting = true,
+    settings = true, option = true, einstellung = true }
+
+local function AddQueryFrames(frames, packed)
+    for pattern in packed:gmatch("[^|]+") do
+        local left, right = pattern:match("^(.-)#(.*)$")
+        local pre, suf = NormalizeSearchText(left), NormalizeSearchText(right)
+        -- Restore only a boundary present in the template. Chinese and Korean
+        -- particles may touch the subject; a Latin word must end at its space.
+        if pre ~= "" and left:sub(-1) == " " then pre = pre .. " " end
+        if suf ~= "" and right:sub(1, 1) == " " then suf = " " .. suf end
+        local buckets = pre == "" and frames.tail or frames.head
+        local key = pre == "" and suf:byte(-1) or pre:match("^(%S+) ") or pre:byte(1)
+        local list = buckets[key]
+        if not list then
+            list = {}
+            buckets[key] = list
+        end
+        list[#list + 1] = { pre, suf }
+    end
+end
+
+local function AddQuerySubjects(packed, caption, canonical)
+    local target = exactQueryTargets[canonical]
+    if not target then return end
+    for phrase in packed:gmatch("[^|]+") do
+        exactQueryTargets[NormalizeSearchText(phrase)] = target
+    end
+    local label = NormalizeSearchText(M.Tr(caption))
+    if label ~= "" then exactQueryTargets[label] = target end
+end
+
+local function PrepareQueryTargets(locale)
+    exactQueryTargets, queryFrames, queryLocale = {}, { head = {}, tail = {}, articles = {} }, locale
+    for phrase, target in pairs(SearchData.CONTROL_QUERY_TARGETS or {}) do
+        exactQueryTargets[NormalizeSearchText(phrase)] = target
+    end
+    local languages = SearchData.CONTROL_QUERY_LANGUAGES
+    local language = languages and languages[locale]
+    AddQueryFrames(queryFrames, COMMON_FRAMES)
+    local articles = COMMON_ARTICLES
+    if language then
+        AddQueryFrames(queryFrames, language.frames)
+        AddQuerySubjects(language.sync, "Sync group", "profile sync")
+        AddQuerySubjects(language.mana, "Mana spend preview", "mana cost preview")
+        AddQuerySubjects(language.variants, "Profile variants", "profile variants")
+        if language.articles then articles = articles .. "|" .. language.articles end
+    end
+    for article in articles:gmatch("[^|]+") do queryFrames.articles[article] = true end
+end
+
+local function KnownQueryTarget(phrase)
+    local builtin = exactQueryTargets[phrase]
+    if builtin then return builtin end
+    local providers = SEARCH_STATE.providerCache
+    local phrases = providers and providers.queryTargets
+    return phrases and phrases[phrase]
+end
+
+local function FrameSubjectTarget(rest, candidates)
+    local target = KnownQueryTarget(rest)
+    if target ~= nil then return target end
+    candidates[rest] = true
+    local word = rest:match("^(%S+) ")
+    if word == "please" or word == "bitte" then rest = rest:sub(#word + 2) end
+    for _ = 1, 2 do
+        word = rest:match(" (%S+)$")
+        if not QUERY_TRAILING[word] then break end
+        rest = rest:sub(1, -#word - 2)
+    end
+    target = KnownQueryTarget(rest)
+    if target ~= nil then return target end
+    word = rest:match("^(%S+) ")
+    candidates[rest] = true
+    if queryFrames.articles[word] then
+        rest = rest:sub(#word + 2)
+        candidates[rest] = true
+        return KnownQueryTarget(rest)
+    end
+end
+
+local function TryQueryFrames(list, normalized, candidates)
+    for i = 1, #list do
+        local pre, suf = list[i][1], list[i][2]
+        if #normalized > #pre + #suf and normalized:find(pre, 1, true) == 1
+            and (suf == "" or normalized:sub(-#suf) == suf) then
+            local rest = TrimText(normalized:sub(#pre + 1, #normalized - #suf))
+            candidates = candidates or {}
+            local target = FrameSubjectTarget(rest, candidates)
+            if target ~= nil then return target end
         end
     end
-    return exactQueryTargets[normalized] or SearchData.NaturalQueryTarget(normalized)
+    return nil, candidates
 end
+
+local function ExactQueryTarget(normalized)
+    local locale = SEARCH_STATE.localeKey or MSUF.LOCALE or "enUS"
+    if locale ~= queryLocale then PrepareQueryTargets(locale) end
+    local target = KnownQueryTarget(normalized)
+    if target ~= nil then return target end
+    local candidates
+    local list = queryFrames.head[normalized:match("^(%S+) ")]
+    if list then target, candidates = TryQueryFrames(list, normalized, candidates) end
+    if target == nil then
+        list = queryFrames.head[normalized:byte(1)]
+        if list then target, candidates = TryQueryFrames(list, normalized, candidates) end
+    end
+    if target == nil then
+        list = queryFrames.tail[normalized:byte(-1)]
+        if list then target, candidates = TryQueryFrames(list, normalized, candidates) end
+    end
+    -- A provider conflict is false and must not fall through to another guess.
+    if target ~= nil then return target end
+    target = SearchData.NaturalQueryTarget(normalized)
+    if target == nil then target = SearchProviders.CompactTarget(SEARCH_STATE.providerCache, normalized) end
+    if target ~= nil then return target end
+    return nil, candidates
+end
+
 local function QueryScope(rec, target)
     local contracts = Search.StaticIndex.TargetField(rec, "prepareContracts")
     if not contracts then
@@ -448,8 +637,9 @@ local function MatchesExactQueryTarget(rec, target)
         local key = tostring(field(rec, "settingKey") or "")
         return key:sub(-#target.settingSuffix) == target.settingSuffix
     end
+    if not target.controlSuffix or (not target.pageKey and rec.key ~= "profiles") then return false end
     local id = tostring(field(rec, "controlId") or "")
-    if not ((target.pageKey or rec.key == "profiles") and target.controlSuffix and id:find(target.controlSuffix, 1, true)) then return false end
+    if not id:find(target.controlSuffix, 1, true) then return false end
     if target.querySettingKey then
         local kind, _, setting = QueryScope(rec, target)
         return kind ~= nil and setting == target.querySettingKey
@@ -457,7 +647,7 @@ local function MatchesExactQueryTarget(rec, target)
     return true
 end
 
-function SearchIndexBuild.QueryContext(query)
+function SearchIndexBuild.QueryContext(query, caption)
     -- Raw setting keys ("gf_party.hpTextMode") reach search from exports and
     -- support references. The baked index is pre-normalized without camelCase
     -- tokens, and the scope prefix names the provider rather than the control,
@@ -473,7 +663,8 @@ function SearchIndexBuild.QueryContext(query)
     if #clauses == 0 then return { empty = true } end
     if SearchCharCount(normalized) < MIN_SEARCH_QUERY_LEN then return { empty = true } end
 
-    local exactQueryTarget = ExactQueryTarget(normalized)
+    local exactQueryTarget, captionSubjects
+    if not caption then exactQueryTarget, captionSubjects = ExactQueryTarget(normalized) end
     local supportQuestion = SearchLooksLikeSupportQuestion(query, normalized)
     local genericLocationSubject, genericLocationClauses = SearchGenericLocationSubjectClauses(query, normalized)
     local genericLocationQuestion = genericLocationSubject ~= nil and genericLocationClauses ~= nil
@@ -493,7 +684,36 @@ function SearchIndexBuild.QueryContext(query)
         supportQuestion = supportQuestion, genericLocationClauses = genericLocationClauses,
         genericLocationQuestion = genericLocationQuestion, controlQuestion = controlQuestion,
         profileTransferQuestion = profileTransferQuestion, wagoBrowseQuestion = wagoBrowseQuestion,
-        requiredMatches = requiredMatches }
+        requiredMatches = requiredMatches, captionSubjects = captionSubjects }
+end
+
+-- For an unregistered subject, reuse ordinary ranking only when the whole
+-- subject equals a displayed caption. Problems and compound questions keep
+-- their complete wording. Equal captions retain the normal tie breakers.
+local function ResolveCaptionContext(context, records, job, deadline)
+    local subjects, best, original = context.captionSubjects, context.bestCaption, context.normalized
+    for i = context.captionIndex or 1, #records do
+        local rec = records[i]
+        local caption = rec.labelNorm
+        -- A FAQ title can itself be a question. Keep its full caption ahead
+        -- of a shorter setting with the same words after the question prefix.
+        if caption == original or rec.sourceLabelNorm == original then
+            best = nil
+            break
+        end
+        if subjects[caption] and (not best or #caption > #best) then best = caption end
+        if deadline and i % 32 == 0 and SearchIndexBuild.Due(deadline) then
+            context.captionIndex, context.bestCaption = i + 1, best
+            return nil
+        end
+    end
+    context.captionSubjects = nil
+    if best then
+        local ranked = SearchIndexBuild.QueryContext(best, true)
+        if not ranked.empty then context = ranked end
+    end
+    if job then job.context = context end
+    return context
 end
 
 -- The search input accepts 60 letters, up to four UTF-8 bytes each.
@@ -504,23 +724,29 @@ function SearchIndexBuild.RecentQueries()
     if recent and recent.serial == SEARCH_STATE.dirtySerial then return recent end
 end
 
-function SearchIndexBuild.ReuseResults(query, page)
+function SearchIndexBuild.FindRecent(query, page)
     local recent = SearchIndexBuild.RecentQueries()
     if not recent then return nil end
+    if page == "home" or page == "search" then page = nil end
     for i = 1, #recent do
         local entry = recent[i]
-        if entry.query == query and entry.page == page then
-            if i > 1 then table.insert(recent, 1, table.remove(recent, i)) end
-            local results, ranks = entry.results, entry.ranks
-            for row = 1, #results do
-                local rec, at = results[row], (row - 1) * 4
-                rec.score, rec.exactQueryHit = ranks[at + 1], ranks[at + 2]
-                rec.matchedClauses, rec.missedClauses = ranks[at + 3], ranks[at + 4]
-                rec.queryClauseCount = entry.clauseCount
-            end
-            return results
-        end
+        if entry.query == query and entry.page == page then return recent, i end
     end
+end
+
+function SearchIndexBuild.ReuseResults(query, page)
+    local recent, index = SearchIndexBuild.FindRecent(query, page)
+    if not recent then return nil end
+    local entry = recent[index]
+    if index > 1 then table.insert(recent, 1, table.remove(recent, index)) end
+    local results, ranks = entry.results, entry.ranks
+    for row = 1, #results do
+        local rec, at = results[row], (row - 1) * 4
+        rec.score, rec.exactQueryHit = ranks[at + 1], ranks[at + 2]
+        rec.matchedClauses, rec.missedClauses = ranks[at + 3], ranks[at + 4]
+        rec.queryClauseCount = entry.clauseCount
+    end
+    return results
 end
 
 function SearchIndexBuild.RememberResults(query, page, results)
@@ -549,7 +775,9 @@ function SearchPages(query, job, deadline)
         return EMPTY_SEARCH_RECORDS
     end
     if SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then return EMPTY_SEARCH_RECORDS end
-    local records = GetSearchRecords()
+    -- A sliced request has a fixed snapshot. Explicit invalidations abort by
+    -- generation; polling-only providers are checked at entry and publication.
+    local records = job and job.context and SEARCH_STATE.records or GetSearchRecords()
     if SEARCH_STATE.recordsDirty or not SEARCH_STATE.records or not SEARCH_STATE.recordsReady then
         if not SEARCH_STATE.request then ScheduleSearchInputQuery(nil, query, false) end
         if job then return nil end
@@ -570,7 +798,14 @@ function SearchPages(query, job, deadline)
         local cached = SearchIndexBuild.ReuseResults(input, currentPageKey)
         if cached then return cached end
         context = SearchIndexBuild.QueryContext(query)
-        if job then job.context = context return nil end
+        if job then
+            job.context = context
+            if deadline and SearchIndexBuild.Due(deadline) then return nil end
+        end
+    end
+    if context.captionSubjects then
+        context = ResolveCaptionContext(context, records, job, deadline)
+        if not context then return nil end
     end
     if context.empty then return EMPTY_SEARCH_RECORDS end
     local normalized, clauses, exactQueryTarget = context.normalized, context.clauses, context.exactQueryTarget
@@ -659,14 +894,16 @@ function SearchPages(query, job, deadline)
         end
         if deadline and SearchIndexBuild.Due(deadline) then job.index = i + 1 return nil end
     end
-    if job and not job.sortReady then job.sortReady, job.index = true, #records + 1 return nil end
-    table.sort(results, function(a, b)
-        if a.score ~= b.score then return a.score > b.score end
-        if (a.hint or "") ~= (b.hint or "") then return tostring(a.hint or "") < tostring(b.hint or "") end
-        if (a.order or 0) ~= (b.order or 0) then return (a.order or 0) < (b.order or 0) end
-        return tostring(a.label) < tostring(b.label)
-    end)
-    local curated = CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
+    if job then
+        job.index = #records + 1
+        if deadline and SearchIndexBuild.Due(deadline) then return nil end
+    end
+    local curated = CurateSearchResults(results, supportQuestion and not genericLocationQuestion, normalized, job, deadline)
+    if not curated then return nil end
+    if job and job.serial then
+        RefreshProviderContexts()
+        if job.serial ~= SEARCH_STATE.dirtySerial then return nil end
+    end
     SearchIndexBuild.RememberResults(input, currentPageKey, curated)
     return curated
 end
@@ -698,6 +935,7 @@ RunSearchInputQuery = function(query, openPage)
     M.searchResultsPending = nil
 
     if query == "" then
+        SEARCH_STATE.request = nil
         SetSearchResults(nil, "")
         if openPage then ShowSearchPageForQuery(query)
         elseif M.activeKey == "search" then Search._Render.ShowSearchPage() end
@@ -705,6 +943,7 @@ RunSearchInputQuery = function(query, openPage)
     end
 
     if SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then
+        SEARCH_STATE.request = nil
         SetSearchResults(nil, query)
         if openPage then ShowSearchPageForQuery(query)
         elseif M.activeKey == "search" then Search._Render.ShowSearchPage() end
@@ -714,13 +953,22 @@ RunSearchInputQuery = function(query, openPage)
     ScheduleSearchInputQuery(nil, query, openPage)
 end
 
-ScheduleSearchInputQuery = function(searchBox, query, openPage, onComplete)
+ScheduleSearchInputQuery = function(searchBox, query, openPage, onComplete, submitted)
     if SearchCombatLocked() or SearchMenuClosed() then
         CancelSearchBackgroundIndex()
         return
     end
     query = TrimText(query)
     openPage = openPage == true
+    local sourcePage = M.activeKey == "search" and M.searchReturnKey or M.activeKey
+    local pending = SEARCH_STATE.request
+    if submitted and pending and pending.serial == SEARCH_STATE.inputSerial and pending.box == searchBox
+        and pending.query == query and pending.sourcePage == sourcePage and pending.openPage == openPage then
+        if pending.submitted then return end
+        pending.onComplete, pending.submitted, pending.debounced = onComplete, true, true
+        SearchIndexBuild.Queue()
+        return
+    end
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
     local serial = SEARCH_STATE.inputSerial
 
@@ -732,7 +980,6 @@ ScheduleSearchInputQuery = function(searchBox, query, openPage, onComplete)
         return
     end
 
-    local sourcePage = M.activeKey == "search" and M.searchReturnKey or M.activeKey
     M.searchResultsPending = true
     M.searchResults = {}
     M.searchResultsQuery = query
@@ -740,14 +987,18 @@ ScheduleSearchInputQuery = function(searchBox, query, openPage, onComplete)
         ShowSearchPageForQuery(query)
     end
 
-    local request = { serial = serial, query = query, openPage = openPage, box = searchBox, onComplete = onComplete, sourcePage = sourcePage }
+    local ready = submitted or not searchBox or SearchIndexBuild.FindRecent(query, sourcePage) ~= nil
+    local request = { serial = serial, query = query, openPage = openPage, box = searchBox, onComplete = onComplete,
+        sourcePage = sourcePage, submitted = submitted, debounced = ready }
     SEARCH_STATE.request = request
     SearchIndexBuild.Queue()
-    C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, function()
-        if SEARCH_STATE.request ~= request or serial ~= SEARCH_STATE.inputSerial then return end
-        request.debounced = true
-        SearchIndexBuild.Queue()
-    end)
+    if not ready then
+        C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, function()
+            if SEARCH_STATE.request ~= request or serial ~= SEARCH_STATE.inputSerial or request.debounced then return end
+            request.debounced = true
+            SearchIndexBuild.Queue()
+        end)
+    end
 end
 
 local function OpenSearchResults(query)

@@ -167,6 +167,7 @@ local LIVE_STATE_UNIT_EVENTS = {
     "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
     "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION",
 }
+local LIVE_PORTRAIT_UNIT_EVENTS = { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED" }
 local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus",
     boss = "boss1", arena = "arena1", pet = "pet", pettarget = "pettarget" }
 local SyncUnitPreviewLiveState
@@ -209,11 +210,22 @@ SyncUnitPreviewLiveState = function(box, key, reason)
     driver:RegisterEvent("PLAYER_TARGET_CHANGED")
     driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
     driver:RegisterEvent("GROUP_ROSTER_UPDATE")
+    driver:RegisterEvent("PORTRAITS_UPDATED")
     if driver.RegisterUnitEvent then
         for i = 1, #LIVE_STATE_UNIT_EVENTS do
             driver:RegisterUnitEvent(LIVE_STATE_UNIT_EVENTS[i], unit)
         end
         driver:RegisterUnitEvent("UNIT_PET", "player")
+    end
+    -- Dependent portraits follow the bound token even when the event names its parent.
+    local unfiltered = MSUF.UF.IsDependentUnit(unit) or not driver.RegisterUnitEvent
+    for i = 1, #LIVE_PORTRAIT_UNIT_EVENTS do
+        local event = LIVE_PORTRAIT_UNIT_EVENTS[i]
+        if unfiltered then
+            driver:RegisterEvent(event)
+        else
+            driver:RegisterUnitEvent(event, unit)
+        end
     end
     if reason == "PLAYER_REGEN_ENABLED" and box.RequestRefresh then box:RequestRefresh("UNIT_PREVIEW_LIVE_STATE") end
 end

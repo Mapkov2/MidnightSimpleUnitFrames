@@ -507,7 +507,7 @@ local function SelectPageArea(area)
         function ctx:AddResizeCallback(fn)
             view.resizeCallbacks[#view.resizeCallbacks + 1] = fn
         end
-        function ctx:TrackPageAreaContentLayout(nestedBuilder)
+        function ctx:TrackPageAreaContentLayout(nestedBuilder, deferred)
             local nestedCtx = nestedBuilder.ctx
             local layout = { builder = nestedBuilder, setHeight = nestedCtx.SetContentHeight, paddingByView = {} }
             view.contentLayouts[#view.contentLayouts + 1] = layout
@@ -515,6 +515,16 @@ local function SelectPageArea(area)
             function nestedCtx:SetContentHeight(height, options)
                 layout.padding = height - math.abs(nestedBuilder.y)
                 return layout.setHeight(self, height, options)
+            end
+            if deferred then
+                return function()
+                    -- A view first selected while closed had no initial content
+                    -- height. Settle its real builder just as SelectPageArea does.
+                    if layout.initialPadding == false then
+                        nestedBuilder:RelayoutCollapsibles(PAGE_AREA_RELAYOUT)
+                        layout.initialPadding = layout.padding
+                    end
+                end
             end
         end
         local builder
@@ -539,7 +549,7 @@ local function SelectPageArea(area)
         ctx._msuf2Building = nil
         entry._msuf2BuildIncomplete = incomplete
         SettlePageArea(area, view)
-        for _, layout in ipairs(view.contentLayouts) do layout.initialPadding = layout.padding end
+        for _, layout in ipairs(view.contentLayouts) do layout.initialPadding = layout.padding or false end
     else
         area.active, area.selected = view, selected
         for i = 1, #view.searchWidgets do entry.searchWidgets[#entry.searchWidgets + 1] = view.searchWidgets[i] end

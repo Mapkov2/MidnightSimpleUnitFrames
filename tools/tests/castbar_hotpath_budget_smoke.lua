@@ -27,8 +27,10 @@ local BUDGETS = {
     -- Added 2026-10-02 from the cost measured before the channel hard-stop
     -- check learned to test a secret name (304 instructions), plus 2 %.
     ["manager tick: focus channel"] = { 310, 8 },
-    ["target START"] = { 2176, 8 },
-    ["target DELAYED"] = { 2040, 8 },
+    -- 2026-11-17: bounded optional fade/recipient dispatch; <=2% above
+    -- measured preimage costs (2167 START, 2025 DELAYED). Idle/heap caps unchanged.
+    ["target START"] = { 2210, 8 },
+    ["target DELAYED"] = { math.ceil(2025 * 1.02), 8 },
     ["boss1 START"] = { 2279, 8 },
     ["boss1 UNIT_HEALTH"] = { 109, 8 },
     ["boss1 UNIT_FLAGS"] = { 202, 8 },

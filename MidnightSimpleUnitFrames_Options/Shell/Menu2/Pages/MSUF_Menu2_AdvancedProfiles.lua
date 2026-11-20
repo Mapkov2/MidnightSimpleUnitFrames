@@ -77,6 +77,8 @@ local function ProfilesMeta(path, classification, exact)
     end
     if path == "import.review" then
         resolved.schemaEphemeralReason = "Builds an import review draft; only the separate Apply action writes profile settings."
+    elseif path == "profiles.back_to_setup" then
+        resolved.schemaEphemeralReason = "Returns to the unitframe setup without changing the profile."
     end
     return ControlMeta("profiles", "advanced", path, classification, resolved)
 end
@@ -1308,6 +1310,9 @@ local function FinishImport(state, name, suiteKind, ok, reason, stage)
     if name then
         M.profileImportNewName = ""
         state.importProfileName:SetText("")
+    end
+    M.ResumeUnitFrameSetupAfterImport()
+    if name then
         ShowImportReloadPrompt(name)
     elseif not suiteKind then
         ShowImportReloadPrompt()
@@ -1592,9 +1597,13 @@ function ProfilesPage.ImportActions(state)
         if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
     end)
     BuildEditModeToggle(state)
-    local wago = ProfileButton(actionsCard, "Browse Wago Profiles", function()
+    local browse = function()
         MSUF.Require("MSUF_ShowCopyLink", FILE)("Wago MSUF Profiles", WAGO_PROFILES_URL)
-    end, nil, "profiles.browse_wago", false, nil, nil, nil, ioButtonW)
+    end
+    local inSetup = M.resumeUnitFrameSetupOnImport == true
+    local wago = ProfileButton(actionsCard, inSetup and "Back to setup" or "Browse Wago Profiles",
+        inSetup and M.OpenUnitFrameSetup or browse, nil, inSetup and "profiles.back_to_setup" or "profiles.browse_wago",
+        false, nil, nil, nil, ioButtonW)
     MoveWidget(exportKind, stringCard, 20, -76, exportKindW)
     local blobW = max(220, stringCardW - 40)
     MoveWidget(blob, stringCard, 20, -142, blobW)
@@ -1717,5 +1726,8 @@ local function BuildModules(ctx)
     end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("profiles", { title = "MSUF Profiles", build = ProfilesPage.Build, version = 7, refreshInPlace = true })
+M.RegisterPage("profiles", {
+    title = "MSUF Profiles", build = ProfilesPage.Build, version = 7, refreshInPlace = true,
+    variantKey = function() return M.resumeUnitFrameSetupOnImport and "setup-import" or "regular" end,
+})
 M.RegisterPage("modules", { title = "MSUF Modules", build = BuildModules })

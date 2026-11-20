@@ -168,7 +168,8 @@ function PA.BuildFrameState(frame, index, kind, scratch, elapsed, chunkedHealth,
   local offset = (i * 0.073) + ((tostring(kind or frame and frame.MSUFUnitKey or ""):byte(1) or 0) * 0.001)
   local hpWave = Triangle(elapsed, 0.145, offset)
   local powerWave = Triangle(elapsed, 0.21, offset + 0.31)
-  local castPct = Saw(elapsed, 0.34, offset + 0.18)
+  local castRate = MSUF.Castbars.Config.fadeEnabled and (0.34 * 2.8 / 3.12) or 0.34
+  local castPct = Saw(elapsed, castRate, offset + 0.18)
   local pulse = Triangle(elapsed, 1.15, offset + 0.09)
 
   scratch.elapsed = elapsed
@@ -631,6 +632,8 @@ local function StoreUnitFrameRestore(frame)
   }
   StoreTextRuntimeState(frame, restore)
   frame._msufPreviewAnimUnitRestore = restore
+  local power = MSUF.UF.Elements.Power
+  if power and power.SyncPreviewResource then power.SyncPreviewResource(frame, true) end
   unitFrameRestoreFrames[frame] = true
   return restore
 end
@@ -655,6 +658,8 @@ local function RestoreUnitFrame(frame, refreshRuntime)
   RestoreRegionState(restore.readyCheckIcon)
 
   frame._msufPreviewNameText = nil
+  local power = MSUF.UF.Elements.Power
+  if power and power.SyncPreviewResource then power.SyncPreviewResource(frame, false) end
   if refreshRuntime == true then
     RefreshUnitFrameRuntimeAfterPreview(frame)
   end
@@ -735,6 +740,7 @@ local function RestoreCastbarFrame(frame)
   local restore = frame and frame._msufPreviewAnimCastRestore
   if not restore then return end
 
+  MSUF.Castbars.Style.Fade.Cancel(frame)
   local bar = frame.statusBar
   if bar then
     if bar.SetMinMaxValues and restore.minValue ~= nil and restore.maxValue ~= nil then
@@ -807,6 +813,8 @@ local function ApplyCastbarPreviewFrame(frame, index, kind, label)
   if duration <= 0 then duration = 2.8 end
   local remaining = max(0, min(duration, tonumber(state.castRemaining) or (duration * 0.5)))
   local elapsed = duration - remaining
+  elapsed = MSUF.Castbars.Style.Fade.Preview(frame, elapsed / duration, duration) * duration
+  remaining = duration - elapsed
 
   local bar = frame.statusBar
   if bar.SetMinMaxValues then bar:SetMinMaxValues(0, duration) end

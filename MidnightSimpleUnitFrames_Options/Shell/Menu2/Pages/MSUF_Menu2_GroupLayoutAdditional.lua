@@ -8,7 +8,7 @@ local CUSTOM_OPTIONS = Schema.UnitOptions()
 local max, min, floor = math.max, math.min, math.floor
 -- Release links select a declared scope and retain any existing tab hook.
 local EXACT_SCOPES = {
-    centerSolo = { "party" }, smallRaidAsParty = { "party" },
+    centerSolo = { "party" }, smallRaidAsParty = { "party" }, showPartyInRaid = { "party" },
     targetsEnabled = { "party" }, targetsIncludePlayer = { "party" },
     targetsWidth = { "party" }, targetsHeight = { "party" }, targetsX = { "party" },
     targetsY = { "party" }, targetsColumns = { "party" }, targetsTextSize = { "party" },

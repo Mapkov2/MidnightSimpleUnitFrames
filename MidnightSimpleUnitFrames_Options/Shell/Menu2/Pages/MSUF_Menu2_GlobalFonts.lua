@@ -1016,6 +1016,59 @@ local function FontNameControls(ctx, parent, label, minChars, noticeFallbackY, g
     return controls
 end
 
+local function BuildFontTextColors(ctx, b)
+    local function BindFontColorModeDropdown(parent, label, values, kind, path)
+        return Schema.Build(ctx, parent, {
+            { "dropdown", path, nil, { label, values, 280 },
+            get = function() return FontTextColorModeGetFor(CurrentFontScope(), kind) end,
+            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
+                set = function(v)
+                    FontTextColorModeSetFor(CurrentFontScope(), kind, v)
+                    M.RequestRefresh(ctx, "health-text-color-mode")
+                end,
+            meta = Meta(path), domain = "global" },
+        }, ROW_OPTIONS)[path]
+    end
+    local colors = Schema.Section(b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 320, true), ctx.key)
+    local nameColor = BindFontColorModeDropdown(colors, "Player Name Color", NameColorValues, "name", "colors.player_name")
+    local npcColor = BindFontColorModeDropdown(colors, "NPC / Boss Name Color", NPCColorValues, "npc", "colors.npc_name")
+    local healthColor, powerColor
+    if CurrentFontScope() ~= "nameplates" then
+        healthColor = BindFontColorModeDropdown(colors, "HP Text Color", HealthColorValues, "hp", "colors.colorHealthTextByHealth")
+        powerColor = BindFontColorModeDropdown(colors, "Power Text Color", PowerColorValues, "power", "colors.colorPowerTextByType")
+    end
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(colors, { "font.default.current" }, {
+            title = "Default Font Color",
+            note = "Uses this Fonts scope's effective Default font color.",
+            historySource = "menu:fonts-global-font-color",
+            context = function() return { scope = CurrentFontScope() } end,
+        })
+    end
+    local gradientColors
+    if healthColor then
+        gradientColors = Schema.Build(ctx, colors, {
+            { "topButton", "gradientColors", nil, { "Health gradient stops", 280, 26 },
+                anchor = { "BOTTOMLEFT", colors, "BOTTOMLEFT", 14, 16 },
+                meta = Meta("colors.health_gradient_stops", "ephemeral", { searchIndexed = true }), domain = "contextColors",
+                action = function()
+                    if M.BlockCombatAction() then return end
+                    local targets = M.ResolveContextColorReferences({
+                        "health.gradient.low", "health.gradient.mid", "health.gradient.high",
+                    }, { scope = CurrentFontScope() })
+                    targets[1].label, targets[2].label, targets[3].label = "Low", "Mid", "High"
+                    W.OpenContextColors(colors, { title = "Health gradient stops",
+                        historySource = "menu:fonts-health-gradient-stops" }, targets)
+                end },
+        }).gradientColors
+        GP.RegisterControl(gradientColors, Meta("colors.health_gradient_stops", "ephemeral", { searchIndexed = true }), "Health gradient stops", "button")
+        M.TrackRefresh(ctx, function()
+            SetControlEnabled(gradientColors, FontTextColorModeGetFor(CurrentFontScope(), "hp") == "HEALTH")
+        end)
+    end
+    return nameColor, npcColor, healthColor, powerColor
+end
+
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
@@ -1073,34 +1126,7 @@ local function BuildFonts(ctx)
         function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end,
         "text_style.opacity")
     local baseline = BuildFontBaseline(ctx, text)
-    local function BindFontColorModeDropdown(parent, label, values, kind, path)
-        return Schema.Build(ctx, parent, {
-            { "dropdown", path, nil, { label, values, 280 },
-            get = function() return FontTextColorModeGetFor(CurrentFontScope(), kind) end,
-            customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.",
-                set = function(v) FontTextColorModeSetFor(CurrentFontScope(), kind, v) end,
-            meta = Meta(path), domain = "global" },
-        }, ROW_OPTIONS)[path]
-    end
-    local function BuildNameShorteningControls(...)
-        return FontNameControls(ctx, ...)
-    end
-    local colors = Schema.Section(b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true), ctx.key)
-    local nameColor = BindFontColorModeDropdown(colors, "Player Name Color", NameColorValues, "name", "colors.player_name")
-    local npcColor = BindFontColorModeDropdown(colors, "NPC / Boss Name Color", NPCColorValues, "npc", "colors.npc_name")
-    local healthColor, powerColor
-    if CurrentFontScope() ~= "nameplates" then
-        healthColor = BindFontColorModeDropdown(colors, "HP Text Color", HealthColorValues, "hp", "colors.colorHealthTextByHealth")
-        powerColor = BindFontColorModeDropdown(colors, "Power Text Color", PowerColorValues, "power", "colors.colorPowerTextByType")
-    end
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(colors, { "font.default.current" }, {
-            title = "Default Font Color",
-            note = "Uses this Fonts scope's effective Default font color.",
-            historySource = "menu:fonts-global-font-color",
-            context = function() return { scope = CurrentFontScope() } end,
-        })
-    end
+    local nameColor, npcColor, healthColor, powerColor = BuildFontTextColors(ctx, b)
     local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor }
     if healthColor then scopedFontControls[#scopedFontControls + 1] = healthColor end
     if powerColor then scopedFontControls[#scopedFontControls + 1] = powerColor end
@@ -1146,6 +1172,9 @@ local function BuildFonts(ctx)
         SetControlEnabled(npcColor, canEdit and not gfScope)
     end)
     M.TrackRefresh(ctx, RefreshScopedFontControls)
+    local function BuildNameShorteningControls(...)
+        return FontNameControls(ctx, ...)
+    end
     BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason, ActiveFontOverrideLabels)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

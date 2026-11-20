@@ -19,6 +19,8 @@ local Round = M.AuraSettings.Round
 local SetCurrentLane = M.AuraSettings.SetCurrentLane
 
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
+local AURA_BAR_FILL_VALUES = VTP "RIGHT=Left to Right|LEFT=Right to Left|UP=Bottom to Top|DOWN=Top to Bottom"
+local AURA_BAR_GROWTH_VALUES = VTP "DEFAULT=Default|DOWN=Down|UP=Up|RIGHT=Right|LEFT=Left"
 
 local AuraCatalogToken = M.AuraCatalogToken
 
@@ -128,6 +130,8 @@ local STYLE_SETTING_FIELDS = {
     ["auras3-duration-bar-display"] = "durationBarDisplay",
     ["auras3-duration-bar-position"] = "durationBarPosition",
     ["auras3-stealable-marker-style"] = "stealableStyle",
+    ["aura-bar-fill"] = "auraBarFill",
+    ["show-as-bars"] = "showAuraBars",
     ["auras3-sort-method"] = "sortMethod", ["auras3-sort-direction"] = "sortReverse",
     ["hide-permanent"] = "blacklist.hidePermanent",
     ["cooldown-swipe-direction"] = "cooldownSwipeReverse",
@@ -252,6 +256,9 @@ local function StyleSetting(page, path)
         else field = (schema.LANE_STYLE_KEYS[lane] or {})[field] or field end
         local unit = page:match("^uf_(.+)$") or "shared"
         if token == "auras3-debuff-type-border-mode" then return UnitLayoutSetting(unit, { field, "useDebuffTypeBorders" }) end
+        if token == "showdurationbar" and MSUF.Client.IsRetail and schema.LANE_SPECS[lane] then
+            return UnitLayoutSetting(unit, { field, schema.LANE_SPECS[lane].durationBarDisplayKey })
+        end
         return UnitLayoutSetting(unit, { field })
     end
     local appearance = path:match("^style%.appearance%.icon%-style%.(.+)$")
@@ -283,7 +290,13 @@ local function ScopedAuraSetting(page, path)
             for _, key in ipairs(M.ControlSchema.GroupKeys("auras." .. lane .. ".showDispelSymbol").keys) do keys[#keys + 1] = key end
             return M.ControlSchema.Family(keys)
         end
-        return M.ControlSchema.GroupKeys("auras." .. lane .. "." .. field)
+        local base = "auras." .. lane .. "."
+        if token == "showdurationbar" and MSUF.Client.IsRetail and (lane == "buff" or lane == "debuff") then
+            local keys = M.ControlSchema.GroupKeys(base .. field).keys
+            for _, key in ipairs(M.ControlSchema.GroupKeys(base .. "durationBarDisplay").keys) do keys[#keys + 1] = key end
+            return M.ControlSchema.Family(keys)
+        end
+        return M.ControlSchema.GroupKeys(base .. field)
     end
     if path == "group-style.root.dynamicscale" then return M.ControlSchema.GroupKeys("auras.dynamicScale") end
     lane, token = path:match("^unit%-workspace%.lane%.([%w]+)%.layout%.(.+)$")
@@ -294,6 +307,7 @@ local function ScopedAuraSetting(page, path)
         if token == "max-duration" then return UnitRuleSetting(unit, lane, "maxDuration", true) end
         local names = { anchor = "anchorKey", growth = "growthKey", ["icon-height"] = "heightPercentKey",
             ["icon-size"] = "sizeKey", layer = "layerKey", ["max-icons"] = "maxKey", ["per-row"] = "perRowKey", spacing = "spacingKey" }
+        names["show-as-bars"], names["aura-bar-fill"] = "showAuraBarsKey", "auraBarFillKey"
         local spec = MSUF.MSUF_Auras3.LaneKeySchema.LANE_SPECS[lane]
         local key = names[token] and spec[names[token]]
         if not key then return nil end
@@ -479,6 +493,128 @@ local function ActionButton(parent, label, width, role)
     local btn = T.Button(parent, label, width or 90, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(btn) end
     return btn
+end
+
+local function AddAuraBarLayoutShortcut(ctx, parent, path, scope, width, openLayout)
+    local label = "Aura Bar Layout"
+    local button = ActionButton(parent, label, width)
+    button:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -184)
+    button:SetScript("OnClick", openLayout)
+    RegisterAuraControl(ctx, button, label, "button", path, "navigation", ctx.key)
+    M.ControlSchema.Owned(button, scope, "navigation")
+end
+
+local AURA_BAR_ICON_POSITIONS = VTP "NONE=None|LEFT=Left (inside)|RIGHT=Right (inside)|OUTSIDE_LEFT=Left (outside)|OUTSIDE_RIGHT=Right (outside)"
+
+local function NumberChoices(low, high, step, suffix)
+    local values = {}
+    for value = low, high, step do
+        values[#values + 1] = { value = value, text = tostring(value) .. suffix, translate = false }
+    end
+    return values
+end
+
+local AURA_BAR_ICON_SIZES = NumberChoices(50, 100, 10, "%")
+local AURA_BAR_ICON_GAPS = NumberChoices(0, 12, 1, "")
+local AURA_BAR_OUTLINE_SIZES = NumberChoices(1, 4, 1, "")
+local AURA_BAR_FILL_COLORS = VTP "SHARED=Shared|CUSTOM=Custom|AUTO=By Aura Type|DARK=Dark by Aura Type"
+local AURA_BAR_OUTLINE_COLORS = VTP "DEFAULT=Default|CUSTOM=Custom|AUTO=By Aura Type"
+
+local function AuraBarOutlineChoices()
+    local items = MSUF.BorderStyles.List()
+    table.insert(items, 1, { value = "", text = "None" })
+    return items
+end
+
+local function AuraBarTextureChoices() return M.StatusBarTextureItems("Default") end
+
+local function AuraBarSettingRow(ctx, adapter, key, token, label, values, isStyle, widgetKind)
+    local A = MSUF.AuraConfig
+    local path = adapter.path .. ".bars." .. token
+    local identity = isStyle and path or (adapter.path .. ".layout." .. token)
+    local settingKey = isStyle and "auraBarStyle" or key
+    local meta = AuraControlMetaAtVisiblePath(ctx, identity, path, nil, adapter.contract(settingKey, key))
+    meta.id, meta.kind, meta.label, meta.values = key, widgetKind or (values and "dropdown" or "toggle"), label, values
+    local write = adapter.write(settingKey, meta.setting)
+    if widgetKind == "color" then
+        meta.get = function() return A.ReadAuraBarColor(adapter.get(settingKey), key) end
+        write.convert = function(r, g, b) return A.CopyAuraBarStyle(adapter.get(settingKey), key, { r, g, b }) end
+    elseif isStyle then
+        meta.default = A.ReadAuraBarStyle(nil, key)
+        meta.get = function() return A.ReadAuraBarStyle(adapter.get(settingKey), key) end
+        local accept = write.accept
+        write.accept = function(value) return (not accept or accept()) and meta.get() ~= value end
+        write.convert = function(value) return A.CopyAuraBarStyle(adapter.get(settingKey), key, value) end
+    else
+        meta.default = key == "auraBarFill" and "RIGHT" or false
+        meta.get = function() return adapter.get(key) end
+    end
+    meta.write = write
+    return meta
+end
+
+local function BuildAuraBarSettings(ctx, b, title, height, scope, rows)
+    local section = b:Section(title, height)
+    local width = (section._msuf2Width or b.width or 720) - 48
+    local result = W.SettingsRows(ctx, section, { x = 24, y = -40, width = width, columns = 2, colGap = 12, rows = rows })
+    for i = 1, #result.list do M.ControlSchema.Owned(result.list[i], scope, "auras") end
+    return result, section
+end
+
+local function BuildAuraBarWorkspace(ctx, b, lane, adapter)
+    local function Row(key, token, label, values, isStyle, widgetKind)
+        return AuraBarSettingRow(ctx, adapter, key, token, label, values, isStyle, widgetKind)
+    end
+    local layout = BuildAuraBarSettings(ctx, b, "Aura Bar Layout", 164, adapter.scope, {
+        Row("showAuraBars", "show-as-bars", "Show as Bars"),
+        Row("auraBarFill", "aura-bar-fill", "Fill Direction", AURA_BAR_FILL_VALUES),
+        Row("growth", "bar-growth", "Growth Direction", AURA_BAR_GROWTH_VALUES, true),
+        lane == "buff" and Row("combineDebuffs", "combine-debuff-bars", "Combine Buff and Debuff Bars", nil, true) or nil,
+    })
+    local combinedHelp = "Enable bars for both types to show Buffs first and Debuffs next, using the Buff anchor and growth direction."
+    if layout.controls.combineDebuffs then
+        AddTooltip(layout.controls.combineDebuffs, "Combine Buff and Debuff Bars", combinedHelp)
+    elseif lane == "debuff" then
+        AddTooltip(layout.controls.growth, "Growth Direction", combinedHelp)
+    end
+    local icon = BuildAuraBarSettings(ctx, b, "Icon", 164, adapter.scope, {
+        Row("iconPlacement", "icon-position", "Bar Icon Position", AURA_BAR_ICON_POSITIONS, true),
+        Row("iconSize", "icon-size", "Bar Icon Size", AURA_BAR_ICON_SIZES, true),
+        Row("iconGap", "icon-spacing", "Bar Icon Spacing", AURA_BAR_ICON_GAPS, true),
+    })
+    local visual = BuildAuraBarSettings(ctx, b, "Appearance", 164, adapter.scope, {
+        Row("texture", "bar-texture", "Aura Bar Texture", AuraBarTextureChoices, true),
+        Row("outline", "outline-style", "Outline style", AuraBarOutlineChoices, true),
+        Row("outlineThickness", "outline-thickness", "Outline Thickness", AURA_BAR_OUTLINE_SIZES, true),
+    })
+    local colors, section = BuildAuraBarSettings(ctx, b, "Colors", 164, adapter.scope, {
+        Row("fillColorMode", "fill-color-mode", "Fill Color Mode", AURA_BAR_FILL_COLORS, true),
+        Row("fillColor", "fill-color", "Aura Bar Fill Color", nil, true, "color"),
+        Row("outlineColorMode", "outline-color-mode", "Outline Color Mode", AURA_BAR_OUTLINE_COLORS, true),
+        Row("outlineColor", "outline-color", "Outline Color", nil, true, "color"),
+    })
+    M.AurasPage.AttachDurationBarColor(section, lane)
+    M.TrackRefresh(ctx, function()
+        local shown = adapter.shown()
+        local enabled = shown and adapter.get("showAuraBars")
+        local style, read = adapter.get("auraBarStyle"), MSUF.AuraConfig.ReadAuraBarStyle
+        W.SetControlEnabled(layout.controls.showAuraBars, shown)
+        W.SetControlEnabled(layout.controls.auraBarFill, enabled)
+        local followsBuff = adapter.followsBuff and adapter.followsBuff()
+        W.SetControlEnabled(layout.controls.growth, enabled and not followsBuff)
+        if layout.controls.combineDebuffs then W.SetControlEnabled(layout.controls.combineDebuffs, enabled) end
+        W.SetControlsEnabled(icon.list, enabled)
+        W.SetControlsEnabled(visual.list, enabled)
+        W.SetControlsEnabled(colors.list, enabled)
+        local showIcon = enabled and read(style, "iconPlacement") ~= "NONE"
+        W.SetControlEnabled(icon.controls.iconSize, showIcon)
+        W.SetControlEnabled(icon.controls.iconGap, showIcon)
+        local hasOutline = enabled and read(style, "outline") ~= ""
+        W.SetControlEnabled(visual.controls.outlineThickness, hasOutline)
+        W.SetControlEnabled(colors.controls.fillColor, enabled and read(style, "fillColorMode") == "CUSTOM")
+        W.SetControlEnabled(colors.controls.outlineColorMode, hasOutline)
+        W.SetControlEnabled(colors.controls.outlineColor, hasOutline and read(style, "outlineColorMode") == "CUSTOM")
+    end)
 end
 
 local Card = W.ThemedControlCard
@@ -825,6 +961,7 @@ end
 
 M.AuraControls = {
     ActionButton = ActionButton,
+    AddAuraBarLayoutShortcut = AddAuraBarLayoutShortcut,
     AddAuraTooltipHelp = AddAuraTooltipHelp,
     AddCasterFilterTooltip = AddCasterFilterTooltip,
     AddTooltip = AddTooltip,
@@ -848,6 +985,8 @@ M.AuraControls = {
     ConfigureAuraSpellPriorityDrag = ConfigureAuraSpellPriorityDrag,
     ConfigureMaxDurationSlider = ConfigureMaxDurationSlider,
     LANE_VALUES = LANE_VALUES,
+    BuildAuraBarWorkspace = BuildAuraBarWorkspace,
+    UnitLayoutSetting = UnitLayoutSetting,
     QueueAurasPageRefresh = QueueAurasPageRefresh,
     Rebuild = Rebuild,
     Repaint = Repaint,

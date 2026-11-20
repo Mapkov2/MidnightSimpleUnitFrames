@@ -106,9 +106,9 @@ end
 
 local function CastbarBackend(unit)
     unit = CastbarUnit(unit)
-    local fn = MSUF.Castbars.Backend and MSUF.Castbars.Backend.GetCastbarBackend
+    local fn = MSUF.Castbars.Backend and MSUF.Castbars.Backend.Resolve
     if type(fn) == "function" then
-        return fn(unit)
+        return fn(unit, nil, MSUF.Castbars.Config.playerFrameDisabled)
     end
     local g = General()
     if not g then

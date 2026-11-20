@@ -14,17 +14,19 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-7.0.1-38C7F0?style=flat-square" alt="MSUF version 7.0.1">
+    <img src="https://img.shields.io/badge/Version-7.0.3-38C7F0?style=flat-square" alt="MSUF stable version 7.0.3">
     <img src="https://img.shields.io/badge/WoW-Midnight%20%7C%20Forever%20%7C%20Classic-148EFF?style=flat-square&logo=worldofwarcraft&logoColor=white" alt="World of Warcraft Midnight, WoW Forever and Classic">
     <img src="https://img.shields.io/github/last-commit/Mapkov2/MidnightSimpleUnitFrames?style=flat-square&logo=github" alt="Latest GitHub commit">
   </p>
 </div>
 
-## 7.0.1 – One Year Anniversary Edition
+## MSUF 7.0 releases
 
 Pet HoTs on your own pet and group pet frames, Icon Skins, independent Health and Power Gloss, and configurable Timer Bars arrive in 7.0. Upgrades carry over 6.5x profiles and character assignments and create a recovery backup.
 
-[Download 7.0.1 on Wago](https://addons.wago.io/addons/midnightsimpleunitframes/versions?stability=stable) · [CurseForge project](https://www.curseforge.com/wow/addons/midnightsimpleunitframes) · [Full changelog](CHANGELOG.md#701---2026-11-14) · [Archived 6.5x branch](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/6.5)
+MSUF 7.0 releases are built from `main`. Each version has a release tag in this repository.
+
+[Stable 7.0.3 on CurseForge](https://www.curseforge.com/wow/addons/midnightsimpleunitframes/files/9687841) · [Wago releases](https://addons.wago.io/addons/midnightsimpleunitframes/versions?stability=stable) · [GitHub releases and betas](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases) · [Changelog](CHANGELOG.md) · [Archived 6.5x branch](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/6.5)
 
 > **Arena Frames, Pet Frames and Pet Target are built in.** Customize them alongside your unit and group frames in one consistent interface.
 
@@ -95,7 +97,7 @@ The Core addon runs normally without opening Options; the Options companion is l
 | **Game** | World of Warcraft: Midnight, WoW Forever, Classic Era, The Burning Crusade Anniversary and Mists of Pandaria Classic |
 | **Interface versions** | Midnight 12.0.7, 12.1.0 and 12.1.5; WoW Forever 16001; Classic Era 1.15.9; TBC Anniversary 2.5.6; Mists Classic 5.5.4 (`tools/classic-client-matrix.tsv` is the list) |
 | **Client differences** | Classic Era has no focus, boss or arena frames and TBC Anniversary no boss frames; arena frames exist on Midnight, TBC Anniversary and Mists Classic, Mythic Raid group frames on Midnight only |
-| **Version** | 7.0.1, shared by all supported clients |
+| **Stable version** | 7.0.3, shared by all supported clients |
 | **Main command** | `/msuf` |
 | **Optional integrations** | LibSharedMedia, Clique and WagoAnalytics |
 

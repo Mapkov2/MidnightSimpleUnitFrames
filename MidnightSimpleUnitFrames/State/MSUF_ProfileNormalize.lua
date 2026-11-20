@@ -864,6 +864,55 @@ local function MSUF_ProfileIO_AuraResetSnapshotMatches(cleanAuras, unit, kind, d
         and math.abs((metrics.y + dy) - desired.firstY) <= 0.51
 end
 
+-- Older imports rebuild Aura3's owner tables. Read the old presentation before
+-- they are replaced, including the legacy layout that held per-unit Style.
+local function LegacyUnitAuraBarValue(owner, key, fallbackKey)
+    if not owner then return end
+    local value = owner[key]
+    if value == nil and fallbackKey then value = owner[fallbackKey] end
+    return value
+end
+
+local function PreserveLegacyUnitAuraBarStyle(shared, source, target, targetLayout)
+    local localShared, localLayout
+    if type(source) == "table" and source.overrideStyle ~= false then
+        if source.overrideSharedLayout == true and type(source.layoutShared) == "table" then localShared = source.layoutShared end
+        if source.overrideLayout == true and type(source.layout) == "table" then localLayout = source.layout end
+    end
+    local function Read(key, fallbackKey)
+        local value = LegacyUnitAuraBarValue(localShared, key, fallbackKey)
+        if value == nil then value = LegacyUnitAuraBarValue(localLayout, key, fallbackKey) end
+        if value == nil then value = LegacyUnitAuraBarValue(shared, key, fallbackKey) end
+        return value
+    end
+    for _, prefix in ipairs(MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER) do
+        local show = Read(prefix .. "ShowAuraBars")
+        if show == true or show == false then
+            target[prefix .. "ShowAuraBars"] = show
+            target[prefix .. "AuraBarFill"] = MSUF.AuraConfig.NormalizeAuraBarFill(Read(prefix .. "AuraBarFill"))
+            local style = Read(prefix .. "AuraBarStyle")
+            if type(style) == "table" then target[prefix .. "AuraBarStyle"] = MSUF.AuraConfig.CopyAuraBarStyle(style) end
+        end
+        if Read(prefix .. "ShowDurationBar", "showDurationBar") == true then
+            target[prefix .. "ShowDurationBar"] = true
+            target[prefix .. "DurationBarDisplay"] = Read(prefix .. "DurationBarDisplay", "durationBarDisplay")
+            target[prefix .. "DurationBarDirection"] = Read(prefix .. "DurationBarDirection", "durationBarDirection")
+            target[prefix .. "DurationBarPosition"] = Read(prefix .. "DurationBarPosition", "durationBarPosition")
+            targetLayout[prefix .. "DurationBarHeight"] = Read(prefix .. "DurationBarHeight", "durationBarHeight")
+        end
+    end
+end
+
+local function PreserveLegacyUnitAuraBars(source, target)
+    if not (MSUF.Client.IsRetail and source) then return end
+    local shared = type(source.shared) == "table" and source.shared or nil
+    local perUnit = type(source.perUnit) == "table" and source.perUnit or {}
+    PreserveLegacyUnitAuraBarStyle(shared, nil, target.shared, target.shared)
+    for unit, owner in pairs(target.perUnit) do
+        PreserveLegacyUnitAuraBarStyle(shared, perUnit[unit], owner.layoutShared, owner.layout)
+    end
+end
+
 local function MSUF_ProfileIO_ResetUnitAuras(profile)
     if type(profile) ~= "table" then return false end
     local sourceA3 = type(profile.auras3) == "table" and profile.auras3 or nil
@@ -935,6 +984,7 @@ local function MSUF_ProfileIO_ResetUnitAuras(profile)
         end
     end
 
+    PreserveLegacyUnitAuraBars(sourceA3, cleanAuras)
     profile.auras3 = cleanAuras
     profile.auras = nil
     profile.auras2 = nil
@@ -1088,6 +1138,35 @@ local function MSUF_ProfileIO_AuraResetRebaseGroupLane(state, scope, laneName, s
     }
 end
 
+local function PreserveLegacyGroupAuraBars(source, target)
+    if not (MSUF.Client.IsRetail and source) then return end
+    for _, lane in ipairs(MSUF_PROFILEIO_UNIT_AURA_RESET_LANE_ORDER) do
+        local previous, current = source[lane], target[lane]
+        if type(previous) == "table" and type(current) == "table" then
+            local hasBarChoice = type(previous.showAuraBars) == "boolean" or previous.showDurationBar == true
+            if hasBarChoice and source.renderer == "CUSTOM" then
+                target.renderer = "CUSTOM"
+                if type(source.enabled) == "boolean" then target.enabled = source.enabled end
+                if type(previous.enabled) == "boolean" then current.enabled = previous.enabled end
+            end
+            if type(previous.showAuraBars) == "boolean" then
+                current.showAuraBars = previous.showAuraBars
+                current.auraBarFill = MSUF.AuraConfig.NormalizeAuraBarFill(previous.auraBarFill)
+                if type(previous.auraBarStyle) == "table" then
+                    current.auraBarStyle = MSUF.AuraConfig.CopyAuraBarStyle(previous.auraBarStyle)
+                end
+            end
+            if previous.showDurationBar == true then
+                current.showDurationBar = true
+                current.durationBarDisplay = previous.durationBarDisplay
+                current.durationBarDirection = previous.durationBarDirection
+                current.durationBarHeight = previous.durationBarHeight
+                current.durationBarPosition = previous.durationBarPosition
+            end
+        end
+    end
+end
+
 local function MSUF_ProfileIO_ResetGroupAuras(profile, groupCount)
     if type(profile) ~= "table" then return false end
     local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalGroupAuraState)
@@ -1133,6 +1212,7 @@ local function MSUF_ProfileIO_ResetGroupAuras(profile, groupCount)
                         end
                     end
                     conf.auras = MSUF_DeepCopy(state.auras)
+                    PreserveLegacyGroupAuraBars(sourceAuras, conf.auras)
                     conf.privateAuras = type(state.privateAuras) == "table"
                         and MSUF_DeepCopy(state.privateAuras) or nil
                     conf.spellIndicators = type(state.spellIndicators) == "table"
@@ -1464,23 +1544,47 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     return profile, changed
 end
 
-MSUF_ProfileIO_TranslateProfilesToCurrent = function(profiles, source)
+local function TranslateStoredProfile(profile, source)
+    local prepared, changed = MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
+        source = source or "profiles",
+        markProfile = true,
+        trustNormalizationMarker = true,
+    })
+    if not MSUF.DefaultsSchema.IsQuarantinedProfile(profile) then
+        MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
+    end
+    return prepared, changed
+end
+
+MSUF_ProfileIO_TranslateProfilesToCurrent = function(profiles, source, activeName)
     if type(profiles) ~= "table" then return false end
     local changed = false
-    for _, profile in pairs(profiles) do
+    local dormant = activeName and {} or nil
+    for name, profile in pairs(profiles) do
         if type(profile) == "table" then
-            local _, profileChanged = MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
-                source = source or "profiles",
-                markProfile = true,
-                trustNormalizationMarker = true,
-            })
-            changed = profileChanged or changed
-            if not MSUF.DefaultsSchema.IsQuarantinedProfile(profile) then
-                MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
+            if dormant and name ~= activeName and profile ~= profiles[activeName]
+                and MSUF.DefaultsSchema.IsValidSparseProfile(profile)
+                and profile._msufProfileSchema == MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
+                and profile._msufProfileNormalizationRevision == MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION then
+                dormant[profile] = true
+            else
+                local _, profileChanged = TranslateStoredProfile(profile, source)
+                changed = profileChanged or changed
             end
         end
     end
-    return changed
+    return changed, dormant
+end
+
+-- Content readers can take a detached view of a dormant profile. Named writes
+-- first restore the real table so clearing a field cannot leave a saved mask
+-- bit behind to restore its old value on the next switch.
+local function ResolveStoredProfile(profile, write)
+    if not MSUF.DefaultsSchema.HasCurrentSparseProfile(profile) then return profile end
+    local candidate = write and profile or MSUF.Util.DeepCopy(profile)
+    local prepared = TranslateStoredProfile(candidate, "named_profile_access")
+    if MSUF.ProfileMigrations then MSUF.ProfileMigrations.Apply(prepared, true) end
+    return prepared
 end
 
 MSUF.ProfileNormalize = {
@@ -1497,6 +1601,7 @@ MSUF.ProfileNormalize = {
     CarryFormerResourceExtrasPatch = MSUF_ProfileIO_CarryFormerResourceExtrasPatch,
     TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent,
     TranslateProfilesToCurrent = MSUF_ProfileIO_TranslateProfilesToCurrent,
+    ResolveStoredProfile = ResolveStoredProfile,
 }
 
 function MSUF.ProfileNormalize.PersistenceRejected(profile)

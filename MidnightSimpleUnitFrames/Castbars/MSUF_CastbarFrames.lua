@@ -232,7 +232,7 @@ function Frames.CreateCastbarPreviewFrame(unit, name, options)
         frame.timeText:SetText(options.timeLabel or "3.2")
     end
 
-    if unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then
         frame.castTargetText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
         frame.CastTargetNameText = frame.castTargetText
         frame.castTargetText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")

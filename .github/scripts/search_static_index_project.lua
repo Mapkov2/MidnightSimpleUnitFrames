@@ -622,6 +622,11 @@ local function VisitWorkspaceStates(M, capture)
         Fail("the Menu2 page lifecycle API did not load")
     end
     local pages, visited = M.pages or {}, 0
+    local laneTools = WORKSPACE_LANE_TOOLS
+    if namespace.Client.IsRetail == true then
+        laneTools = { unpack(WORKSPACE_LANE_TOOLS) }
+        laneTools[#laneTools + 1] = "bars"
+    end
     local function Visit(pageKey)
         RebuildPage(M, pageKey)
         capture()
@@ -640,7 +645,7 @@ local function VisitWorkspaceStates(M, capture)
     for _, row in ipairs(WORKSPACE_UNIT_PAGES) do
         if pages[row.page] then
             for _, lane in ipairs({ "buff", "debuff" }) do
-                for _, tool in ipairs(WORKSPACE_LANE_TOOLS) do UnitView(row.unit, row.page, lane, tool) end
+                for _, tool in ipairs(laneTools) do UnitView(row.unit, row.page, lane, tool) end
             end
             for index = 1, 3 do
                 local container = "custom" .. index
@@ -667,7 +672,7 @@ local function VisitWorkspaceStates(M, capture)
                 Visit("gf_auras")
             end
             for _, lane in ipairs({ "buff", "debuff" }) do
-                for _, tool in ipairs(WORKSPACE_LANE_TOOLS) do GroupView(lane, tool) end
+                for _, tool in ipairs(laneTools) do GroupView(lane, tool) end
             end
             for _, tool in ipairs(WORKSPACE_EXTERNALS_TOOLS) do GroupView("externals", tool) end
         end

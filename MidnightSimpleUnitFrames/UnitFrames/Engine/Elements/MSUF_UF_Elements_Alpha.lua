@@ -15,6 +15,7 @@ local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
 local Clamp01 = Visuals.Clamp01
 local SetFrameAlpha = Visuals.SetFrameAlpha
 local SetAlphaCached = Visuals.SetAlphaCached
+local Appearance = UF.Appearance
 local CreateFrame = CreateFrame
 -- The one combat-state source (Kernel/MSUF_Util.lua). Asking it with the
 -- regen event also marks the combat edge for the group pokes below.
@@ -36,9 +37,15 @@ local function SetRangeBooleanAlpha(obj, frame, inAlpha, outAlpha, field)
   if not (obj and obj.SetAlphaFromBoolean) then return end
   local inRange = frame._msufRangeBooleanValue
   if frame._msufRangeBooleanCheckedSecret == true then
-    local rangeAlpha = EvaluateColorValueFromBoolean(inRange, inAlpha, outAlpha)
     local fallbackAlpha = frame._msufRangeBooleanFallback == false and outAlpha or inAlpha
-    obj:SetAlphaFromBoolean(frame._msufRangeBooleanChecked, rangeAlpha, fallbackAlpha)
+    if obj._msufAppearance then
+      Appearance.WriteBoolean(obj, inRange, inAlpha, outAlpha, frame._msufRangeBooleanChecked, fallbackAlpha, true)
+    else
+      local rangeAlpha = EvaluateColorValueFromBoolean(inRange, inAlpha, outAlpha)
+      obj:SetAlphaFromBoolean(frame._msufRangeBooleanChecked, rangeAlpha, fallbackAlpha)
+    end
+  elseif obj._msufAppearance then
+    Appearance.WriteBoolean(obj, inRange, inAlpha, outAlpha)
   else
     obj:SetAlphaFromBoolean(inRange, inAlpha, outAlpha)
   end
@@ -47,6 +54,7 @@ end
 
 
 local Alpha = {}
+Appearance.EvaluateBoolean = EvaluateColorValueFromBoolean
 
 -- Out-of-combat fade driver. The regen pair is registered only while at least
 -- one frame's compiled spec carries oocFade, so a profile without the feature
@@ -233,11 +241,13 @@ local function ApplyCastbarRangeAlpha(frame, mul, force)
 
   if frame._msufRangeBooleanActive == true
     and CastbarRangeAlpha(frame, frame._msufRangeBooleanOutAlpha) ~= 1 then
-    SetRangeBooleanAlpha(castbar, frame, 1, frame._msufRangeBooleanOutAlpha, "_msufRangeCastbarAlpha")
+    local fade = castbar._msufCastbarFadeAlpha or 1
+    SetRangeBooleanAlpha(castbar, frame, fade, frame._msufRangeBooleanOutAlpha * fade, "_msufRangeCastbarAlpha")
     return true
   end
 
   local alpha = CastbarRangeAlpha(frame, mul)
+  if castbar._msufCastbarFadeAlpha then alpha = alpha * castbar._msufCastbarFadeAlpha end
   SetAlphaCached(castbar, alpha, "_msufRangeCastbarAlpha", force)
   return true
 end
@@ -356,6 +366,7 @@ local function CompileAlphaRuntime(frame, spec)
   local range = spec and spec.range
   local cfg = spec and spec.alpha or nil
   frame._msufAlphaRuntimeCfg = cfg
+  Appearance.Configure(frame, cfg)
   frame._msufAlphaRangeActive = range and range.active == true
   frame._msufAlphaRangeHealthLayer = range and range.layerMode == "health"
   OocTrackFrame(frame, cfg ~= nil and cfg.oocFade == true)
@@ -546,7 +557,7 @@ end
 
 function Alpha.IsEnabled(frame, spec)
   local cfg = spec and spec.alpha
-  return cfg and (cfg.active == true or cfg.oocFade == true)
+  return cfg and (cfg.active == true or cfg.oocFade == true or cfg.fadeIn == true)
 end
 
 function Alpha.GetEvents(frame, spec)
@@ -566,6 +577,7 @@ end
 function Alpha.SceneApply(frame, spec)
   local cfg = spec and spec.alpha or nil
   frame._msufAlphaRuntimeCfg = cfg
+  Appearance.Configure(frame, cfg)
   frame._msufAlphaRangeActive, frame._msufAlphaRangeHealthLayer = false, false
   local held = cfg and cfg.externalOoc
   if cfg then cfg.externalOoc = true end
@@ -587,6 +599,7 @@ function Alpha.Disable(frame)
   if not frame then
     return
   end
+  Appearance.Configure(frame, nil)
   OocTrackFrame(frame, false)
   frame._msufAlphaLastFrame = nil
   frame._msufAlphaLastHP = nil

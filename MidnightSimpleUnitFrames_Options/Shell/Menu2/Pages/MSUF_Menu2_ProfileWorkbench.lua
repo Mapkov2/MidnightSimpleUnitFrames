@@ -98,7 +98,7 @@ local function Timeline(ctx, builder, width)
     Button(section, "Save restore point", "version.save", 20, -116,
         function() Result(W.Checkpoint(state.name or M.Tr("Restore point"))) end)
     local values = { { value = 0, text = "Choose a restore point" } }
-    for _, point in ipairs(W.Points()) do
+    for _, point in ipairs(W.Points(true)) do
         local label = point.automatic and M.Tr(point.label) or point.label
         local stamp = point.time and date("%Y-%m-%d %H:%M", point.time) or tostring(point.id)
         values[#values + 1] = { value = point.id, text = stamp .. " · " .. label, translate = false }

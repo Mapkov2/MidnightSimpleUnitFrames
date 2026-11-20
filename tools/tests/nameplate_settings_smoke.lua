@@ -11,6 +11,13 @@ Secrets.Install()
 local combat, failRefresh, refreshes, fontRefreshes = false, false, 0, 0
 local MSUF = { Util = { IsSecret = issecretvalue, InCombat = function() return combat end },
     Public = {}, SuiteLink = {}, UF = { Config = {} }, MSUF_FONT_COLORS = { white = { 1, 1, 1 }, green = { 0, 1, 0 } } }
+local resolvedProfiles = {}
+MSUF.ProfileNormalize = {
+    ResolveStoredProfile = function(profile, write)
+        Check(not write, "nameplate capture resolves a read-only profile view")
+        return resolvedProfiles[profile] or profile
+    end,
+}
 MSUF.HostAPIPlayerInCombat = function() return combat end
 MSUF.RunHostAPIStep = function(_, callback, ...) return pcall(callback, ...) end
 MSUF.SuiteLink.ApplyFonts = function() fontRefreshes = fontRefreshes + 1 end
@@ -94,8 +101,12 @@ for _, fonts in ipairs({ false, true }) do
         and other.general.castbarInterruptibleR == nil, "inactive profile export")
     Check(MSUF_ActiveProfile == "Current" and MSUF_DB == MSUF_GlobalDB.profiles.Current, "inactive export keeps active identity")
     Check(Settings.Capture("missing") == nil, "unknown named profile refuses")
-    MSUF_GlobalDB.profiles.Sparse = { player = { width = 151 } }
-    Check(Settings.Capture("Sparse") ~= nil, "inactive sparse profile captures defaults without materializing the profile")
+    local sparse = { player = { width = 151 } }
+    MSUF_GlobalDB.profiles.Sparse = sparse
+    resolvedProfiles[sparse] = { general = { fontSize = 24 } }
+    local sparseExport = Settings.Capture("Sparse")
+    Check(sparseExport and sparseExport.nameplates.fontSize == 24 and sparse.general == nil
+        and MSUF_GlobalDB.profiles.Sparse == sparse, "inactive sparse profile uses its resolved font without materializing")
     payload.general.kickReadyStyle, payload.general.kickReadyShowNameplates = "fill", true
     payload.general.castbarTexture, payload.general.castbarOutlineThickness = "Plate Texture", 8
     payload.nameplates.fontKey, payload.nameplates.fontSize = "FRIZQT", 23

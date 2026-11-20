@@ -182,7 +182,7 @@ local function Apply(mode)
     MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("castbar", unit)
 
     local dx, dy = DefaultOffsets(unit)
-    local currentX = Quick.San(g[xKey], dx)
+    local currentX = tonumber(g[xKey]) or dx
     local currentY = Quick.San(g[yKey], dy)
     local displayX = pf.xBox and tonumber(pf.xBox:GetText())
     local displayY = pf.yBox and tonumber(pf.yBox:GetText())
@@ -201,15 +201,38 @@ local function Apply(mode)
         if h then g[hKey] = floor(max(8, min(100, h)) + 0.5) end
     end
 
-    --- Size changes may move the visible center-facing X edge. Materialize the
+    --- Size changes may move the visible position. Materialize the
     --- new geometry first, then translate the displayed X/Y fields back into
     --- the provider's saved anchor offsets.
-    if mode ~= "position" then ReapplyCastbar(unit) end
+    local resizeX
+    if mode ~= "position" then
+        if not Quick.IsBoxEdited(pf.xBox) then
+            resizeX = Util.FrameResizeReferenceX(CastbarFrame(unit))
+            if resizeX ~= nil then currentX = Quick.San(g[xKey], dx) end
+        end
+        ReapplyCastbar(unit)
+    end
     local changed
-    g[xKey], g[yKey], changed = TranslateFramePosition(CastbarFrame(unit), currentX, currentY, displayX, displayY)
+    g[xKey], g[yKey], changed = TranslateFramePosition(CastbarFrame(unit), currentX, currentY, displayX, displayY, resizeX)
     if mode == "position" or changed then ReapplyCastbar(unit) end
     if mode ~= "position" then SyncMenuAfterSizeWrite() end
     if pf and pf:IsShown() then Sync() end
+end
+
+local function StepX(amount)
+    if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return false end
+    local g, unit = EditableGeneral(), pf.unit
+    local xKey = OffsetKeys(unit)
+    if not (g and xKey) then return false end
+    local fallback = DefaultOffsets(unit)
+    local current = tonumber(g[xKey]) or (unit == "focus" and tonumber(g.castbarTargetOffsetX)) or fallback
+    local nextX = Util.StepFrameOffsetX(CastbarFrame(unit), current, amount, true)
+    if nextX == current then return false end
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("castbar", unit)
+    g[xKey] = nextX
+    ReapplyCastbar(unit)
+    if pf:IsShown() then Sync(true) end
+    return true
 end
 
 local function ResetPosition()
@@ -289,7 +312,7 @@ local function WirePopupFocus(btn)
         "castbar", "cast-popup") or btn
 end
 
-function Sync()
+function Sync(committedX)
     if not (pf and pf.unit) then return end
     local g, unit = General(), pf.unit
     local xKey, yKey = OffsetKeys(unit)
@@ -298,7 +321,7 @@ function Sync()
     local x, y = FramePositionValues(CastbarFrame(unit))
 
     if pf._titleFS then pf._titleFS:SetText(string.format(Quick.Tr("%s Castbar"), Quick.Tr(UnitLabel(unit)))) end
-    Quick.SetBoxText(pf.xBox, x ~= nil and x or Quick.San(xKey and g[xKey], dx))
+    Quick.SetBoxText(pf.xBox, x ~= nil and x or Quick.San(xKey and g[xKey], dx), committedX)
     Quick.SetBoxText(pf.yBox, y ~= nil and y or Quick.San(yKey and g[yKey], dy))
     Quick.SetBoxText(pf.wBox, w)
     Quick.SetBoxText(pf.hBox, h)
@@ -337,7 +360,7 @@ local function Build()
     })
     local opts = ButtonOpts()
     Quick.ValueCard(pf, pf, 20, -58, 208, "Position", {
-        { label = "X", key = "xBox", onChanged = function() Apply("position") end },
+        { label = "X", key = "xBox", onChanged = function() Apply("position") end, onStep = StepX },
         { label = "Y", key = "yBox", onChanged = function() Apply("position") end },
     }, { height = 132, boxWidth = 64, hoverWash = true, hoverKey = opts.hoverKey })
     local sizeCard = Quick.ValueCard(pf, pf, 240, -58, 300, "Size", {

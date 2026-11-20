@@ -87,6 +87,53 @@ Case("font readback and style invalidation", function()
     T.ApplyMenuFont(fs, 1, "body")
     assert(fs.fontSize == T.FontSize("body"), "cache clear left stale font size")
 end)
+Case("fresh surface skips empty anchor clears", function()
+    local owner = env.CreateFrame("Button", nil, env.UIParent)
+    owner:SetSize(140, 24)
+    local create, cleared = owner.CreateTexture, 0
+    owner.CreateTexture = function(self, ...)
+        local tex = create(self, ...)
+        local clear = tex.ClearAllPoints
+        tex.ClearAllPoints = function(region)
+            cleared = cleared + 1
+            return clear(region)
+        end
+        return tex
+    end
+    local fill, border = T.CreateSuperellipseLayers(owner, "_fresh", 2)
+    assert(cleared == 0, "fresh parts cleared empty anchors: " .. cleared)
+    for _, layer in ipairs({ fill, border }) do
+        for _, part in ipairs({ layer.L, layer.M, layer.R }) do
+            local _, relative = part:GetPoint(1)
+            local _, second = part:GetPoint(2)
+            assert(relative == owner and second == owner, "fresh part lost an owner anchor")
+        end
+    end
+end)
+Case("navigation only builds the procedural fallback when used", function()
+    local accent = T.MenuAccentActive
+    T.MenuAccentActive = function() return true end
+    local nav = T.Button(env.UIParent, "Nav", 140, 24, { nav = "item", noSearch = true })
+    local header = T.Button(env.UIParent, "Header", 140, 24, { nav = "header", noSearch = true })
+    assert(not nav._msuf2Fill and not header._msuf2Fill, "idle navigation allocated standard button art")
+    nav:SetEnabled(false)
+    local fill = assert(nav._msuf2Fill, "disabled navigation lacks the standard painter")
+    assert(not fill.L:IsShown(), "disabling idle navigation revealed its pill")
+    nav:SetEnabled(true)
+    nav:SetActive(true)
+    assert(fill == nav._msuf2Fill and fill.L:IsShown(), "accent selection did not reveal the retained fallback")
+    nav:SetActive(false)
+    assert(not fill.L:IsShown(), "idle navigation left the fallback visible")
+    local hovered = T.Button(env.UIParent, "Hover", 140, 24, { nav = "item", noSearch = true })
+    hovered._msuf2NavPillVisualWidth = 100
+    World.FireScript(hovered, "OnEnter")
+    local hoverFill = assert(hovered._msuf2Fill, "accent hover did not create its fallback")
+    local _, _, _, x = hoverFill.R:GetPoint(1)
+    assert(hoverFill.R:IsShown() and x == -42, "new fallback did not use navigation width")
+    World.FireScript(hovered, "OnLeave")
+    assert(not hoverFill.L:IsShown(), "hover ended with the fallback visible")
+    T.MenuAccentActive = accent
+end)
 Case("retained surface parts and resize", function()
     local frame = env.CreateFrame("Button", nil, env.UIParent)
     frame:SetSize(120, 24)

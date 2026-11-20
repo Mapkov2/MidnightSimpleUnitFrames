@@ -537,7 +537,7 @@ end
 local function NativeAuraEditGroup(frame)
     if not frame or not IsEditModeActive() then return nil end
     local container = frame._msufA3EditForwardContainer or frame
-    local laneKind = frame._msufA3LaneKind or container._msufA3NativeLane
+    local laneKind = container._msufA3TrailingFlowGroup and "buff" or frame._msufA3LaneKind or container._msufA3NativeLane
     if laneKind == "buffs" then laneKind = "buff" end
     if laneKind == "debuffs" then laneKind = "debuff" end
     if laneKind ~= "buff" and laneKind ~= "debuff" then return nil end
@@ -571,7 +571,7 @@ local function SetLaneMouseSuppressed(container, suppressed)
     if not container then return true end
     if container.IsForbidden and container:IsForbidden() then return suppressed == true end
     local restored = true
-    local forwardKind = container._msufA3NativeLane
+    local forwardKind = container._msufA3TrailingFlowGroup and "buff" or container._msufA3NativeLane
     if forwardKind == "buffs" then forwardKind = "buff" end
     if forwardKind == "debuffs" then forwardKind = "debuff" end
     local canForward = forwardKind == "buff" or forwardKind == "debuff"
@@ -612,7 +612,7 @@ local function SetLaneMouseSuppressed(container, suppressed)
 end
 
 local RUNTIME_MOUSE_ROOTS = { "Buffs", "Debuffs", "Externals",
-    "DispelSensor", "DispelSensorNeutral", "DispelSensorHostile" }
+    "DispelSensor", "DispelSensorNeutral", "DispelSensorHostile", "GroupAuraFlow" }
 local function SetRuntimeAuraMouse(element, suppressed)
     local restored = true
     for i = 1, #RUNTIME_MOUSE_ROOTS do

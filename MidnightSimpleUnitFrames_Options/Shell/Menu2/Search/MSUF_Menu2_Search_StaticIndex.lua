@@ -393,16 +393,20 @@ local function DecodeLine(decoder, line)
                 haystack = haystack .. " " .. localizedNorm
             end
         end
-        local displayHint, localizedHint = hint, hint
-        if displayHint ~= "" then
-            localizedHint = TranslateHint(hint, hintCache)
-            displayHint = page.title .. " > " .. localizedHint
-        else
-            displayHint = page.title
+        local pageHints = decoder.hints[pageKey]
+        if not pageHints then
+            pageHints = {}
+            decoder.hints[pageKey] = pageHints
         end
-        local hintNorm = Normalize(displayHint)
-        -- A translated breadcrumb keeps its English words for scoring as well.
-        if localizedHint ~= hint then hintNorm = hintNorm .. " " .. Normalize(hint) end
+        local localizedHint = hint ~= "" and TranslateHint(hint, hintCache) or hint
+        local hintInfo = pageHints[hint]
+        if not hintInfo then
+            local displayHint = hint ~= "" and (page.title .. " > " .. localizedHint) or page.title
+            local hintNorm = Normalize(displayHint)
+            if localizedHint ~= hint then hintNorm = hintNorm .. " " .. Normalize(hint) end
+            hintInfo = { displayHint, hintNorm, page }
+            pageHints[hint] = hintInfo
+        end
         -- The clause scorer gates on the haystack before it inspects the page
         -- title, so page/group words have to be present here too.
         -- The baked base already contains the English breadcrumb. Retain it
@@ -432,17 +436,6 @@ local function DecodeLine(decoder, line)
             decoder.labels[label] = labelInfo
         end
         columns[1][id], columns[2][id] = labelInfo, kind ~= "" and kind or "control"
-        local pageHints = decoder.hints[pageKey]
-        if not pageHints then
-            pageHints = {}
-            decoder.hints[pageKey] = pageHints
-        end
-        local hintInfo = pageHints[hint]
-        if not hintInfo then
-            -- Each hint is already interned per page. Keep the page once per hint.
-            hintInfo = { displayHint, hintNorm, page }
-            pageHints[hint] = hintInfo
-        end
         columns[3][id] = hintInfo
         columns[5][id], columns[7][id] = searchIdentity, haystack
         columns[8][id] = settingKey ~= "" and settingKey or nil

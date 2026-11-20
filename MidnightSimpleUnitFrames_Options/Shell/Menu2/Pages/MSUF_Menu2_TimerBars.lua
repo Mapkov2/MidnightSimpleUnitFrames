@@ -29,7 +29,16 @@ local function Select(id)
     return true
 end
 Preview.Select = Select
+-- A cold exact result names the tab before the host asks its section for the widget.
+M.RegisterSearchTargetResolver("castbar-timers", function(pageKey, target)
+    if pageKey ~= "opt_castbar" or not target or target.sectionId ~= "timer_bars" then return end
+    local id = target.prepareKind == "menuTab" and target.prepareValue
+    if not id and type(target.settingKey) == "string" then id = target.settingKey:match("^general%.castbarTimers%.([^.]+)%.") end
+    if id then Select(id) end
+end)
 function Preview.Build(preview, toolbar, makeButtons)
+    -- A rebuilt page has its own timer section, which can still be collapsed.
+    page, Preview.frames = nil, nil
     local values = {}
     for _, id in ipairs(Bars.Order) do
         if Bars.IsAvailable(id) then values[#values + 1] = { key = id, text = Bars.Labels[id] } end
@@ -177,15 +186,30 @@ local function BuildTabs(ctx, section, width)
             M.UnitSectionsShared.MakeTabFrame(section, id, -122, width, frames)
         end
     end
+    local function BuildTab(id)
+        local frame = frames[id]
+        if not frame or frame.timerControlsBuilt then return end
+        frame.timerControlsBuilt = true
+        BuildTimer(ctx, frame, id)
+    end
+    local function BuildSelected()
+        if section._msuf2CollapsibleEntry.open then BuildTab(Selected()) end
+    end
     local tabs, refreshTabs = M.Widgets.SegmentTabs(ctx, section, {
         label = "", values = values, width = math.min(660, width - 48),
         frames = frames, defaultTab = Selected(), get = Selected,
         customSetReason = "Changes editor selection or input state rather than a fixed profile field.",
         set = SetSelection, afterSet = ShowSelection, x = 14, y = -64,
+        afterRefresh = BuildSelected,
     })
     if tabs._msuf2Title then tabs._msuf2Title:Hide() end
     M.RegisterControlMetadata(tabs, Meta("timers.selected", "ephemeral"), "Selected timer bar", "segment")
     Schema.Owned(tabs, ctx.key, "sectionNavigation")
+    -- The static catalog visits hidden pages to capture every available tab.
+    if ctx.hiddenBuild then
+        for _, id in ipairs(Bars.Order) do BuildTab(id) end
+    end
+    M.TrackCollapsibleRefresh(ctx, section, BuildSelected)
     return frames, refreshTabs
 end
 function M.BuildTimerBarSections(ctx, builder)
@@ -203,10 +227,9 @@ function M.BuildTimerBarSections(ctx, builder)
     }, Schema.UnitOptions())
     section:HookScript("OnHide", function() Bars.SetPreview(false) end)
     local frames, refreshTabs = BuildTabs(ctx, section, width)
-    page = { refreshTabs = refreshTabs }
-    Preview.frames = frames
-    for _, id in ipairs(Bars.Order) do
-        if frames[id] then BuildTimer(ctx, frames[id], id) end
+    if not ctx.hiddenBuild then
+        page = { refreshTabs = refreshTabs }
+        Preview.frames = frames
     end
     refreshTabs()
 end

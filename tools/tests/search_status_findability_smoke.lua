@@ -32,6 +32,17 @@ local function Find(query, page, limit)
     return nil, rows[1] and (rows[1].key .. "/" .. rows[1].label) or "empty"
 end
 Ready()
+local ranksSupported = flavor == "Forever" or flavor == "Vanilla" or flavor == "TBC"
+for _, case in ipairs({
+    { "Show spell rank", "general.castbarPlayerShowSpellRank", ranksSupported },
+    { "Show PvP countdown", "player.pvpIndicatorCountdownEnabled", flavor == "Forever" },
+}) do
+    local found = false
+    for _, row in ipairs(api.SearchPages(M.Tr(case[1]))) do
+        if index.TargetField(row, "settingKey") == case[2] then found = true break end
+    end
+    Check(found == case[3], "cold search exposed the wrong client setting: " .. case[1])
+end
 local cold = {
     { "status icons" }, { "statusicons" }, { "Status-Icons" },
     { "where are status icons" }, { "where are player status icons", "uf_player" },

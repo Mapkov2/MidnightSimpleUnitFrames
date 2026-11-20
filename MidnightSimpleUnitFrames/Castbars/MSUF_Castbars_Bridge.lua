@@ -32,7 +32,9 @@ local function GeneralDB()
 end
 
 local function GetBackend(unit)
-    return Backend.Resolve(unit, Config.Read().general)
+    unit = Backend.Unit(unit)
+    local record = unit and Config.Read(unit)
+    return record and record.backend
 end
 
 local function ShouldUseMSUF(unit)
@@ -221,6 +223,7 @@ function NativeOwner:Apply()
         return false
     end
 
+    local hadPending = nativeOwnershipPending
     nativeOwnershipPending = true
     local foundAny = false
     ForEachBlizzardPlayerCastbar(function(frame)
@@ -228,6 +231,7 @@ function NativeOwner:Apply()
         SetNativeFrameSuppressed(frame, suppress)
     end)
     nativeOwnershipPending = false
+    if hadPending then eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
     return foundAny
 end
 
@@ -237,21 +241,7 @@ end
 Bridge.SuppressBlizzardPlayerCastbars = SuppressBlizzardPlayerCastbars
 Publish("MSUF_SuppressBlizzardPlayerCastbars", Bridge.SuppressBlizzardPlayerCastbars)
 
-local SyncBlizzardCastbarEvents
 eventFrame = CreateFrame("Frame")
-eventFrame:SetScript("OnEvent", function(_, event, addonName)
-    -- The first event with the saved profile: keep the events it asks for.
-    if event == "PLAYER_LOGIN" then SyncBlizzardCastbarEvents() end
-    if event == "ADDON_LOADED"
-        and addonName ~= "Blizzard_CastingBarFrame"
-        and addonName ~= "Blizzard_CastingBar"
-        and addonName ~= "Blizzard_UnitFrame"
-    then
-        return
-    end
-
-    SuppressBlizzardPlayerCastbars()
-end)
 
 local function RegisterOwnershipEvents()
     eventFrame:RegisterEvent("PLAYER_LOGIN")
@@ -259,7 +249,7 @@ local function RegisterOwnershipEvents()
     eventFrame:RegisterEvent("ADDON_LOADED")
 end
 
-SyncBlizzardCastbarEvents = function()
+local function SyncBlizzardCastbarEvents()
     local wanted = not ShouldUseBlizzard("player")
     eventFrame:UnregisterAllEvents()
     if wanted then RegisterOwnershipEvents() end
@@ -271,6 +261,47 @@ end
 -- default (MSUF owns the player castbar). Until login the events are the ones
 -- that default asked for; PLAYER_LOGIN resyncs them from the saved profile.
 RegisterOwnershipEvents()
+
+local appliedPlayerBackend
+local function ApplyPlayerBackend()
+    local backend = GetBackend("player")
+    SyncBlizzardCastbarEvents()
+    SuppressBlizzardPlayerCastbars()
+
+    local applyPlayerState = Manager.PlayerCastbar_ApplyBackendState
+    if type(applyPlayerState) == "function" then applyPlayerState() end
+    if not nativeOwnershipPending then appliedPlayerBackend = backend end
+end
+
+eventFrame:SetScript("OnEvent", function(_, event, addonName)
+    -- The first event with the saved profile: keep the events it asks for.
+    if event == "PLAYER_LOGIN" then
+        Config.SyncPlayerFrameSetting()
+        ApplyPlayerBackend()
+        return
+    end
+    if event == "ADDON_LOADED"
+        and addonName ~= "Blizzard_CastingBarFrame"
+        and addonName ~= "Blizzard_CastingBar"
+        and addonName ~= "Blizzard_UnitFrame"
+    then
+        return
+    end
+
+    SuppressBlizzardPlayerCastbars()
+end)
+
+-- The unit-frame apply queue has already passed its combat fence.
+function Bridge.ApplyPlayerFrameChange()
+    Config.SyncPlayerFrameSetting()
+    local backend = GetBackend("player")
+    if appliedPlayerBackend == backend then return false end
+    ApplyPlayerBackend()
+    if backend ~= "MSUF" then
+        Anchors.UpdateCastbarWidthSourceSync(Config.Read().general, "player")
+    end
+    return true
+end
 
 local AreAnyCastbarsEnabled = Bridge.AreAnyCastbarsEnabled
 if type(AreAnyCastbarsEnabled) ~= "function" then
@@ -333,19 +364,14 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
             syncBackend(Config.Source(true).general)
         end
 
-        SyncBlizzardCastbarEvents()
-        SuppressBlizzardPlayerCastbars()
+        if not ns.Util.InCombat() then Config.SyncPlayerFrameSetting() end
+        ApplyPlayerBackend()
         -- The castbar files below load after this one, before any settings
         -- change: the focus kick state driver, the castbar driver and the
         -- interrupt-ready indicator.
         FocusDriver.FocusKickDriver_ForceUpdate()
         Driver.CastbarDriver_SyncLifecycle(true)
         KickReady.KickReady_RefreshAll(true)
-
-        local applyPlayerState = Manager.PlayerCastbar_ApplyBackendState
-        if type(applyPlayerState) == "function" then
-            applyPlayerState()
-        end
 
         local applyUnitState = Driver.CastbarDriver_ApplyBackendState
         if type(applyUnitState) == "function" then

@@ -561,7 +561,6 @@ h:RunTimers()
 CheckStatus("disconnected read during the roster update")
 -- A new slot must be born in the same native dispatch in the open world.
 -- The addon must still defer its protected layout pass until regen.
-local liveOpenWorld = flavor == "Mainline" or flavor == "Forever"
 local function EnterZone(location, event)
     instanceType = location
     h:Event(event or "ZONE_CHANGED_NEW_AREA")
@@ -603,8 +602,8 @@ for _, location in ipairs({ "none", "raid", "party", "pvp", "arena", "scenario",
     h:EnterCombat(function()
         assert(GF._raidRosterCombatActive, "pre-lockdown layout guard was not armed")
     end)
-    local immediate = liveOpenWorld and location == "none"
-    assert(runtimeZoneReads == beforePull + (immediate and 1 or 0), flavor .. "/" .. location .. ": wrong zone reads at pull")
+    local immediate = location == "none"
+    assert(runtimeZoneReads == beforePull + 1, flavor .. "/" .. location .. ": wrong zone reads at pull")
     local reused = assert(GF.FrameForUnit("raid1"))
     if immediate then
         reused._msufCoreVisible = false
@@ -623,8 +622,8 @@ for _, location in ipairs({ "none", "raid", "party", "pvp", "arena", "scenario",
         assert(reused._msufCoreVisible == true and not reused._msufCoreEventsSuspended,
             "already bound slot did not recover after native show")
     else
-        assert(runtimeZoneReads == beforeZoneReads, "instance or Classic roster polled the zone")
-        assert(GF.FrameForUnit("raid3") == nil, "instance or Classic raid updated before regen")
+        assert(runtimeZoneReads == beforeZoneReads, "instance roster polled the zone")
+        assert(GF.FrameForUnit("raid3") == nil, "instance raid updated before regen")
     end
     assert(#h.violations == 0, "join wrote protected state: " .. tostring(h.violations[1]))
     h:LeaveCombat()
@@ -657,10 +656,10 @@ for _, location in ipairs({ "none", "party" }) do
     h:SetRoster({ "player" })
     Roster()
     assert(GF.headers.party == nil, "solo should not start with a Party header")
-    local checkConsumption = liveOpenWorld and location == "none" and flavor == "Forever"
+    local checkConsumption = location == "none" and flavor == "Forever"
     if checkConsumption then party.statusConsumptionText = true end
     h:EnterCombat()
-    local immediate = liveOpenWorld and location == "none"
+    local immediate = location == "none"
     assert((GF.headers.party ~= nil) == immediate, "wrong Party standby scope")
     assert(GF.FrameForUnit("player") == nil, "standby displayed the solo player")
     if immediate then
@@ -712,7 +711,7 @@ Roster()
 local partyHeader = assert(GF.headers.party)
 assert(partyHeader:GetAttribute("nameList"), "Party name-list fixture missing")
 h:EnterCombat()
-assert((partyHeader:GetAttribute("nameList") == nil) == liveOpenWorld, "wrong Party live sort scope")
+assert(partyHeader:GetAttribute("nameList") == nil, "outdoor Party kept its fixed sort")
 h:LeaveCombat()
 h:RunTimers()
 assert(partyHeader:GetAttribute("nameList"), "regen did not restore Party sort")
@@ -720,17 +719,13 @@ h:EnterCombat()
 h:SetRoster({ "player", "party1", "party2" })
 h:Event("GROUP_ROSTER_UPDATE")
 h:RunTimers()
-if liveOpenWorld then
-    AssertCombatPaint("party2", "PartyTwo")
-else
-    assert(GF.FrameForUnit("party2") == nil, "wrong custom Party join timing")
-end
+AssertCombatPaint("party2", "PartyTwo")
 h:LeaveCombat()
 h:RunTimers()
 assert(GF.FrameForUnit("party2") and partyHeader:GetAttribute("nameList"), "Party sort or roster not restored")
 assert(#h.violations == 0, "join wrote protected state: " .. tostring(h.violations[1]))
 
-if liveOpenWorld then
+do
     -- Retiring a Party header detaches its slots but leaves their compiled
     -- specs behind. Both the first invite and a later join must reattach them.
     party.sortMode, party.playerFirstInRole = "INDEX", false
@@ -774,11 +769,11 @@ if liveOpenWorld then
     instanceType = "party"
     local beforePull = runtimeZoneReads
     h:EnterCombat()
-    assert(runtimeZoneReads == beforePull and not GF._openWorldCombatRoster, "loading transition retained the world handler")
+    assert(runtimeZoneReads == beforePull + 1 and not GF._openWorldCombatRoster, "loading transition retained the world handler")
     h:LeaveCombat()
     h:RunTimers()
 
-    -- A stale world selection may check the location, but must freeze as usual.
+    -- The pull samples the new instance even if its zone event has yet to arrive.
     EnterZone("none")
     instanceType = "party"
     beforePull = runtimeZoneReads

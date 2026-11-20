@@ -28,6 +28,7 @@ local ControlRow, SectionCard, SectionNote = controls.Row, controls.Card, contro
 local SettingMeta, ReviewedMeta, RegisterControl = controls.SettingMeta, controls.ReviewedMeta, controls.RegisterControl
 local UnitSectionShared = controls.Shared
 local SetSectionHeaderStatus, CreateSectionNotice = UnitSectionShared.SetSectionHeaderStatus, UnitSectionShared.CreateSectionNotice
+local CastbarBackend = MSUF.Castbars.Backend
 local CastbarsOnSettingsChanged = runtime.OnSettingsChanged
 local SuppressBlizzardPlayerCastbars, ShowReloadRecommendedPopup = runtime.SuppressBlizzardPlayerCastbars, runtime.ShowReloadPopup
 local NormalizeTabKey, CurrentTab, SetSectionBodyHeight = tabs.Normalize, tabs.Current, tabs.SetBodyHeight
@@ -62,6 +63,9 @@ end
 local function CurrentCastbarTab(unit)
     return CurrentTab("unitCastbarTabSelection", CASTBAR_TAB_HEIGHTS, unit)
 end
+local function PlayerFrameDisabled(unit)
+    return unit == "player" and not ReadBool(unit, "enabled", true)
+end
 local function PrepareCastbarSwitch(ctx, sec, unit)
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then Schema.Section(sec, unit) end
@@ -70,17 +74,16 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
     local providerMemoryKey = fields.providerMemory or (fields.backend and (fields.backend .. "BeforeHide") or nil)
     local canUseBlizzardProvider = unit == "player"
     local state = {}
-    -- The core functions resolve once per build: the refresh closures below read the backend on every setting change.
     local fnNormalizeForUnit = MSUF.Require("MSUF_NormalizeCastbarBackendForUnit", FILE)
-    local fnGetBackend = MSUF.Require("MSUF_GetCastbarBackend", FILE)
     local fnSetBackend = MSUF.Require("MSUF_SetCastbarBackend", FILE)
     local function NormalizeBackend(value)
         return fnNormalizeForUnit(unit, value) or "MSUF"
     end
     local function ReadCastbarBackend()
-        return NormalizeBackend(fnGetBackend(unit, GetGeneral()))
+        return CastbarBackend.Resolve(unit, GetGeneral(), PlayerFrameDisabled(unit)) or "MSUF"
     end
     local function SetCastbarBackend(value)
+        if PlayerFrameDisabled(unit) then return end
         local backend = NormalizeBackend(value)
         local g = GetGeneral()
         if providerMemoryKey and backend ~= "HIDE" then g[providerMemoryKey] = backend end
@@ -298,7 +301,7 @@ function CastbarSection.Cards(s)
             historySource = "menu:unit-castbar-general-colors",
             context = castContext,
         })
-        W.AttachContextColorReferences(providerCard, { "cast.background", "cast.border" }, {
+        W.AttachContextColorReferences(providerCard, { "cast.background", "cast.border", "cast.latency" }, {
             title = "Castbar Surface Colors",
             note = "Shared castbar background and outline colors.",
             historySource = "menu:unit-castbar-surface-colors",
@@ -403,10 +406,6 @@ function CastbarSection.General(s)
             customSetReason = "Coordinates the selected castbar provider, enabled state and dependent backend settings.", set = SetCastbarProvider,
             scope = unit, meta = SettingMeta(ctx, "castbar.provider", "general", fields.backend),
             beforeBind = function(widget)
-                -- Player castbar ownership is independent from Player UnitFrame
-                -- ownership, so the page-level frame-disabled gate must not lock this
-                -- provider selector while the MSUF Player frame is off.
-                widget._msuf2UnitFrameGateAlwaysEnabled = true
                 W.AttachUnitEditFocus(widget, unit, "castbar")
             end,
         })
@@ -535,6 +534,14 @@ function CastbarSection.IconAndText(s)
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.
     })
+    if unit == "player" and MSUF.Castbars.Utils.PlayerSpellRanksSupported then
+        ControlRow(ctx, spellCard, { "toggle", "spellRank", false, { "Show spell rank", 16, -196, controlWLeft },
+            get = function() return ReadGeneralBool("castbarPlayerShowSpellRank", false) end,
+            write = { call = SetGeneralBool, keyOnly = true, args = { "MSUF2_CASTBAR_SPELL_RANK", { castbar = true, preview = true } } },
+            scope = unit, meta = SettingMeta(ctx, "castbar.show_spell_rank", "general", "castbarPlayerShowSpellRank"),
+            beforeBind = s.PrepareControl, castbarControl = true,
+        })
+    end
     local targetNameToggle
     if fields.targetName and targetNameCard then
         targetNameToggle = ControlRow(ctx, targetNameCard, { "switch", "targetNameToggle", false, { "Enable", 16, -52, 160 },
@@ -698,7 +705,7 @@ local function BuildCastbar(ctx, builder, unit)
     }, {
         also = function()
             local backend = ReadCastbarBackend()
-            if backend ~= "MSUF" then
+            if backend ~= "MSUF" and not PlayerFrameDisabled(unit) then
                 if backend == "HIDE" then
                     castbarNotice:SetMessage(M.Format("%s castbar is off. Turn it on to use the MSUF castbar.", UnitTopLabel(unit)), "warning")
                 else

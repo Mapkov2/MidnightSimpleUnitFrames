@@ -55,14 +55,9 @@ end
 --- Edit Mode 2 version tag.
 EM2.VERSION = "2.0.0"
 
---- Edit Mode position fields use one visual coordinate contract regardless of
---- the frame's saved anchor pair. X is the signed gap from the screen center to
---- the center-facing horizontal edge: a frame left of center uses its RIGHT
---- edge, a frame right of center uses its LEFT edge, and an overlapping frame
---- reports zero. Y remains the TOP edge relative to the screen center. Runtime
---- profile offsets stay untouched until the user edits a field; then the
---- requested visual delta is translated back into the existing anchor's local
---- scale. Mirrored left/right elements therefore report equal magnitudes.
+--- X is the frame center relative to screen center. Y uses the top edge.
+--- A fixed horizontal reference keeps the displayed coordinate continuous
+--- while the frame spans the center line.
 EM2.Geometry = MSUF.Geometry
 local EditFrameRectToUI = MSUF.Geometry.EditRect
 
@@ -75,17 +70,11 @@ end
 
 local EditRound = MSUF.Require("MSUF_RoundOffset", CALLER)
 
-local function EditHorizontalPosition(left, right, centerX)
-    if right <= centerX then return right - centerX end
-    if left >= centerX then return left - centerX end
-    return 0
-end
-
 function Util.FramePositionValues(frame)
     local left, right, top, bottom = EditFrameRectToUI(frame)
     if not left then return nil end
     local centerX, centerY = EditScreenCenter()
-    return EditRound(EditHorizontalPosition(left, right, centerX)), EditRound(top - centerY),
+    return EditRound((left + right) * 0.5 - centerX), EditRound(top - centerY),
         EditRound(right - left), EditRound(top - bottom)
 end
 
@@ -101,7 +90,44 @@ local function EditPositionClamp(value)
     return math.max(-4096, math.min(4096, value))
 end
 
-function Util.TranslateFramePosition(frame, currentOffsetX, currentOffsetY, displayX, displayY)
+local PhysicalPixelSize = MSUF.Require("MSUF_GetPhysicalPixelSize", CALLER)
+
+function Util.HorizontalScreenStep(amount, minimum)
+    if amount == 0 then return 0 end
+    local pixel = PhysicalPixelSize(UIParent, 1)
+    return (amount < 0 and -1 or 1) * math.max(math.abs(amount), pixel, minimum or 0)
+end
+
+function Util.StepFrameOffsetX(frame, offset, amount, wholeOffsets)
+    local _, _, _, _, frameScale, uiScale = EditFrameRectToUI(frame)
+    local scaleRatio = frameScale and uiScale / frameScale or 1
+    local minimum = wholeOffsets and 1 / scaleRatio or 0
+    local nextX = offset + Util.HorizontalScreenStep(amount, minimum) * scaleRatio
+    return EditPositionClamp(nextX)
+end
+
+-- Preserve the existing inward edge when a size edit changes the bounds.
+-- Position inputs and the drag readout use the horizontal center instead.
+local function ResizeEdgeX(left, right, centerX)
+    if right <= centerX then return right - centerX end
+    if left >= centerX then return left - centerX end
+    return 0
+end
+
+function Util.FrameResizeReferenceX(frame)
+    local left, right = EditFrameRectToUI(frame)
+    if left then return EditRound(ResizeEdgeX(left, right, EditScreenCenter())) end
+end
+
+local function TranslateResizeReferenceX(left, right, centerX, savedX, requestedX, scaleRatio)
+    local currentX = ResizeEdgeX(left, right, centerX)
+    if requestedX == EditRound(currentX) then return savedX end
+    requestedX = EditPositionClamp(requestedX)
+    local anchorX = requestedX < 0 and right - centerX or requestedX > 0 and left - centerX or currentX
+    return EditPositionClamp(EditRound(savedX + (requestedX - anchorX) * scaleRatio))
+end
+
+function Util.TranslateFramePosition(frame, currentOffsetX, currentOffsetY, displayX, displayY, resizeX)
     local savedX = EditPositionNumber(currentOffsetX) or 0
     local savedY = EditPositionNumber(currentOffsetY) or 0
     local requestedX = EditPositionNumber(displayX)
@@ -109,28 +135,18 @@ function Util.TranslateFramePosition(frame, currentOffsetX, currentOffsetY, disp
     local left, right, top, _, frameScale, uiScale = EditFrameRectToUI(frame)
     if not left then return savedX, savedY, false end
     local centerX, centerY = EditScreenCenter()
-    local currentX, currentY = EditHorizontalPosition(left, right, centerX), top - centerY
+    local currentX, currentY = (left + right) * 0.5 - centerX, top - centerY
     local scaleRatio = uiScale / frameScale
     local nextX, nextY = savedX, savedY
     --- The edit boxes show rounded geometry. Treat that same rounded value as
     --- unchanged so editing width/height or another field cannot introduce a
     --- sub-pixel position drift. After a resize, the rounded reference edge
     --- changes and the old field value deliberately restores it.
-    if requestedX ~= nil and requestedX ~= EditRound(currentX) then
+    if resizeX ~= nil then
+        nextX = TranslateResizeReferenceX(left, right, centerX, savedX, resizeX, scaleRatio)
+    elseif requestedX ~= nil and requestedX ~= EditRound(currentX) then
         requestedX = EditPositionClamp(requestedX)
-        local currentEdgeX
-        if requestedX < 0 then
-            currentEdgeX = right - centerX
-        elseif requestedX > 0 then
-            currentEdgeX = left - centerX
-        elseif right <= centerX then
-            currentEdgeX = right - centerX
-        elseif left >= centerX then
-            currentEdgeX = left - centerX
-        end
-        if currentEdgeX ~= nil then
-            nextX = EditPositionClamp(EditRound(savedX + (requestedX - currentEdgeX) * scaleRatio))
-        end
+        nextX = EditPositionClamp(savedX + (requestedX - currentX) * scaleRatio)
     end
     if requestedY ~= nil and requestedY ~= EditRound(currentY) then
         requestedY = EditPositionClamp(requestedY)

@@ -393,9 +393,10 @@ local function Apply()
     end
     UndoBeforeChange("unit", key)
     local frame = FrameForUnitKey(key) or pf.parent
-    local currentX, currentY = San(conf.offsetX, 0), San(conf.offsetY, 0)
+    local currentX, currentY = tonumber(conf.offsetX or conf.x) or 0, San(conf.offsetY or conf.y, 0)
     local displayX = pf.xBox and tonumber(pf.xBox:GetText())
     local displayY = pf.yBox and tonumber(pf.yBox:GetText())
+    local oldWidth, oldHeight = conf.width, conf.height
     local w=pf.wBox and tonumber(pf.wBox:GetText())
     if w then
         conf.width=floor(max(SizeBounds.minW,min(SizeBounds.maxW,w))+0.5)
@@ -403,6 +404,11 @@ local function Apply()
     local h=pf.hBox and tonumber(pf.hBox:GetText())
     if h then
         conf.height=floor(max(SizeBounds.minH,min(SizeBounds.maxH,h))+0.5)
+    end
+    local resizeX
+    if (conf.width ~= oldWidth or conf.height ~= oldHeight) and not Quick.IsBoxEdited(pf.xBox) then
+        resizeX = U.FrameResizeReferenceX(frame)
+        if resizeX ~= nil then currentX = San(currentX, 0) end
     end
     local sharedDetachedWidthSourceChanged = false
     if conf.powerBarDetached and CanDetachPower(key) then
@@ -454,7 +460,7 @@ local function Apply()
     if frame and conf.width and conf.height then
         frame:SetSize(conf.width, conf.height)
     end
-    conf.offsetX, conf.offsetY = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+    conf.offsetX, conf.offsetY = TranslateFramePosition(frame, currentX, currentY, displayX, displayY, resizeX)
     if frame and frame.ForceUpdate then frame:ForceUpdate("EM2_UNIT_POPUP") end
     --- Full layout re-apply (power bar embed, text anchors, borders, etc.)
     if sharedDetachedWidthSourceChanged then
@@ -479,7 +485,26 @@ local function Apply()
     if pf and pf:IsShown() then Sync() end
 end
 
-function Sync()
+local function StepX(amount)
+    if BlockConfigCombatLocked() or not (pf and pf.unit) then return false end
+    local key = CK(pf.unit)
+    local conf = key and Conf(key)
+    if not conf then return false end
+    local frame = FrameForUnitKey(key) or pf.parent
+    local current = tonumber(conf.offsetX or conf.x) or 0
+    local nextX = U.StepFrameOffsetX(frame, current, amount)
+    if nextX == current then return false end
+    UndoBeforeChange("unit", key)
+    conf.offsetX = nextX
+    if not ApplySettingsForKeySafe(key) then ApplyAllSettingsSafe() end
+    SyncMovers()
+    RefreshUFPreview("EM2_UNIT_POPUP_APPLY", key)
+    NotifyPositionChanged(key, true)
+    if pf:IsShown() then Sync(true) end
+    return true
+end
+
+function Sync(committedX)
     if not pf or not pf.unit then return end
     local key=CK(pf.unit)
     local conf=key and Conf(key)
@@ -489,7 +514,7 @@ function Sync()
     if pf._titleFS then pf._titleFS:SetText(string.format(Tr("%s Frame"), Tr(UnitLabel(key)))) end
     local frame = FrameForUnitKey(key) or pf.parent
     local x, y, width, height = FramePositionValues(frame)
-    Quick.SetBoxText(pf.xBox,x ~= nil and x or San(conf.offsetX,0))
+    Quick.SetBoxText(pf.xBox,x ~= nil and x or San(conf.offsetX,0), committedX)
     Quick.SetBoxText(pf.yBox,y ~= nil and y or San(conf.offsetY,0))
     Quick.SetBoxText(pf.wBox,conf.width or width or (frame and frame:GetWidth()) or 250)
     Quick.SetBoxText(pf.hBox,conf.height or height or (frame and frame:GetHeight()) or 40)
@@ -751,7 +776,7 @@ local function Build()
     end
 
     Quick.ValueCard(pf, pf, 20, -58, 208, "Position", {
-        { label = "X", key = "xBox", onChanged = Apply },
+        { label = "X", key = "xBox", onChanged = Apply, onStep = StepX },
         { label = "Y", key = "yBox", onChanged = Apply },
     }, { height = 132, boxWidth = 64 })
     local sizeCard = Quick.ValueCard(pf, pf, 240, -58, 300, "Size", {

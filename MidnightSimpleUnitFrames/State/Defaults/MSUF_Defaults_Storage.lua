@@ -142,7 +142,7 @@ local function ApplySparseV2(restore)
     return count
 end
 
-local function RestoreSparseV2(profile, prepared, revision)
+local function ValidateSparseV2(profile, prepared, revision)
     if profile._msufDefaultsRevision ~= (revision or sparseToken) or not ReadSparseV2Mask(profile[sparseV2Marker]) then return false end
     if not prepared then
         local ok = CountTables(profile, scratchRefs, scratchPath, 0, scratchLists)
@@ -151,14 +151,34 @@ local function RestoreSparseV2(profile, prepared, revision)
         ClearScratch()
         if not ok then return false end
     end
+    return ValidateSparseV2MaskOwners() and sparseV3.Validate(profile)
+end
+
+local function RestoreSparseV2(profile, prepared, revision)
     -- Validate the entire mask and all referenced owners before the first write.
-    if not ValidateSparseV2MaskOwners() or not sparseV3.Validate(profile) then return false end
+    if not ValidateSparseV2(profile, prepared, revision) then return false end
     if profile[sparseV3.Marker] ~= nil then sparseV3.Apply(true, prepared) end
     ApplySparseV2(true)
     profile[sparseV3.Marker] = nil
     profile[sparseV2Marker] = nil
     profile._msufDefaultsRevision = 17
     return true
+end
+
+function Schema.HasCurrentSparseProfile(profile)
+    if not Plain(profile) then return false end
+    local revision, mask, extension = profile._msufDefaultsRevision, profile[sparseV2Marker], profile[sparseV3.Marker]
+    local IsSecret = MSUF.Util.IsSecret
+    return not IsSecret(revision) and not IsSecret(mask) and not IsSecret(extension)
+        and revision == sparseToken and type(mask) == "string" and (extension == nil or type(extension) == "string")
+end
+
+function Schema.IsValidSparseProfile(profile)
+    if not Schema.HasCurrentSparseProfile(profile) or Schema.IsQuarantinedProfile(profile) then return false end
+    InitializeSparse()
+    local valid = ValidateSparseV2(profile, false)
+    ReleaseSparseV2(false)
+    return valid
 end
 
 -- Revision 18 belongs to 6.5. A 6.510 login may keep 7.0's state stamp and
@@ -307,6 +327,97 @@ function Schema.PreparePersistence(globalDB)
 end
 
 local sparseRefusalNotices = setmetatable({}, { __mode = "k" })
+
+-- Only raw table edges matter for ownership. An unrelated runtime cache can
+-- contain unsupported scalar values or metatables, without sharing a profile.
+local function AccountTableReferences(store)
+    local refs, pending = { [store] = 1 }, { store }
+    local IsSecret = MSUF.Util.IsSecret
+    local function Reference(value)
+        if IsSecret(value) then return end
+        local count = refs[value]
+        refs[value] = (count or 0) + 1
+        if not count then pending[#pending + 1] = value end
+    end
+    local index = 1
+    while index <= #pending do
+        for key, value in next, pending[index] do
+            if type(key) == "table" then Reference(key) end
+            if type(value) == "table" then Reference(value) end
+        end
+        index = index + 1
+    end
+    return refs
+end
+
+local function OwnsProfileTree(value, refs)
+    if type(value) ~= "table" then return true end
+    if refs[value] ~= 1 then return false end
+    for _, child in pairs(value) do
+        if not OwnsProfileTree(child, refs) then return false end
+    end
+    return true
+end
+
+local function EligibleInactiveProfile(profile)
+    if not Plain(profile) or Schema.IsQuarantinedProfile(profile) then return false end
+    local revision, mask, extension = profile._msufDefaultsRevision, profile[sparseV2Marker], profile[sparseV3.Marker]
+    local IsSecret = MSUF.Util.IsSecret
+    return not IsSecret(revision) and not IsSecret(mask) and not IsSecret(extension)
+        and revision == 17 and mask == nil and extension == nil
+end
+
+local function CompactProfileTree(profile, refs)
+    local safe = CountTables(profile, scratchRefs, scratchPath, 0, scratchLists) and OwnsProfileTree(profile, refs)
+    ClearScratch()
+    if not safe then return false end
+    local copy = MSUF.Util.DeepCopy(profile)
+    local compacted = CountTables(copy, scratchRefs, scratchPath, 0, scratchLists)
+        and PersistProfile(copy, scratchRefs, scratchLists) > 0
+    ClearScratch()
+    if not compacted then return false end
+    -- Keep the named root identity. Copy its compact children again since Lua
+    -- 5.1 does not shrink the hash capacity of the tables pruned by the codec.
+    local compact = MSUF.Util.DeepCopy(copy)
+    for key in pairs(profile) do profile[key] = nil end
+    for key, value in pairs(compact) do profile[key] = value end
+    return true
+end
+
+function Schema.CompactInactiveProfiles(globalDB, names)
+    local profiles = Schema.PreparePersistence(globalDB)
+    if not profiles or not Plain(names) then return 0 end
+    local compatibility = globalDB._compatSave
+    local IsSecret = MSUF.Util.IsSecret
+    if IsSecret(compatibility) or compatibility == "armed" or compatibility == "saved" then return 0 end
+    local live = globalDB == MSUF_GlobalDB
+    if live and MSUF.Util.InCombat() then return 0 end
+    local candidates = {}
+    for _, name in ipairs(names) do
+        if not IsSecret(name) and type(name) == "string" then
+            local profile = profiles[name]
+            if EligibleInactiveProfile(profile) and (not live or (name ~= MSUF_ActiveProfile and profile ~= MSUF_DB)) then
+                candidates[profile] = true
+            end
+        end
+    end
+    if not next(candidates) or (live and not Schema.HasRollbackBackup(globalDB, true)) then return 0 end
+
+    -- A single private walk guards saved aliases without retaining an account-
+    -- sized reference table in the shared codec scratch after a profile switch.
+    local refs = AccountTableReferences(globalDB)
+    if refs[profiles] ~= 1 then return 0 end
+    InitializeSparse()
+    local count = 0
+    for profile in pairs(candidates) do
+        if CompactProfileTree(profile, refs) then count = count + 1 end
+    end
+    return count
+end
+
+function Schema.CompactInactiveProfile(globalDB, name)
+    return Schema.CompactInactiveProfiles(globalDB, { name }) > 0
+end
 
 function Schema.Persist(globalDB)
     local profiles = Schema.PreparePersistence(globalDB)

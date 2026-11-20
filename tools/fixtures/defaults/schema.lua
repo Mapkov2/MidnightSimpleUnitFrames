@@ -95683,6 +95683,7 @@ return {
         },
         ["bars_12"] = {
             ["fields"] = {
+                ["castbarFadeEnabled"] = {[1]="boolean",[2]=false},
                 ["castbarShowGlow"] = {[1]="boolean",[2]=false},
                 ["castbarShowSpark"] = {[1]="boolean",[2]=false},
                 ["castbarSparkOverflow"] = {[1]="boolean",[2]=true},
@@ -95691,6 +95692,8 @@ return {
         },
         ["bars_13"] = {
             ["fields"] = {
+                ["castbarPlayerShowSpellRank"] = {[1]="boolean",[2]=false},
+                ["castbarPlayerShowTargetName"] = {[1]="boolean",[2]=false},
                 ["castbarFocusShowIcon"] = {[1]="boolean",[2]=true},
                 ["castbarFocusShowSpellName"] = {[1]="boolean",[2]=true},
                 ["castbarFocusShowTargetName"] = {[1]="boolean",[2]=false},

@@ -38,7 +38,10 @@ OptionText = OptionText or M.OptionText
 -- Only Midnight has the Mythic Raid scope (MSUF.Client.SupportsGroupKind); the
 -- other clients get no "Hide groups 5–8" option and a shorter Group Layout section.
 local MYTHIC_RAID_SUPPORTED = not M.SupportsFrameScope or M.SupportsFrameScope("mythicraid")
-local GEOMETRY_SECTION_HEIGHT = MYTHIC_RAID_SUPPORTED and 540 or 504
+local function GeometrySectionHeight()
+    local height = MYTHIC_RAID_SUPPORTED and 540 or 504
+    return CurrentScope() == "party" and height + 36 or height
+end
 local function ScopeLabel()
     local scope = CurrentScope() or "party"
     for i = 1, #SCOPE_VALUES do
@@ -368,7 +371,7 @@ local function BuildGFTransparencySection(ctx, b)
     local transparencyCardW = floor((transparencyInnerW - transparencyGap) / 2)
     local transparencyRightX = transparencyLeftX + transparencyCardW + transparencyGap
     local transparencyRightW = transparencyInnerW - transparencyCardW - transparencyGap
-    local transparencyCardH = 180
+    local transparencyCardH = 216
     -- State tab row: base cards edit the general, always-on opacities,
     -- the second tab holds the whole-member-frame out-of-combat fade.
     local _, transparencyBarY = W.NextRow(transparency, 34)
@@ -415,12 +418,16 @@ local function BuildGFTransparencySection(ctx, b)
     end
     AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Foreground", key = "hpBarAlpha", default = 1, y = -54 })
     AddAlphaSlider(healthOpacityCard, transparencyCardW, { label = "Background", key = "hpBgAlpha", default = 0.85, y = -112 })
-    Schema.Build(ctx, opacityOptionsCard, {
+    local opacityControls = Schema.Build(ctx, opacityOptionsCard, {
+        { "toggle", "fadeInOnShow", false, { "Fade in when shown", 16, -154, transparencyRightW - 32 },
+            domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
         { "toggle", "alphaExcludeTextPortrait", false, { "Keep text + portrait visible", 16, -62, transparencyRightW - 32 },
             domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
         { "toggle", "alphaExcludePredictionBars", false, { "Keep Absorbs + Prediction Visible", 16, -112, transparencyRightW - 32 },
             domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
     }, ROW_OPTIONS)
+
+    M.AddTooltip(opacityControls.fadeInOnShow, "Fade in when shown", "Disabled while Reduce menu motion is enabled.", { hook = true })
 
     -- Out of Combat tab: whole-member-frame fade; min-composed with range and
     -- offline fades at runtime (strongest fade wins). Slider greys while off.
@@ -479,7 +486,7 @@ local function BuildGFTransparencySection(ctx, b)
 end
 
 local function BuildGFGeometrySection(ctx, b)
-    local section = b:CollapsibleSection("layout_advanced", "Group Layout", GEOMETRY_SECTION_HEIGHT, false)
+    local section = b:CollapsibleSection("layout_advanced", "Group Layout", GeometrySectionHeight(), false)
     if section._msuf2CollapsibleEntry then Schema.Section(section, "group") end
     local width = section._msuf2Width or b.width or 720
     local inner = width - 40
@@ -509,18 +516,26 @@ local function BuildGFGeometrySection(ctx, b)
     if MYTHIC_RAID_SUPPORTED then
         table.insert(visibilityRows, 2, {"Hide groups 5–8 in Mythic raids", "hideMythicGroupsFiveToEight"})
     end
-    local missingRows = 4 - #visibilityRows
+    if CurrentScope() == "party" then
+        visibilityRows[#visibilityRows + 1] = {
+            "Show Party Frames in Raid", "showPartyInRaid",
+            tip = "Shows your own subgroup in the Party layout alongside the raid frames, including raids of up to 5 players.",
+            setting = Schema.Family({ "gf_party.showPartyInRaid" }),
+        }
+    end
+    local rowHeightOffset = (#visibilityRows - 4) * 36
     local rules = Schema.Build(ctx, section, { { "card", "menu2.gf_layout.geometry.rules", nil, { "Group visibility", nil, 20,
-        -246, inner, 262 - missingRows * 36 }, domain = "layout", scope = "group" }, })["menu2.gf_layout.geometry.rules"]
+        -246, inner, 262 + rowHeightOffset }, domain = "layout", scope = "group" }, })["menu2.gf_layout.geometry.rules"]
     local rows = {}
     for i, entry in ipairs(visibilityRows) do
         rows[#rows + 1] = { "toggle", entry[2], false, { entry[1], 16, -40 - (i - 1) * 36, inner - 32 },
-            domain = "rebuild", beforeBind = function(widget) AttachGroupFocus(widget, "layout") end }
+            domain = "rebuild", beforeBind = function(widget) AttachGroupFocus(widget, "layout") end,
+            setting = entry.setting, tip = entry.tip and { entry[1], entry.tip, { hook = true, labelHit = true } } }
     end
     rows[#rows + 1] = { "text", "menu2.gf_layout.geometry.visibility_help", nil,
         { "Group visibility options apply only to their matching Party, Raid, or Mythic Raid scope. Empty groups " ..
             "collapse when Preserve raid groups is enabled.",
-            16, -188 + missingRows * 36, inner - 32, T.colors.muted }, scope = "group" }
+            16, -188 - rowHeightOffset, inner - 32, T.colors.muted }, scope = "group" }
     local organization = Schema.Build(ctx, rules, rows, ROW_OPTIONS)
     for _, entry in ipairs(visibilityRows) do M.GroupFrameAdditionalSections.ExactScope(organization[entry[2]], entry[2]) end
     TrackSectionRefresh(ctx, section, function()
@@ -1060,7 +1075,7 @@ local GROUP_LAYOUT_SECTION_SPECS = {
     { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection,
         prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PrepareRangeSwitch(ctx, sec) end },
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
-    { sectionId = "layout_advanced", title = "Group Layout", height = GEOMETRY_SECTION_HEIGHT, build = BuildGFGeometrySection },
+    { sectionId = "layout_advanced", title = "Group Layout", height = GeometrySectionHeight, build = BuildGFGeometrySection },
     { sectionId = "sorting", title = "Sorting", autoHeight = true, build = BuildGFSortingSection },
 }
 -- The master-switch sections (buff coverage to healer mana) declare themselves in the Additional file.

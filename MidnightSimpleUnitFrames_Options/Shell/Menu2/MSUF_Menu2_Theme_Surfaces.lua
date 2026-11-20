@@ -211,11 +211,13 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
     SmoothTexture(right)
     return { L = left, M = middle, R = right, SetVertexColor = SetSuperellipseVertexColor }
 end
-local function LayoutSuperellipseParts(parts, frame, inset, capW, rightPad)
-    rightPad = tonumber(rightPad) or 0
-    parts.L:ClearAllPoints()
-    parts.M:ClearAllPoints()
-    parts.R:ClearAllPoints()
+local function LayoutSuperellipseParts(parts, frame, inset, capW, rightPad, reanchor)
+    -- Fresh untemplated textures have no anchors to clear.
+    if reanchor then
+        parts.L:ClearAllPoints()
+        parts.M:ClearAllPoints()
+        parts.R:ClearAllPoints()
+    end
     -- Keep every slice tied to the owner while sibling texture bounds are still unresolved.
     parts.L:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
     parts.L:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inset, inset)
@@ -264,9 +266,10 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
         -- Anchors follow the owner. Retain only changed geometry in this existing
         -- closure, without growing every fill/border table used by the painter.
         if lastFillCap == nextCapW and lastBorderCap == borderCapW and lastRightPad == rightPad then return end
+        local reanchor = lastFillCap ~= nil
         lastFillCap, lastBorderCap, lastRightPad = nextCapW, borderCapW, rightPad
-        LayoutSuperellipseParts(fill, frame, p, nextCapW, rightPad)
-        LayoutSuperellipseParts(border, frame, bInset, borderCapW, rightPad)
+        LayoutSuperellipseParts(fill, frame, p, nextCapW, rightPad, reanchor)
+        LayoutSuperellipseParts(border, frame, bInset, borderCapW, rightPad, reanchor)
     end
     Layout()
     if frame.HookScript and not frame[key .. "LayoutHooked"] then

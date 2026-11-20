@@ -3,6 +3,7 @@
 local _, MSUF = ...
 local Castbars = MSUF.Require("MSUF", "Castbars/MSUF_CastbarPreviews.lua").Castbars
 local Config = Castbars.Config
+local Fade = Castbars.Style.Fade
 local Anchors = Castbars.Anchors
 local Backend = Castbars.Backend
 local Core = Castbars.Core
@@ -39,6 +40,7 @@ local PREVIEW_UNITS = {
         y = UNIT_CASTBAR.player.y,
         detached = UNIT_CASTBAR.player.detached,
         showTime = "showPlayerCastTime",
+        showTargetName = "castbarPlayerShowTargetName",
         test = "playerCastbarTestMode",
     },
     target = {
@@ -213,6 +215,7 @@ local function PositionFocusCastbarPreview()
 end
 
 local function ApplyPreviewCastText(frame, label)
+    Utils.CapturePlayerSpellRank(frame, nil, Translate("Rank 4"))
     ApplyCastbarTexts(frame, nil, label, nil)
 end
 
@@ -230,6 +233,7 @@ end
 local function ClearPreviewTest(frame, unit)
     if not frame then return end
 
+    Fade.Cancel(frame)
     StopPreviewTestCast(frame)
 
     if frame.statusBar and frame.statusBar.SetMinMaxValues then
@@ -295,7 +299,9 @@ local function UpdatePreviewTest(frame)
 
     local duration = frame.MSUF_testDur or 4.0
     local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-    local elapsed = (now - (frame.MSUF_testStart or now)) % duration
+    local cycle = duration + (Config.fadeEnabled and 0.32 or 0)
+    local elapsed = (now - (frame.MSUF_testStart or now)) % cycle
+    elapsed = Fade.Preview(frame, elapsed / cycle, duration) * duration
     local remaining = duration - elapsed
 
     if frame.statusBar then
@@ -343,7 +349,7 @@ local function StartPreviewTest(frame)
         if frame.icon.Show then frame.icon:Show() end
     end
 
-    frame:Show()
+    Fade.Show(frame)
     frame:SetScript("OnUpdate", UpdatePreviewTest)
 end
 
@@ -521,21 +527,9 @@ local function HideBlizzardPlayerCastbar()
     local shouldUseBlizzard = Backend.ShouldUseBlizzardCastbar
     local allowShown = type(shouldUseBlizzard) == "function" and shouldUseBlizzard("player") == true
 
-    if allowShown then return end
+    if allowShown or IsInCombat() then return end
 
-    local frames = { PlayerCastingBarFrame, CastingBarFrame }
-    for index = 1, #frames do
-        local frame = frames[index]
-        if frame then
-            if frame.UnregisterAllEvents then
-                frame:UnregisterAllEvents()
-            end
-            -- Castbars/MSUF_Castbars_Bridge.lua (loads first): a shown managed
-            -- bar is concealed, never hidden from here (its OnHide runs the
-            -- bottom managed-frame layout tainted).
-            MSUF.Castbars.NativeOwner.Conceal(frame)
-        end
-    end
+    MSUF.Castbars.NativeOwner:Apply()
 end
 
 local function UpdatePlayerCastbarPreview()
@@ -633,6 +627,7 @@ InstallPoolPreviewEventDriver()
 local function HideCastbarPreviewFrame(frame)
     if not frame then return end
 
+    Fade.Cancel(frame)
     StopPreviewTestCast(frame)
 
     if frame.statusBar then

@@ -21,6 +21,7 @@ core.SuiteLink.GetChangelog = function()
     end
 end
 core.SuiteLink.CanOpenInstaller = function() return installed end
+core.SuiteLink.CanContinueSetup = function() return installed end
 core.SuiteLink.OpenInstaller = function()
     installerCalls = installerCalls + 1
     return true
@@ -161,6 +162,10 @@ local function CheckScaling()
 end
 
 core.FirstLoad6:Dismiss("test_dashboard")
+if M.IsUnitFrameSetupActive() then
+    SelectHome(true)
+    assert(Button("Open full settings"), "first-run setup could not exit to Dashboard"):Click()
+end
 M.SetMenuStateValue("dashboardScalingOpen", true)
 M.SetMenuStateValue("dashboardChangelogOpen", true)
 local wide = SelectHome(true)
@@ -179,7 +184,7 @@ local pill = wide.wrapper._msuf2DashboardState.scalePills[3]
 assert(pill:GetText() == M.Format("Frames %d%%", 123), "retained Scaling header shows stale applied scale")
 general.msufUiScale = oldFrameScale
 M.MarkMenuDataDirty("scaling-fixture")
-local _, quickRight, quickY = CheckButton("Start Quick Setup")
+local _, quickRight, quickY = CheckButton("Setup")
 local suiteLeft, _, suiteY = CheckButton("MSUF Suite Setup")
 assert(quickRight + 8 == suiteLeft and quickY == suiteY, "Suite Setup must sit next to Quick Setup")
 CheckButton("Wago Profiles", 16)
@@ -200,7 +205,7 @@ for _, nextWidth in ipairs({ 830, 630, 540, 428, 1040 }) do
     CheckScaling()
     CheckChangelog()
     CheckChangelogTabs()
-    local _, quickEdge, actionY = CheckButton("Start Quick Setup")
+    local _, quickEdge, actionY = CheckButton("Setup")
     local setupLeft, _, setupY = CheckButton("Redo Suite Setup")
     local _, _, wagoY = CheckButton("Wago Profiles")
     assert(quickEdge + 8 == setupLeft and setupY == actionY, "setup buttons lost their row")
@@ -237,7 +242,7 @@ SelectHome(true)
 assert(not Button("MSUF Changelog") and not Button("Suite Changelog"), "changelog tabs appeared without Suite")
 CheckChangelog()
 assert(not Button("MSUF Suite Setup") and not Button("Redo Suite Setup"), "Suite setup appeared without Suite")
-core.FirstLoad6:Reset("fresh")
+core.FirstLoad6:Reset("upgrade")
 SelectHome(true)
 local skip = assert(Button("Skip Guided Setup"), "first-run Skip button missing")
 local prompt
@@ -257,7 +262,8 @@ for attempt = 1, 2 do
         core.FirstLoad6:Reset("fresh")
         SelectHome(true)
     end
-    assert(Button("Start Quick Setup"), "Quick Setup launcher missing"):Click()
+    if not M.IsUnitFrameSetupActive() then assert(Button("Setup"), "Setup launcher missing"):Click() end
+    assert(Button("Guided Setup"), "Walkthrough launcher missing"):Click()
     assert(M.activeKey == "guided_setup" and core.GuidedTour6:IsActive(), "Quick Setup could not restart")
     prompt = nil
     assert(Button("Skip Guided Setup"), "guided route Skip button missing"):Click()
@@ -265,14 +271,122 @@ for attempt = 1, 2 do
     prompt.onAccept()
     assert(M.activeKey == "home" and core.GuidedTour6:GetState().status == "dismissed", "route Skip did not exit")
     assert(core.FirstLoad6:GetState().status == "dismissed", "route Skip did not close first-run onboarding")
-    assert(Button("Start Quick Setup"), "Quick Setup missing after Skip")
+    assert(Button("Setup") or Button("Guided Setup"), "setup could not be opened again after Skip")
 end
 core.GuidedTour6:Complete()
 M.MarkMenuDataDirty("guided-complete")
 SelectHome()
 prompt = nil
-assert(Button("Start Quick Setup"), "Quick Setup missing after completion"):Click()
+if not M.IsUnitFrameSetupActive() then assert(Button("Setup"), "Setup missing after completion"):Click() end
+assert(Button("Guided Setup"), "Walkthrough missing after completion"):Click()
 assert(prompt and not core.GuidedTour6:IsActive(), "completed setup must confirm a restart")
 prompt.onAccept()
 assert(M.activeKey == "guided_setup" and core.GuidedTour6:IsActive(), "completed tour could not restart")
-print("PASS Dashboard resize, Changelog tabs, first-run Skip and Suite Setup (" .. flavor .. ")")
+
+local tour = core.GuidedTour6
+local function Start(mode, area)
+    assert(M.StartGuidedTour({ source = "dashboard", restart = true, mode = mode }))
+    tour:SetPreference("setupMode", mode)
+    tour:SetPreference("setupArea", area)
+    assert(M.RunGuidedTourStep("next"))
+    assert(M.activeKey == "guided_setup")
+end
+local general = M.GetGeneralDB()
+general.msufUiScale = 0.87
+Start("quick", "unitframes")
+assert(tour:GetState().currentStageId == "edit_mode")
+local minus = assert(Button("-"), "Standalone Quick Setup is missing the scale stepper")
+local player = core.UF.frames.player
+if not player then
+    player = mw.env.CreateFrame("Button", nil, mw.env.UIParent)
+    player.MSUFUnitKey = "player"
+    core.UF.frames.player = player
+    core.UF.frameList[#core.UF.frameList + 1] = player
+end
+local db = mw.env.MSUF_DB
+local anchor, x, y, ui = db.player.anchorFrameName, db.player.offsetX, db.player.offsetY, general.UIScale.Enabled
+tour:SetPreference("quickFrameScaleBefore", "invalid")
+assert(M.SelectPage("guided_setup"))
+minus:Click()
+assert(math.abs(general.msufUiScale - 0.82) < 0.00001)
+assert(player and math.abs(player:GetScale()-0.82) < 0.00001, "scale did not reach live player frame")
+assert(Button("Back to 87%"), "reset missing after first edit"):Click()
+assert(general.msufUiScale == 0.87 and not Button("Back to 87%"))
+assert(Button("+")):Click()
+assert(M.RunGuidedTourStep("next"))
+assert(tour:GetState().currentStageId == "uf_player" and not tour:GetPreference("editModeMoved"))
+assert(math.abs(general.msufUiScale-0.92)<0.00001 and general.UIScale.Enabled == ui)
+assert(db.player.offsetX == x and db.player.offsetY == y and db.player.anchorFrameName == anchor)
+assert(M.RunGuidedTourStep("back"))
+assert(Button("Back to 87%"), "original scale lost on revisit"):Click()
+general.msufUiScale = 0.25
+assert(Button("+")):Click()
+assert(Button("-")):Click()
+assert(math.abs(general.msufUiScale - 0.25) < 0.00001)
+assert(not Button("-"):IsEnabled())
+assert(Button("Back to 87%")):Click()
+-- Optional group placement is also reachable on its own.
+Start("quick", "groupframes")
+assert(tour:GetState().currentStageId == "group_edit_mode" and not Button("-"))
+assert(M.RunGuidedTourStep("next") and tour:GetState().currentStageId == "gf_layout")
+-- The complete route and the Suite quick route retain their practice requirement.
+Start("complete", "unitframes")
+assert(M.RunGuidedTourStep("next"))
+assert(tour:GetState().currentStageId == "edit_mode" and not Button("Edit positions"))
+assert(not M.RunGuidedTourStep("next"))
+installed = true
+mw.env.MSUFSuite = {}
+Start("quick", "unitframes")
+assert(tour:GetState().currentStageId == "edit_mode" and not Button("Edit positions"))
+assert(not M.RunGuidedTourStep("next"))
+tour:Dismiss()
+core.FirstLoad6:Dismiss("scale-check")
+core.UpgradeHighlights.ShouldShow = function() return false end
+if M.IsUnitFrameSetupActive() then
+    SelectHome(true)
+    assert(Button("Open full settings"), "Unit Frame Setup could not return to Dashboard"):Click()
+end
+local function Shortcut()
+    M.SetMenuStateValue("dashboardScalingOpen", false)
+    SelectHome(true)
+    local pill = assert(M.cache.home.wrapper._msuf2DashboardState.scalePills[3]):GetParent()
+    for _, child in ipairs({pill:GetChildren()}) do
+        if child:GetObjectType() == "Button" then return child end
+    end
+end
+width = 1040
+assert(not Shortcut(), "Suite Dashboard acquired a standalone shortcut")
+installed = false
+mw.env.MSUFSuite = nil
+width = 428
+local shortcut = assert(Shortcut())
+local open = M.SearchBridge.OpenSearchTarget
+local ok, focused, exact
+M.SearchBridge.OpenSearchTarget = function(...)
+    local called
+    called, ok, focused, exact = open(...)
+    return called, ok, focused, exact
+end
+shortcut:Click()
+assert(ok and focused and exact and M.dashboardScalingOpen, "percentage did not focus the exact frame slider")
+assert(general.msufUiScale == 0.87 and general.UIScale.Enabled == ui)
+M.SearchBridge.OpenSearchTarget = open
+
+assert(M.OpenUnitFrameSetup())
+assert(Button("Import a profile")):Click()
+Settle()
+assert(M.activeKey == "profiles" and Button("Back to setup"), "Setup import did not offer a return to Setup")
+assert(M.SelectPage("opt_misc") and M.SelectPage("profiles"))
+Settle()
+assert(Button("Browse Wago Profiles") and not Button("Back to setup"), "ordinary Profiles kept the abandoned Setup route")
+local profileEntry = M.cache.profiles
+assert(M.OpenUnitFrameSetup())
+assert(Button("Import a profile")):Click()
+Settle()
+M.ResumeUnitFrameSetupAfterImport()
+assert(M.activeKey == "home" and Button("Import a profile"), "Setup import could not resume Setup")
+assert(M.SelectPage("profiles"))
+Settle()
+assert(M.cache.profiles == profileEntry and Button("Browse Wago Profiles"), "ordinary Profiles did not retain its cached view")
+
+print("PASS Dashboard resize, Changelog tabs, standalone scale and placement, first-run Skip and Suite Setup (" .. flavor .. ")")

@@ -19,9 +19,11 @@ local Harness = {}
 -- Cache the exact formatted tokens, with a fixed limit for long-running tests.
 local literalNumbers, literalKeys = {}, {}
 local numberCount, keyCount = 0, 0
+local zeroLiteral, negativeZeroLiteral = string.format("%.17g", 0), string.format("%.17g", -1 / math.huge)
 local function NumberLiteral(value)
     -- Negative zero compares equal to zero but has a different saved literal.
-    if value == 0 or value ~= value then return string.format("%.17g", value) end
+    if value == 0 then return 1 / value < 0 and negativeZeroLiteral or zeroLiteral end
+    if value ~= value then return string.format("%.17g", value) end
     local token = literalNumbers[value]
     if not token then
         token = string.format("%.17g", value)
@@ -34,7 +36,7 @@ end
 local function KeyLiteral(key)
     local token = literalKeys[key]
     if not token then
-        token = string.format("[%q]", key)
+        token = string.format("[%q]=", key)
         if #key <= 128 then
             if keyCount >= 2048 then literalKeys, keyCount = {}, 0 end
             literalKeys[key], keyCount = token, keyCount + 1
@@ -43,26 +45,53 @@ local function KeyLiteral(key)
     return token
 end
 
+local function LessKey(a, b) return tostring(a) < tostring(b) end
 local function Literal(value)
-    local kind = type(value)
-    if kind == "number" then return NumberLiteral(value) end
-    if kind == "boolean" then return value and "true" or "false" end
-    if kind == "string" then return string.format("%q", value) end
-    local keys, allStrings = {}, true
-    for key in pairs(value) do
-        keys[#keys + 1] = key
-        if type(key) ~= "string" then allStrings = false end
+    -- Append each token once. Siblings can reuse the same key array after
+    -- their preceding sibling has finished, including when its shape differs.
+    local parts, keyStack, at = {}, {}, 0
+    local function Write(current, depth)
+        local kind = type(current)
+        at = at + 1
+        if kind == "number" then parts[at] = NumberLiteral(current)
+        elseif kind == "boolean" then parts[at] = current and "true" or "false"
+        elseif kind == "string" then parts[at] = string.format("%q", current)
+        elseif next(current) == nil then parts[at] = "{}"
+        else
+            local keys = keyStack[depth]
+            if not keys then keys = {}; keyStack[depth] = keys end
+            local allStrings, count = true, 0
+            for key in pairs(current) do
+                count = count + 1
+                keys[count] = key
+                if type(key) ~= "string" then allStrings = false end
+            end
+            for index = #keys, count + 1, -1 do keys[index] = nil end
+            if count > 1 then
+                if allStrings then table.sort(keys) else table.sort(keys, LessKey) end
+            end
+            parts[at] = "{"
+            for index = 1, count do
+                local key = keys[index]
+                at = at + 1
+                if type(key) == "string" then parts[at] = KeyLiteral(key)
+                else
+                    parts[at] = "["
+                    Write(key, depth + 1)
+                    at = at + 1
+                    parts[at] = "]="
+                end
+                Write(current[key], depth + 1)
+                at = at + 1
+                parts[at] = ","
+            end
+            parts[at] = "}" -- The last field's comma closes this table.
+        end
     end
-    if allStrings then table.sort(keys)
-    else table.sort(keys, function(a, b) return tostring(a) < tostring(b) end) end
-    local parts = {}
-    for index = 1, #keys do
-        local key = keys[index]
-        local name = type(key) == "string" and KeyLiteral(key) or ("[" .. Literal(key) .. "]")
-        parts[index] = name .. "=" .. Literal(value[key])
-    end
-    return "{" .. table.concat(parts, ",") .. "}"
+    Write(value, 1)
+    return table.concat(parts)
 end
+
 -- Public callers may forward multiple return values; only the value is input.
 function Harness.Literal(value) return Literal(value) end
 

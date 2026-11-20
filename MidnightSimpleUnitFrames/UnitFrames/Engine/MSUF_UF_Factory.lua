@@ -448,7 +448,7 @@ ApplyBossPhysicalBarGeometry = function(frame)
   local spec = frame.MSUFSpec or {}
   local powerSpec = spec.power or {}
   local power = frame.targetPowerBar
-  local powerEnabled = power and powerSpec.enabled == true
+  local powerEnabled = power and powerSpec.enabled == true and frame._msufPowerResourceMissing ~= true
   local powerDetached = powerEnabled and powerSpec.detached == true
   local powerEmbedded = powerEnabled and not powerDetached and powerSpec.embed ~= false
 

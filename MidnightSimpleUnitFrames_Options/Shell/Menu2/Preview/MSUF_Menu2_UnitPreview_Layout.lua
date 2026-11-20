@@ -443,7 +443,12 @@ function Stage.MeasureLayerFootprint(st)
     if key == "arena" and arenaTrinket and PreviewLayerWanted(box, "trinket") then
         minX, maxX, minY, maxY = arenaTrinket.Footprint(minX, maxX, minY, maxY, w, h, ExpandAnchoredRect)
     end
-    local auraPreviewState = box.mock._body._msufSceneAuraLanes
+    local auraFrame = box.mock._body
+    local auraPreviewState = auraFrame._msufSceneAuraLanes
+    local auraScene = auraFrame._msufPreviewScene
+    local al, ar, ab, at = MSUF.GF.PreviewAuraBarBounds(auraPreviewState, w, h, auraScene and auraScene.auraSampleCount,
+        PreviewLayerWanted(box, "buff"), PreviewLayerWanted(box, "debuff"))
+    minX, maxX, minY, maxY = ExpandRect(minX, maxX, minY, maxY, al, ab, ar, at)
     local auraFootprintState = false
     for kind, lane in pairs(auraPreviewState or EMPTY) do
         local layer = (kind == "buff" or kind == "debuff") and kind or "auras"

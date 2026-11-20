@@ -13,6 +13,7 @@ local Secrets = assert(loadfile(root .. "/tools/tests/classpower_secrets.lua"))(
 local secretFlag = Secrets.New("boolean")
 local helpfulAuras, consumptionReads = {}, 0
 local EMPTY_AURAS = {}
+local playerFFA, pvpTimerRunning, pvpTimerMs, pvpTimerValueReads = false, false, 0, 0
 local mw = MenuWorld.Open(root, flavor, { page = 'uf_target', clientScriptBindings = true,
     tocMetadata = true, beforeCore = function(world)
         MenuWorld.InstallNativeUnitInputs(world)
@@ -73,7 +74,15 @@ local mw = MenuWorld.Open(root, flavor, { page = 'uf_target', clientScriptBindin
             if unit == "focus" then return focusFlagged end
             return unit == "player" and flagged
         end
-        world.env.UnitIsPVPFreeForAll = function(unit) return unit == "target" and targetFFA end
+        world.env.UnitIsPVPFreeForAll = function(unit)
+            return (unit == "target" and targetFFA) or (unit == "player" and playerFFA)
+        end
+        -- The native PvP flag timer: whether it runs, and its remaining milliseconds.
+        world.env.IsPVPTimerRunning = function() return pvpTimerRunning end
+        world.env.GetPVPTimer = function()
+            pvpTimerValueReads = pvpTimerValueReads + 1
+            return pvpTimerMs
+        end
         world.env.UnitFactionGroup = function(unit) return unit == "target" and "Horde" or "Alliance" end
         world.env.IsInInstance = function()
             instanceReads = instanceReads + 1
@@ -299,6 +308,231 @@ check(gated(GF.CompileSpec('party').status.pvp), 'live group recompile stays con
 conf.pvpIcon = false; GF.InvalidateCompiledSpecs('party'); group:Refresh('SETTINGS'); settle()
 check(not shown(cell.pvpIndicatorIcon), 'group disabled PvP stays hidden in all')
 check(cell.MSUFSpec.status.pvp.enabled == false, 'group private PvP flag respects disabled setting')
+-- WoW Forever: the player's PvP flag countdown beside the icon follows the
+-- native timer through its unitless event, the flag events and spec applies.
+local function CheckForeverPVPCountdown(player, icon, toggle, db, prior)
+    local widgets = mw.world.widgets
+    local fs = player.pvpIndicatorTimerText
+    check(fs ~= nil, "the Forever player frame must own the PvP countdown text")
+    if not fs then return end
+    -- The world's own player frame no longer receives this smoke's settings
+    -- refreshes; keep it hidden so only the frames under test count.
+    if prior then prior:Hide() end
+    local element = UF.elements.PVPIndicator
+    local function Has(list, name)
+        for _, event in ipairs(list or {}) do
+            if event == name then return true end
+        end
+        return false
+    end
+    check(Has(element.GetUnitlessEvents(player, player.MSUFSpec), "PVP_TIMER_UPDATE")
+        and not Has(element.GetEvents(player, player.MSUFSpec), "PVP_TIMER_UPDATE"),
+        "the player-wide timer event must use the player frame's unitless route")
+    local firstTicker = #widgets.tickers + 1
+    local function Active()
+        local found, count = nil, 0
+        for i = firstTicker, #widgets.tickers do
+            local ticker = widgets.tickers[i]
+            if not ticker.cancelled and ticker.delay == 1 then found, count = ticker, count + 1 end
+        end
+        return found, count
+    end
+    local function Tick(seconds)
+        widgets:AdvanceTime(seconds)
+        local ticker = Active()
+        if ticker then ticker.callback() end
+    end
+    local function Expect(text, tickers, why)
+        local actual = shown(fs) and fs:GetText() or nil
+        local _, count = Active()
+        check(actual == text, why .. " (text " .. tostring(actual) .. ")")
+        check(count == tickers, why .. " (" .. count .. " active tickers)")
+    end
+    local function Fire(event, ...) mw.world:FireEvent(event, ...) end
+
+    pvpTimerRunning, pvpTimerMs = false, 0
+    Fire("PVP_TIMER_UPDATE")
+    check(shown(icon), "a flag without a running timer keeps the icon")
+    Expect(nil, 0, "no countdown while the native timer is stopped")
+
+    pvpTimerRunning, pvpTimerMs = true, 300000
+    Fire("PVP_TIMER_UPDATE", "player")
+    Expect("5:00", 1, "the native timer event must start the countdown with its documented unit")
+    local countdownToggle
+    for _, widget in ipairs(widgets.frames) do
+        local contract = widget._msuf2ExactTargetContracts
+        if contract and contract.unitStatus and contract.unitStatus.statusPvp == "player.pvpIndicatorCountdownEnabled" then
+            countdownToggle = widget
+            break
+        end
+    end
+    check(shown(countdownToggle), "the Forever PvP menu must offer a separate countdown switch")
+    if countdownToggle then
+        countdownToggle:Click("LeftButton")
+        check(db.player.pvpIndicatorCountdownEnabled == false and shown(icon), "turning off the timer keeps the live PvP flag")
+        Expect(nil, 0, "turning off the timer stops the live ticker")
+        countdownToggle:Click("LeftButton")
+        Expect("5:00", 1, "turning the timer back on reads the native remaining time")
+    end
+    local _, relativeTo = fs:GetPoint(1)
+    check(relativeTo == icon, "the countdown must sit beside the PvP icon")
+    Tick(1)
+    Expect("4:59", 1, "the countdown repaints once per second")
+    Tick(61)
+    Expect("3:58", 1, "the countdown follows the native remaining time")
+    pvpTimerMs = 300000
+    Fire("PVP_TIMER_UPDATE")
+    Expect("5:00", 1, "a native timer reset restarts the countdown on the same ticker")
+    Tick(299.5)
+    Expect("0:01", 1, "the final second still counts")
+    Tick(0.5)
+    Expect(nil, 0, "expiry must hide the countdown and stop the ticker")
+    check(shown(icon), "the icon stays while the client still reports the flag after expiry")
+    Tick(1)
+    Expect(nil, 0, "no work remains after expiry")
+
+    pvpTimerRunning, pvpTimerMs = true, 120000
+    Fire("PVP_TIMER_UPDATE")
+    Expect("2:00", 1, "a new native timer shows again")
+    pvpTimerRunning = false
+    Fire("PVP_TIMER_UPDATE")
+    Expect(nil, 0, "a stopped native timer hides the countdown")
+    check(shown(icon), "the icon stays while flagged with the timer stopped")
+    pvpTimerRunning, pvpTimerMs = true, 0
+    Fire("PVP_TIMER_UPDATE")
+    Expect(nil, 0, "a running timer at zero shows no countdown")
+
+    pvpTimerRunning, pvpTimerMs = true, 90000
+    Fire("PVP_TIMER_UPDATE")
+    Expect("1:30", 1, "countdown before the flag clears")
+    flagged = false
+    Fire("PLAYER_PVP_FLAG_CHANGED", false)
+    check(not shown(icon), "clearing the flag hides the icon")
+    Expect(nil, 0, "clearing the flag removes the countdown and its ticker")
+
+    -- An enemy guard flags the player in combat; the client may report the
+    -- timer before or after the flag.
+    widgets:SetCombat(true)
+    pvpTimerRunning, pvpTimerMs = false, 0
+    flagged = true
+    Fire("UNIT_FACTION", "player")
+    check(shown(icon), "a PvE guard flag must show the icon at once in combat")
+    Expect(nil, 0, "no countdown before the client starts the timer")
+    pvpTimerRunning, pvpTimerMs = true, 300000
+    Fire("PVP_TIMER_UPDATE")
+    Expect("5:00", 1, "the native timer starts the countdown in combat")
+    Tick(10)
+    Expect("4:50", 1, "the countdown ticks in combat")
+    flagged = false
+    Fire("PLAYER_PVP_FLAG_CHANGED", false)
+    Expect(nil, 0, "the cleared flag ends the countdown in combat")
+    pvpTimerMs = 240000
+    Fire("PVP_TIMER_UPDATE")
+    check(not shown(icon), "a timer event before the flag shows no icon")
+    Expect(nil, 0, "a timer event before the flag shows no countdown")
+    flagged = true
+    Fire("UNIT_FACTION", "player")
+    Expect("4:00", 1, "the later flag shows icon and countdown together")
+    Fire("PLAYER_PVP_FLAG_CHANGED", true)
+    Expect("4:00", 1, "repeated flag inputs keep one ticker")
+    widgets:SetCombat(false)
+
+    playerFFA = true
+    Fire("UNIT_FACTION", "player")
+    check(shown(icon), "free-for-all keeps its icon")
+    Expect(nil, 0, "Blizzard suppresses the countdown in free-for-all")
+    playerFFA = false
+    Fire("UNIT_FACTION", "player")
+    Expect("4:00", 1, "leaving free-for-all restores the countdown")
+    pvpBadgesDisabled = true
+    Fire("ACTIVE_GAME_MODE_UPDATED", 1)
+    Fire("PVP_TIMER_UPDATE")
+    check(not shown(icon), "the PvP game rule hides the icon")
+    Expect(nil, 0, "the PvP game rule hides the countdown")
+    pvpBadgesDisabled = false
+    Fire("ACTIVE_GAME_MODE_UPDATED", 1)
+    Fire("PVP_TIMER_UPDATE")
+    Expect("4:00", 1, "the restored game mode shows the countdown")
+
+    toggle:Click("LeftButton")
+    check(db.player.showPvpIndicator == false and not shown(icon), "disabling hides the icon")
+    Expect(nil, 0, "disabling the indicator stops the countdown at once")
+    toggle:Click("LeftButton")
+    Expect("4:00", 1, "re-enabling while the timer runs shows the countdown")
+
+    player:Hide()
+    Tick(1)
+    Expect(nil, 0, "a hidden player frame stops the countdown work")
+    player:Show()
+    Fire("PVP_TIMER_UPDATE")
+    Expect("4:00", 1, "the shown frame resumes from the native timer")
+
+    local reloaded = mw.env.CreateFrame("Button", nil, mw.env.UIParent)
+    reloaded.MSUFUnitKey = "player"
+    pvpTimerMs = 200000
+    UF.ApplySpec(reloaded, UF.Config.GetSpec("player"), nil, { StatusIndicators = true, PVPIndicator = true })
+    local reloadedText = reloaded.pvpIndicatorTimerText
+    check(shown(reloaded.pvpIndicatorIcon) and reloadedText and shown(reloadedText) and reloadedText:GetText() == "3:20",
+        "a frame applied after reload reads the running native timer")
+    local _, count = Active()
+    check(count == 1, "two player frames share one countdown ticker")
+    UF.elements.PVPIndicator.Disable(reloaded)
+    check(not shown(reloadedText), "the disabled element hides its countdown")
+    reloaded:Hide()
+
+    local renderer = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Status_Indicators.lua"
+    local stopWatch = Secrets.Watch(renderer, { strict = true })
+    pvpTimerRunning = Secrets.New("boolean")
+    Fire("PVP_TIMER_UPDATE")
+    Expect(nil, 0, "a restricted timer state shows no countdown")
+    pvpTimerRunning, pvpTimerMs = true, Secrets.New("number")
+    Fire("PVP_TIMER_UPDATE")
+    Expect(nil, 0, "a restricted remaining time shows no countdown")
+    local violations = stopWatch()
+    check(#violations == 0, "PvP countdown used restricted timer data: " .. table.concat(violations, ", "))
+    check(shown(icon), "restricted timer data keeps the actual flag icon")
+    pvpTimerRunning, pvpTimerMs = false, 0
+    Fire("PVP_TIMER_UPDATE")
+    flagged = false
+    Fire("PLAYER_PVP_FLAG_CHANGED", false)
+    local box = U.active
+    local function preview(mode, selection)
+        U.SelectStatusIcon(selection)
+        U.SetStatusPreviewMode(mode)
+        box:RequestRefresh("SETTINGS")
+        settle()
+        return box.mock._body
+    end
+    local beforePreviewReads = pvpTimerValueReads
+    local previewFrame = preview("current", "statusPvp")
+    local previewText = previewFrame.pvpIndicatorTimerText
+    check(shown(previewFrame.pvpIndicatorIcon) and shown(previewText), "current PvP preview paints the flag and its sample time while unflagged")
+    previewFrame = preview("all", "statusPvp")
+    check(shown(previewFrame.pvpIndicatorIcon) and shown(previewFrame.pvpIndicatorTimerText), "all status symbols includes the PvP countdown")
+    box._animationEnabled = true
+    box._animationElapsed = 1
+    check(U.RefreshAnimation(box) ~= false, "PvP preview animation can render")
+    local firstText = previewText and previewText:GetText()
+    box._animationElapsed = 3
+    U.RefreshAnimation(box)
+    check(previewText and shown(previewText) and previewText:GetText() ~= firstText, "preview clock advances the countdown")
+    box._animationEnabled = nil
+    previewFrame = preview("current", "raidmarker")
+    check(not shown(previewFrame.pvpIndicatorTimerText), "previewing another status hides the countdown")
+    previewFrame = preview("current", "statusPvp")
+    if countdownToggle then
+        countdownToggle:Click("LeftButton")
+        settle()
+        check(shown(previewFrame.pvpIndicatorIcon) and not shown(previewFrame.pvpIndicatorTimerText),
+            "disabling the countdown keeps the preview's PvP icon")
+        countdownToggle:Click("LeftButton")
+        settle()
+        check(shown(previewFrame.pvpIndicatorTimerText), "enabling the countdown repaints the preview")
+    end
+    check(not shown(icon) and pvpTimerValueReads == beforePreviewReads, "preview never reads live timer data or changes the live PvP flag")
+    if prior then prior:Show() end
+end
+
 -- Apply the option while the player's live flag is already set, then exercise
 -- the native unit event on the same frame without a spec refresh.
 do
@@ -349,7 +583,8 @@ do
     check(shown(icon), "re-enabling the option must show the icon while still flagged")
 
     flagged = false
-    mw.world:FireEvent("PVP_TIMER_UPDATE", "player")
+    -- The refresh also works when dispatch supplies no payload.
+    mw.world:FireEvent("PVP_TIMER_UPDATE")
     check(not shown(icon), "the player icon must hide when the native PvP timer event clears the flag")
     mw.world.widgets:SetCombat(true)
     flagged = true
@@ -363,6 +598,7 @@ do
         flagged = true
         mw.world:FireEvent("PLAYER_PVP_FLAG_CHANGED", true)
         check(shown(icon), "the native Forever flag event must show the player icon")
+        CheckForeverPVPCountdown(player, icon, toggle, db, prior)
     elseif flavor == "Mainline" then
         check(shown(icon), "War Mode on must show the actual PvP flag")
         mw.world:FireEvent("WAR_MODE_STATUS_UPDATE", false)
@@ -370,7 +606,7 @@ do
         warMode = false
         mw.world:FireEvent("PLAYER_FLAGS_CHANGED", "player")
         mw.world:FireEvent("UNIT_FACTION", "player")
-        mw.world:FireEvent("PVP_TIMER_UPDATE", "player")
+        mw.world:FireEvent("PVP_TIMER_UPDATE")
         check(not shown(icon), "later flag events must not restore the disabled War Mode icon")
 
         local reloaded = mw.env.CreateFrame("Button", nil, mw.env.UIParent)
@@ -390,6 +626,10 @@ do
         warMode = false
         mw.world:FireEvent("PLAYER_FLAGS_CHANGED", "player")
         check(not shown(icon), "the icon must follow a confirmed War Mode disable")
+    end
+    if flavor ~= "Forever" then
+        check(player.pvpIndicatorTimerText == nil and pvpTimerValueReads == 0,
+            "only WoW Forever builds and reads the player PvP countdown")
     end
     db.player.showPvpIndicator = saved
     UF.frames.player = prior

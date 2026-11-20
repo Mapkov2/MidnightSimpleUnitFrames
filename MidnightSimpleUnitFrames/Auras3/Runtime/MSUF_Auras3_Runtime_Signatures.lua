@@ -36,7 +36,7 @@ local TRACKING_FIELDS = {
 local LAYOUT_FIELDS = { "anchor", "x", "y", "alpha" }
 -- Current compilers leave smoothing absent. Preserve their historical bytes;
 -- an explicit optional value must still distinguish immutable timer binding.
-local OPTIONAL_BUTTON_FIELDS = { "durationBarSmooth" }
+local OPTIONAL_BUTTON_FIELDS = { "durationBarSmooth", "auraBarFill" }
 local SIGNATURE_SCHEMA = {
     Fields = { Button = BUTTON_FIELDS, Tracking = TRACKING_FIELDS, Layout = LAYOUT_FIELDS, Optional = OPTIONAL_BUTTON_FIELDS },
     EncodedBy = {
@@ -159,6 +159,8 @@ LaneButtonSignature = function(lane, sharedSignatures)
         local field = OPTIONAL_BUTTON_FIELDS[index]
         if lane[field] ~= nil then optional = optional .. "\030" .. field .. ":" .. tostring(lane[field]) end
     end
+    local barAppearance = lane.auraBarAppearance
+    if barAppearance then optional = optional .. "\030" .. barAppearance.signature end
     local signature = FieldsSignature(lane, buttonFields, buttonParts)
         .. "\030" .. tostring(A3.GetNativeVisualSignature and A3.GetNativeVisualSignature() or "0")
         .. optional

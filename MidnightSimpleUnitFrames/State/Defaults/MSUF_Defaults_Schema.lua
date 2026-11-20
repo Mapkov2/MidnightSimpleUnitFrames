@@ -112,6 +112,7 @@ local stages = {
         castbarShowGlow = false,
         castbarShowSpark = false,
         castbarSparkOverflow = true,
+        castbarFadeEnabled = false,
     },
     ["bars_13"] = {
         castbarFocusShowIcon = true,
@@ -119,6 +120,8 @@ local stages = {
         castbarFocusShowTargetName = false,
         castbarPlayerShowIcon = true,
         castbarPlayerShowSpellName = true,
+        castbarPlayerShowSpellRank = false,
+        castbarPlayerShowTargetName = false,
         castbarTargetShowIcon = true,
         castbarTargetShowSpellName = true,
         castbarTargetShowTargetName = false,
@@ -638,7 +641,7 @@ local values = {
 },
     CoreShortenNames = { shortenNames = false },
     CoreTexLayerLinkGeometry = { texLayerLinkGeometry = false, texLayerLinkSize = false },
-    CoreOocFadeEnabled = { oocFadeEnabled = false, oocFadeAlpha = 0.5 },
+    CoreOocFadeEnabled = { oocFadeEnabled = false, oocFadeAlpha = 0.5, fadeInOnShow = false },
     CoreAlphaExcludeTextPortrait = { alphaExcludeTextPortrait = false, alphaExcludePredictionBars = false },
     CoreHpBarAlpha = { hpBarAlpha = 1, powerBarAlpha = 1, hpBgAlpha = 0.85 },
     CoreSmoothFill = { smoothFill = false },
@@ -679,7 +682,8 @@ local values = {
     CoreDarkBgCustomColor = { darkBgCustomColor = false },
     CoreDarkBgBrightness = { darkBgBrightness = 0.25 },
     CorePlayerDefensives003 = { playerDefensives = "FOLLOW_PORTRAIT" },
-    CoreAlphaExcludeTextPortrait002 = { alphaExcludeTextPortrait = false, alphaExcludePredictionBars = false, oocFadeEnabled = false, oocFadeAlpha = 0.5 },
+    CoreAlphaExcludeTextPortrait002 = { alphaExcludeTextPortrait = false, alphaExcludePredictionBars = false,
+        oocFadeEnabled = false, oocFadeAlpha = 0.5, fadeInOnShow = false },
     CoreHpBarAlpha001 = { hpBarAlpha = 1, powerBarAlpha = 1, hpBgAlpha = 0.85 },
     UnitsAlphaExcludeTextPortrait = { alphaExcludeTextPortrait = false },
     UnitsHpBarAlpha = { hpBarAlpha = 1, powerBarAlpha = 1, hpBgAlpha = 0.85 },
@@ -962,6 +966,12 @@ local values = {
         portraitWidth = 0, portraitZoom = 100,
     },
 }
+values.BarsCastbarFeatureFlags = {
+    castbarFadeEnabled = stages.bars_12.castbarFadeEnabled,
+    castbarPlayerShowSpellRank = stages.bars_13.castbarPlayerShowSpellRank,
+    castbarPlayerShowTargetName = stages.bars_13.castbarPlayerShowTargetName,
+}
+values.BarsCastTargetText = { Position = "BELOW", FontSize = 10, Align = "RIGHT", OffsetX = 0, OffsetY = 1 }
 Schema.Values = values
 
 -- Read metadata only: absent optional fields remain absent in saved profiles.
@@ -977,7 +987,7 @@ Schema.ReadDefaults = {
     },
     unit = {
         alphaExcludePredictionBars = false, alphaExcludeTextPortrait = false, hpBarAlpha = 1, hpBgAlpha = 0.85, oocFadeAlpha = 0.5,
-        oocFadeEnabled = false, powerBarAlpha = 1, powerBarBgAlpha = 0.85, rangeFadeAlpha = 0.4, rangeFadeEnabled = true,
+        oocFadeEnabled = false, fadeInOnShow = false, powerBarAlpha = 1, powerBarBgAlpha = 0.85, rangeFadeAlpha = 0.4, rangeFadeEnabled = true,
         rangeFadeLayerMode = "frame", rangeFadeUpdateRate = 0,
     },
     bars = {
@@ -999,6 +1009,15 @@ function Schema.Fill(owner, defaults, overwrite)
         elseif owner[key] == nil or overwrite then
             owner[key] = value
         end
+    end
+    return owner
+end
+
+function Schema.FillCastTargetText(owner, prefix)
+    if type(owner) ~= "table" then return owner end
+    for suffix, value in pairs(values.BarsCastTargetText) do
+        local key = prefix .. "TargetName" .. suffix
+        if owner[key] == nil then owner[key] = value end
     end
     return owner
 end

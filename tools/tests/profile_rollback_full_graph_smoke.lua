@@ -93,7 +93,10 @@ local function Healthy(world, stage)
     assert(#errors == 0, stage .. ": " .. table.concat(errors, "; "))
 end
 local function Login(saved, character, source)
-    local world = C.NewWorld(root, flavor, character, nil, source, gameType)
+    local world = C.NewWorld(root, flavor, character, function(testWorld)
+        -- This login has no group. Both releases must see a real numeric roster count.
+        testWorld.env.GetNumSubgroupMembers = function() return 0 end
+    end, source, gameType)
     if source then
         assert(#world.corePaths == #graph, "historical graph count differs")
         for index, path in ipairs(graph) do
@@ -137,12 +140,20 @@ local function Roundtrip()
                     world.core.RunUnitFrameApply(function() error("injected-logout-apply-error") end, function() end)
                 end)
             end
-            for name in pairs(env.MSUF_GlobalDB.profiles) do assert(env.MSUF_SwitchProfile(name)) end
+            -- Capture full bytes while each profile is bound. Switching may
+            -- compact the outgoing profile before the compatibility save begins.
+            local fullProfiles = {}
+            for name in pairs(env.MSUF_GlobalDB.profiles) do
+                assert(env.MSUF_SwitchProfile(name))
+                assert(env.MSUF_DB == env.MSUF_GlobalDB.profiles[name], "switch did not bind " .. name)
+                fullProfiles[name] = C.Copy(env.MSUF_DB)
+            end
             local pool = env.MSUF_GlobalDB.profiles
             pool.Inactive = C.Copy(env.MSUF_DB)
             pool.Inactive.general.rollbackUnknown = { false, 0, "", [12345] = "spell" }
             pool.Inactive.general.castbarShowPushback = nil
-            local full, active, bindings = H.Literal(pool), H.Literal(env.MSUF_DB), H.Literal(env.MSUF_GlobalDB.char)
+            fullProfiles.Inactive = C.Copy(pool.Inactive)
+            local full, active, bindings = H.Literal(fullProfiles), H.Literal(env.MSUF_DB), H.Literal(env.MSUF_GlobalDB.char)
             for _ in pairs(pool) do profiles = profiles + 1 end
             world:FireEvent("PLAYER_LOGOUT")
             Healthy(world, "7.0 sparse logout")

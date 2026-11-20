@@ -406,6 +406,8 @@ secureexecuterange	api	Blizzard client API (Blizzard_SharedXMLBase CallbackRegis
 strmatch	luaenv	string.match, which WoW also publishes as a global
 time	luaenv	WoW's time() global (there is no os table in the client)
 wipe	luaenv	WoW's table-clearing global
+GetPVPTimer	api	Forever native player PvP timer; reviewed loaded call in Gethe bebcb6bf309cf41b41bd74f8ca651e6a105b2676 Blizzard_UnitFrame/Mainline/PlayerFrame.lua
+debugstack	luaenv	Blizzard Lua environment function; upstream/live:Blizzard_ScriptErrors/Blizzard_ScriptErrors.lua:59 uses this global
 GetInventoryItemID	api	Blizzard inventory lookup used by upstream/forever:Blizzard_GamepadActionBars/TargetActionBars/HostileTargetingActionBar.lua:101
 INVSLOT_RANGED	constant	Blizzard ranged equipment slot used by upstream/forever:Blizzard_GamepadActionBars/TargetActionBars/HostileTargetingActionBar.lua:101
 UnregisterAttributeDriver	api	Blizzard secure attribute-driver API paired with RegisterAttributeDriver; removes the owned boss/arena right-click driver outside combat

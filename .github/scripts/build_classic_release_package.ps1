@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ReleaseVersion,
 
-    [string]$OutputDirectory = "dist"
+    [string]$OutputDirectory = "dist",
+    [switch]$ClassicOnly
 )
 
 Set-StrictMode -Version Latest
@@ -327,7 +328,7 @@ if ($sourceVersion -ne $release) {
     throw "VERSION '$sourceVersion' does not match Classic release '$release'."
 }
 & (Join-Path $PSScriptRoot "assert-classic-release-line.ps1") `
-    -RepositoryRoot $repoRoot -ReleaseVersion $release
+    -RepositoryRoot $repoRoot -ReleaseVersion $release -ClassicOnly:$ClassicOnly
 & (Join-Path $PSScriptRoot "assert-classic-changelog-links.ps1") `
     -RepositoryRoot $repoRoot -ReleaseVersion $release
 $outputRoot = Resolve-RepoOutputPath $OutputDirectory
@@ -336,6 +337,12 @@ $expectedTocRelativePaths = @(
         foreach ($flavor in $flavors) {
             "$addon/${addon}_$flavor.toc"
         }
+    }
+)
+$packageFlavors = if ($ClassicOnly) { $classicFlavors } else { $flavors }
+$packageTocRelativePaths = @(
+    foreach ($addon in $addonNames) {
+        foreach ($flavor in $packageFlavors) { "$addon/${addon}_$flavor.toc" }
     }
 )
 
@@ -427,13 +434,14 @@ if (-not $stageRoot.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)
 }
 
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-$zipPath = Join-Path $outputRoot ('MSUF-' + $release + '-' + ($flavors -join '-') + '.zip')
+$zipPath = Join-Path $outputRoot ('MSUF-' + $release + '-' + ($packageFlavors -join '-') + '.zip')
 $releaseNotesMarkdownPath = Join-Path $outputRoot 'RELEASE_NOTES_CLASSIC.md'
 $releaseNotesHtmlPath = Join-Path $outputRoot 'RELEASE_NOTES_CLASSIC_CF.html'
 
 try {
     New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
     foreach ($relative in $trackedAddonPaths) {
+        if ($ClassicOnly -and $relative -cin $mainlineSourceHashes.Keys) { continue }
         $relativePlatform = $relative.Replace('/', [IO.Path]::DirectorySeparatorChar)
         $sourcePath = Join-Path $repoRoot $relativePlatform
         $destinationPath = Join-Path $stageRoot $relativePlatform
@@ -453,19 +461,21 @@ try {
         }
     }
 
-    foreach ($relative in $mainlineSourceHashes.Keys) {
-        $stagedPath = Join-Path $stageRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
-        $stagedHash = Get-Sha256 $stagedPath
-        if ($stagedHash -ne $mainlineSourceHashes[$relative]) {
-            throw "Mainline TOC changed while staging Classic release: $relative"
+    if (-not $ClassicOnly) {
+        foreach ($relative in $mainlineSourceHashes.Keys) {
+            $stagedPath = Join-Path $stageRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
+            $stagedHash = Get-Sha256 $stagedPath
+            if ($stagedHash -ne $mainlineSourceHashes[$relative]) {
+                throw "Mainline TOC changed while staging Classic release: $relative"
+            }
         }
     }
 
     $stagedTocs = @(Get-ChildItem -LiteralPath $stageRoot -Filter '*.toc' -File -Recurse | ForEach-Object {
         Get-RelativePath -Root $stageRoot -FullName $_.FullName
     } | Sort-Object)
-    if (($stagedTocs -join "`n") -ne (($expectedTocRelativePaths | Sort-Object) -join "`n")) {
-        throw "Classic package stage must contain exactly the expected $($expectedTocRelativePaths.Count) suffixed TOCs."
+    if (($stagedTocs -join "`n") -ne (($packageTocRelativePaths | Sort-Object) -join "`n")) {
+        throw "Classic package stage must contain exactly the expected $($packageTocRelativePaths.Count) suffixed TOCs."
     }
 
     [IO.File]::WriteAllText($releaseNotesMarkdownPath, $releaseNotesMarkdown, [Text.UTF8Encoding]::new($false))
@@ -485,8 +495,8 @@ try {
         }
 
         $zipTocs = @($fileEntryNames | Where-Object { $_ -match '(?i)\.toc$' } | Sort-Object)
-        if (($zipTocs -join "`n") -ne (($expectedTocRelativePaths | Sort-Object) -join "`n")) {
-            throw "Release zip must contain exactly the expected $($expectedTocRelativePaths.Count) suffixed TOCs. Got [$($zipTocs -join ', ')]."
+        if (($zipTocs -join "`n") -ne (($packageTocRelativePaths | Sort-Object) -join "`n")) {
+            throw "Release zip must contain exactly the expected $($packageTocRelativePaths.Count) suffixed TOCs. Got [$($zipTocs -join ', ')]."
         }
 
         $forbiddenEntries = @($fileEntryNames | Where-Object { Test-ForbiddenArtifactPath -RelativePath $_ })
@@ -495,7 +505,7 @@ try {
         }
 
         foreach ($addon in $addonNames) {
-            foreach ($flavor in $flavors) {
+            foreach ($flavor in $packageFlavors) {
                 $relative = "$addon/${addon}_$flavor.toc"
                 $content = Read-ZipEntryText -Archive $archive -EntryName $relative
                 $actualVersion = Get-TocField -Content $content -Name 'Version' -AllowConditioned:($flavor -eq 'Mainline')
@@ -537,7 +547,7 @@ try {
 $zipHash = Get-Sha256 $zipPath
 Write-Host "Classic release package validated: $zipPath"
 Write-Host "Classic release version: $release"
-Write-Host "Classic TOCs stamped: $($addonNames.Count * $classicFlavors.Count) ($($classicFlavors -join ', ')); Mainline TOCs unchanged: $($addonNames.Count * $mainlineFlavors.Count)"
+Write-Host "Packaged TOC flavors: $($packageFlavors -join ', ')"
 Write-Host "CurseForge project: $expectedProjectId"
 Write-Host "Classic TOC interfaces: $($classicInterfaces.Values -join ', ')"
 Write-Host "SHA-256: $zipHash"

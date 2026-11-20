@@ -697,6 +697,7 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
     local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra,
         widget and widget._msuf2LiteralSearchLabel)
     if rec then
+        if entry.kind == "dropdown" then rec.choiceLabels = data[1] end
         rec.controlId, rec.controlPath, rec.actionKey = data[18], data[4], data[11]
         rec.sectionId = sectionId
         local controlId = tostring(data[18] or "")

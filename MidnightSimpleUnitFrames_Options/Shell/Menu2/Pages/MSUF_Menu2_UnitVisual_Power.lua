@@ -33,7 +33,7 @@ local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
 -- Power Bar section card geometry. Player gets one extra resource-source row;
 -- BuildPower and PowerSectionHeight share these helpers so the detached card
 -- always follows the first row without overlap.
-local function PowerMainCardHeight(unit) return unit == "player" and 284 or 220 end
+local function PowerMainCardHeight(unit) return unit == "player" and 308 or 244 end
 local function PowerDetachedCardTop(unit) return -38 - PowerMainCardHeight(unit) - 26 end
 local function PowerSectionHeight(unit)
     local isPlayer = unit == "player"
@@ -326,18 +326,22 @@ function PowerSection.Main(pw)
     end
     FillToggle("smoothFill", "powerSmoothFill", "powerChunkedFill", "Smooth fill", -158, "MSUF2_POWER_SMOOTH", "Smooth power fill")
     FillToggle("chunkedFill", "powerChunkedFill", "powerSmoothFill", "Chunked power loss", -188, "MSUF2_POWER_CHUNKED", "Chunked power loss")
+    local embedY = isPlayer and -202 or -138
+    local toggleSpacing = 32
     local attachedPowerFields = pw.BuildPowerControls(mainCard, AddPowerControl, {
         { "slider", "powerBarHeight", 3, { "Power bar height", 1, 20, 1, 300 }, { 16, -76, cardW - 72, "CENTER" },
             reason = "MSUF2_POWER_HEIGHT", read = function()
             local conf = GetConf(unit)
             return tonumber(conf.powerBarHeight) or tonumber(GetBars().powerBarHeight) or 3
         end },
-        { "toggle", "embedPowerBarIntoHealth", false, { "Embed into health", 16, isPlayer and -202 or -138, cardW - 32 },
+        { "toggle", "embedPowerBarIntoHealth", false, { "Embed into health", 16, embedY, cardW - 32 },
             reason = "MSUF2_POWER_EMBED", read = function()
             local conf = GetConf(unit)
             if conf.embedPowerBarIntoHealth ~= nil then return conf.embedPowerBarIntoHealth == true end
             return GetBars().embedPowerBarIntoHealth == true
         end },
+        { "toggle", "powerHideMissingResource", false,
+            { "Hide when resource is missing", 16, embedY - 2 * toggleSpacing, cardW - 32 }, reason = "MSUF2_POWER_HIDE_MISSING" },
     })
     pw.attachedPowerHeight = attachedPowerFields.powerBarHeight
     pw.embedPower = attachedPowerFields.embedPowerBarIntoHealth
@@ -356,7 +360,7 @@ function PowerSection.Main(pw)
         scope = unit, meta = SettingMeta(ctx, "power.powerBarBorderThickness", unit, "powerBarBorderThickness"), roundStep = true,
         beforeBind = AddPowerControl,
     })
-    ControlRow(ctx, mainCard, { "toggle", "detached", false, { "Detach from frame", 16, isPlayer and -230 or -166, cardW - 32 },
+    ControlRow(ctx, mainCard, { "toggle", "detached", false, { "Detach from frame", 16, embedY - toggleSpacing, cardW - 32 },
         get = function() return ReadBool(unit, "powerBarDetached", false) end,
         customSetReason = "Normalizes values or coordinates dependent profile writes and their runtime side effects.",
             companionWrites = Schema.Fields({ unit }, { "detachedPowerBarOffsetX", "detachedPowerBarOffsetY",

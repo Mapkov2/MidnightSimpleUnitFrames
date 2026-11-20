@@ -1,15 +1,32 @@
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local flavor = arg[2] or "Mainline"
 local World = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
-local mw = World.Open(root, flavor, { page = "opt_castbar" })
+local function UseClassicFrameScripts(world)
+    local create = world.env.CreateFrame
+    world.env.CreateFrame = function(frameType, ...)
+        local frame = create(frameType, ...)
+        if frameType == "Frame" then
+            local get = frame.GetScript
+            frame.Click = false
+            function frame:GetScript(name)
+                assert(name ~= "OnClick", "Frame:GetScript(): Doesn't have a \"OnClick\" script")
+                return get(self, name)
+            end
+        end
+        return frame
+    end
+end
+local strictScripts = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists"
+local mw = World.Open(root, flavor, { page = "home", beforeCore = strictScripts and UseClassicFrameScripts })
+assert(mw:Select("opt_castbar"), "opens Castbars from the menu")
 local core, M, env = mw.core, mw.M, mw.env
 local Bars = assert(core.TimerBars)
 assert(core.ProfileFields.GeneralKeyInKind("castbarTimers", "castbar"), "timer settings travel with castbar profiles")
 local g = env.MSUF_DB.general
 local preview = assert(M._msuf2CastbarPreview)
 local function Select(id)
-    preview.timerKind = id
     assert(M.SetCastbarPreviewUnit("timers"))
+    assert(preview.timerButtons[id], "timer preview offers " .. id):Click()
     mw:RunTimers()
     return assert(preview.timerSample)
 end
@@ -30,6 +47,12 @@ local function Find(setting)
     Walk(assert(M.cache.opt_castbar).wrapper)
     return assert(found, "missing timer setting: " .. setting)
 end
+local section = assert(M.cache.opt_castbar.sections.timer_bars)
+local entry = assert(section._msuf2CollapsibleEntry)
+assert(not entry.open, "timer settings start collapsed")
+assert(entry.header._msuf2ControlSchema.action)(nil, "LeftButton")
+mw:RunTimers()
+assert(entry.open, "registered button action opens the timer settings")
 local enable = Find("general.castbarTimers.breath.enabled")
 enable:SetChecked(true)
 enable:Click()
@@ -114,6 +137,19 @@ for _, id in ipairs(Bars.Order) do
         assert(sample.id == id and sample.frame.castText:GetText() == core.Translate(Bars.Labels[id]), "timer chooser displays its own sample")
     end
 end
+local tabs
+for _, child in ipairs(section.children) do
+    local schema = child._msuf2ControlSchema
+    if schema and schema.id == "menu2.opt.castbar.global.timers.selected" then tabs = child end
+end
+assert(tabs and not tabs._msuf2ControlSchema.action, "the tab container has no button action")
+assert(M.TimerBarPreview.Select("breath"))
+for _, button in ipairs(tabs.buttons) do
+    if button._msuf2Value == "fatigue" then button:Click() end
+end
+assert(tabs:GetValue() == "fatigue" and preview.timerKind == "fatigue", "the timer button selects its preview")
+assert(Bars.IsPreview(), "selecting a timer shows the enabled bars for positioning")
+Bars.SetPreview(false)
 assert(M.SetCastbarPreviewUnit("player"))
 mw:RunTimers()
 assert(not sample.frame:IsShown() and preview.scene:Frame():IsShown(), "normal castbar preview is restored")

@@ -843,6 +843,8 @@ local function RegisterCastContextFactories()
                 ContextStoredState(G, { prefix .. "R", prefix .. "G", prefix .. "B", prefix .. "A" }, ApplyCastbarColors))
         end)
     end
+    CastBackdropFactory("cast.latency", "Latency zone color", "GetCastbarLatencyColor", "SetCastbarLatencyColor",
+        "castbarLatency", 1, 0, 0, 0.25)
     CastBackdropFactory("cast.border", "Castbar border", "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, 1)
     CastBackdropFactory("cast.background", "Castbar background", "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg",
         0.10, 0.10, 0.10, 0.85)
@@ -1216,6 +1218,7 @@ for path, reference in pairs({
     ["api.SetCastbarTargetNameColor"] = "cast.target_text",
     ["general.castbarBorder"] = "cast.border",
     ["general.castbarBg"] = "cast.background",
+    ["general.castbarLatency"] = "cast.latency",
     ["castbar.player_override.custom_color"] = "cast.player_override",
     ["castbar.focus_override.custom_color"] = "cast.focus_override",
     ["table.kickReadyColor"] = "cast.kick_ready",

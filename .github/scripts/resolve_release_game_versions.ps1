@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ClientMatrixPath,
     # Game version names the publishing site knows. Empty when the list could not be read.
-    [string[]]$AvailableNames = @()
+    [string[]]$AvailableNames = @(),
+    [switch]$ClassicOnly
 )
 
 # Turns the CurseForgeVersions column of the client matrix into the game version
@@ -22,6 +23,9 @@ $ErrorActionPreference = "Stop"
 $clientMatrix = @(Import-Csv -LiteralPath $ClientMatrixPath -Delimiter "`t")
 if ($clientMatrix.Count -eq 0) { throw "$ClientMatrixPath names no clients." }
 
+if ($ClassicOnly) {
+    $clientMatrix = @($clientMatrix | Where-Object { $_.IsClassic -ceq "true" })
+}
 $versionClients = @($clientMatrix | Sort-Object -Property @(
     @{ Expression = { $_.IsClassic -ceq "true" } },
     @{ Expression = { @(([string]$_.Interfaces -split ',') | ForEach-Object { [int]$_.Trim() } | Sort-Object)[0] } }
@@ -56,6 +60,7 @@ foreach ($entry in $wanted) {
     } else {
         $name = $entry
         if ($available.Count -gt 0 -and $available -cnotcontains $name) {
+            if ($ClassicOnly) { throw "Classic game version '$name' is not available on the publishing site." }
             Write-Host "::warning::Game version '$name' is not available on the publishing site; the upload skips it."
             continue
         }

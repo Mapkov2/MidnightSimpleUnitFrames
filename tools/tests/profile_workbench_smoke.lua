@@ -9,11 +9,58 @@ local mw = Open(root, flavor, { page = "home", clientScriptBindings = true, tocM
 local M, W, F = mw.M, mw.core.ProfileWorkbench, mw.core.ProfileFields
 assert(W, "profile workbench is loaded on every supported client")
 local db = M.EnsureDB()
+
+-- Use the same SavedVariables shape on both sides of a save/load boundary.
+do
+    local H = assert(loadfile(root .. "/tools/tests/profile_state_harness.lua"))()
+    local global = mw.env.MSUF_GlobalDB.global
+    local original = global.profileWorkbench
+    local meta = { version = 1, serial = 2, points = {} }
+    local function MakePoint(id, width, zero, extra)
+        return { id = id, label = "Version " .. id, profile = F.ProfileName(db), bytes = 128,
+            snapshot = { core = { player = { width = width }, layout = { [0] = false, name = "Layout" },
+                signed = { value = zero }, unknown = extra and { [7] = "" } or {} },
+                providers = { test = { nested = { [false] = true } } } } }
+    end
+    local newer, older = MakePoint(2, 234, -1 / math.huge, true), MakePoint(1, 123, 0, false)
+    meta.points[1], meta.points[2] = newer, older
+    global.profileWorkbench = meta
+    local originalText = H.Literal(meta)
+    local compact = W.CompactStoredPoints
+    assert(compact, "restore-point duplicate storage can be compacted before opening the menu")
+    compact()
+    assert(newer.snapshot.core.layout == older.snapshot.core.layout, "exact layouts did not share storage")
+    assert(newer.snapshot.providers == older.snapshot.providers, "exact providers did not share storage")
+    assert(newer.snapshot.core.player ~= older.snapshot.core.player, "differing settings were shared")
+    assert(newer.snapshot.core.signed ~= older.snapshot.core.signed, "signed zero was merged")
+    assert(newer.snapshot.core.unknown ~= older.snapshot.core.unknown, "missing and explicit values were merged")
+    assert(H.Literal(meta) == originalText, "saved restore points changed during compaction")
+    local reload = assert(loadstring("return " .. H.Literal(meta)))()
+    assert(reload.points[1].snapshot.core.layout ~= reload.points[2].snapshot.core.layout,
+        "native-style serialization must recover independent legacy tables")
+    local legacy = assert(loadstring("return " .. originalText))()
+    assert(H.Literal(reload) == H.Literal(legacy), "legacy reload changed a restore point")
+    local metadata = W.Points(true)
+    assert(metadata[1].id == 2 and metadata[1].label == newer.label and metadata[1].snapshot == nil)
+    assert(newer.snapshot.providers == older.snapshot.providers, "opening the list expanded restore points")
+    local published = W.Points()
+    assert(published[1] == newer and published[2] == older, "listing changed a public record's identity")
+    published[1].snapshot.core.layout[0] = true
+    assert(published[2].snapshot.core.layout[0] == false, "mutating a published point changed another version")
+    compact()
+    assert(published[2].snapshot.core.layout[0] == false, "compaction touched a published point")
+    global.profileWorkbench = original
+end
+
 local width = db.player.width
-assert(W.Checkpoint("Named version"))
+local added, pointID = W.Checkpoint("Named version")
+assert(added)
 db.player.width = width + 10
-local point = W.Points()[1]
-assert(W.Restore(point.id))
+assert(W.Checkpoint("Changed width"))
+local savedPoints = mw.env.MSUF_GlobalDB.global.profileWorkbench.points
+assert(savedPoints[1].snapshot.core.target == savedPoints[2].snapshot.core.target,
+    "new checkpoints keep identical subtrees shared")
+assert(W.Restore(pointID))
 assert(db.player.width == width, "restore keeps the live table and restores its value")
 local after = assert(W.Snapshot())
 after.core.player.width = width + 33

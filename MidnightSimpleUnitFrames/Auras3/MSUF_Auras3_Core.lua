@@ -320,6 +320,9 @@ local function LaneKeySchemaRows()
         { "durationBarDisplayKey", "DurationBarDisplay", "styleLayoutShared", "durationBarDisplay", nil, S },
         { "durationBarPositionKey", "DurationBarPosition", "styleLayoutShared", "durationBarPosition", nil, S },
         { "durationBarDirectionKey", "DurationBarDirection", "styleLayoutShared", "durationBarDirection", nil, S },
+        { "showAuraBarsKey", "ShowAuraBars", "layoutShared" },
+        { "auraBarFillKey", "AuraBarFill", "layoutShared" },
+        { "auraBarStyleKey", "AuraBarStyle", "layoutShared" },
         { "tooltipKey", "ShowTooltip", "styleLayoutShared", "showTooltip", nil, SF },
         { "showStackKey", "ShowStackCount", "styleLayoutShared", "showStackCount", nil, S },
         { "stackAnchorKey", "StackCountAnchor", "styleLayoutShared", "stackCountAnchor", nil, S },
@@ -373,10 +376,16 @@ local function BuildLaneKeySchema()
     }
     local seedDefaults, fallbackDefaults, ownerOf = {}, {}, {}
     local function AddKey(key, owner, default, defaults)
-        assert(ownerOf[key] == nil, "MSUF Auras3 lane key listed twice: " .. tostring(key))
+        if ownerOf[key] ~= nil then
+            error("MSUF Auras3 lane key listed twice: " .. key)
+        end
         ownerOf[key] = owner
-        assert(owner == false or OWNER_SETS[owner], "MSUF Auras3 lane key has an unknown owner: " .. tostring(key))
-        for _, set in ipairs(owner and OWNER_SETS[owner] or {}) do set[key] = true end
+        local sets = OWNER_SETS[owner]
+        if sets then
+            for _, set in ipairs(sets) do set[key] = true end
+        elseif owner ~= false then
+            error("MSUF Auras3 lane key has an unknown owner: " .. key)
+        end
         if defaults == SF or defaults == S then seedDefaults[key] = default end
         if defaults == SF or defaults == F then fallbackDefaults[key] = default end
     end
@@ -580,6 +589,24 @@ function A3.GetDurationBarColor()
     return DurationColorComponent(r), DurationColorComponent(g), DurationColorComponent(b)
 end
 
+local function MigrateAuraBarOwner(owner)
+    if type(owner) ~= "table" then return end
+    for _, spec in pairs(A3.LaneKeySchema.LANE_SPECS) do
+        if owner[spec.showAuraBarsKey] == nil and owner[spec.showDurationBarKey] == true
+            and owner[spec.durationBarDisplayKey] ~= "OVERLAY" then
+            owner[spec.showAuraBarsKey] = true
+        end
+    end
+end
+
+local function MigrateUnitAuraBars(auras)
+    MigrateAuraBarOwner(auras.shared)
+    if type(auras.perUnit) ~= "table" then return end
+    for _, unit in pairs(auras.perUnit) do
+        if type(unit) == "table" then MigrateAuraBarOwner(unit.layoutShared) end
+    end
+end
+
 function A3.NormalizeProfileDB(db)
     if type(db.auras2) == "table" then
         --- Every caller passes a stored profile: the live MSUF_DB, a profile being
@@ -598,6 +625,7 @@ function A3.NormalizeProfileDB(db)
     db.auras2 = nil
     current._msufAurasRuntime = nil
     MSUF.MSUF_MaterializeUnitAuraLaneOwners(current)
+    if MSUF.Client.IsRetail then MigrateUnitAuraBars(current) end
     if tonumber(current.profileModelRevision) and tonumber(current.profileModelRevision) >= 1 then
         current._msufA3FrameOwnedLists_v1 = nil
     else

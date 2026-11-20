@@ -10,6 +10,7 @@ local CreateFrame = C.CreateFrame or CreateFrame
 local UnitPower = C.UnitPower or UnitPower
 local UnitPowerMax = C.UnitPowerMax or UnitPowerMax
 local UnitPowerType = C.UnitPowerType or UnitPowerType
+local UnitHasPowerType = UnitHasPowerType
 local UnitPowerPercent = C.UnitPowerPercent or UnitPowerPercent
 local ResolveDisplayedPowerIdentity = C.ResolveDisplayedPowerIdentity
 local PowerBarColor = C.PowerBarColor or PowerBarColor
@@ -209,7 +210,7 @@ local function ReadPowerTypeCached(bar, unit, force)
       bar._msufPowerTypeUnit = nil
       bar._msufPowerDisplayMana = nil
     end
-    return nil, nil
+    return nil, nil, powerType
   end
   if bar then
     bar._msufPowerType = powerType
@@ -321,7 +322,7 @@ function Power.SetClassResourceOocHidden(frame, hidden)
   local bar = frame.targetPowerBar
   SetClassResourceOocAlpha(bar, hidden)
   SetClassResourceOocAlpha(frame.powerBarBG, hidden)
-  SetClassResourceOocAlpha(bar and bar.MSUFPowerBorderHost, hidden)
+  SetClassResourceOocAlpha(bar and bar.MSUFPowerBorderHost, hidden or frame._msufPowerResourceMissing == true)
   local trail = frame.powerLossTrail
   if trail then
     -- Combat-transition path: iterate inline rather than through ForEachTrailSnapshot.
@@ -820,6 +821,44 @@ function Power.GetEvents(frame, spec)
   return POWER_EVENTS
 end
 
+local function SetMissingResource(frame, missing)
+  missing = missing or nil
+  if frame._msufPowerResourceMissing == missing then return false end
+  frame._msufPowerResourceMissing = missing
+  local text = MSUF.UFText
+  if text and text.SetPowerResourceHidden then text.SetPowerResourceHidden(frame, missing) end
+  return true
+end
+
+local function ReadMissingResource(frame, unit, powerType)
+  if issecretvalue(unit) == true or type(unit) ~= "string" then return false end
+  local forced = UF.Preview and UF.Preview.ForcedUnits
+  if forced and forced[unit] == true then return false end
+  local token, partialType
+  if powerType == nil then
+    powerType, token, partialType = ReadPowerTypeCached(frame.targetPowerBar, unit, true)
+  end
+  local presenceType = powerType or partialType
+  if UnitHasPowerType and type(presenceType) == "number" then
+    local present = UnitHasPowerType(unit, presenceType)
+    if issecretvalue(present) ~= true and type(present) == "boolean" then
+      return not present, powerType, token
+    end
+  end
+  local maximum = UnitPowerMax(unit, presenceType)
+  return issecretvalue(maximum) ~= true and maximum == 0, powerType, token
+end
+
+local function ApplyResourcePresence(frame, power, enabled, ebonMight, sample)
+  if enabled and power.hideMissingResource == true and not ebonMight and not sample and not frame._msufPreviewAnimUnitRestore then
+    local missing, powerType, token = ReadMissingResource(frame, frame.MSUFUnitKey)
+    SetMissingResource(frame, missing)
+    return not missing, powerType, token, true
+  end
+  SetMissingResource(frame, false)
+  return enabled
+end
+
 function Power.Disable(frame)
   if MSUF.ResourceVisibility then MSUF.ResourceVisibility.Unbind(frame and frame._msufPowerVisibilityHost) end
   SetShown(frame, false)
@@ -827,6 +866,7 @@ function Power.Disable(frame)
   if HideBarGradient and frame then HideBarGradient(frame.powerGradients) end
   if frame and frame.powerGloss then C.HideBarGloss(frame.powerGloss) end
   if frame then
+    SetMissingResource(frame, false)
     frame._msufPowerEbonMight = nil
     frame._msufPowerBarDetached = nil
     if Health and Health.Layout then Health.Layout(frame, frame.MSUFSpec, false) end
@@ -910,7 +950,7 @@ local function ApplyPowerMedia(frame, bar, power, spec, detached)
   return trail
 end
 
-function Power.Apply(frame, spec)
+function Power.Apply(frame, spec, sample)
   if not frame.targetPowerBar then Power.Create(frame, spec) end
   local bar = frame.targetPowerBar
   frame.Power = bar
@@ -926,7 +966,6 @@ function Power.Apply(frame, spec)
   local h = tonumber(power.height) or 3
   local detached = power.detached == true and true or nil
   frame._msufPowerBarDetached = detached
-  if Health and Health.Layout then Health.Layout(frame, spec, enabled) end
   if detached then
     LayoutDetached(frame, bar, power, h)
   else
@@ -1019,10 +1058,13 @@ function Power.Apply(frame, spec)
     SetBarSmoothing(bar, not ebonMight and power.smooth == true,
       not ebonMight and power.chunked == true, trail)
   end
-  SetColor(frame, true)
-  SetShown(frame, enabled)
+  local shown, powerType, token, metaReady = ApplyResourcePresence(frame, power, enabled, ebonMight, sample)
+  if Health and Health.Layout then Health.Layout(frame, spec, shown) end
+  SetColor(frame, true, powerType, token, metaReady)
+  SetShown(frame, shown)
   if enabled then
     ApplyPowerBorder(bar, power)
+    SetClassResourceOocAlpha(bar.MSUFPowerBorderHost, not shown or frame._msufClassPowerOocHidden == true)
   else
     HidePowerBorder(bar)
     if HideBarGradient then HideBarGradient(frame.powerGradients) end
@@ -1051,7 +1093,7 @@ function Power.Apply(frame, spec)
   -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
   -- after the elements; a spec applies only once the core has loaded.
   MSUF.Require("ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua", MSUF.UF.Factory)(frame)
-  NotifyRoundedPowerBorder(frame, enabled)
+  NotifyRoundedPowerBorder(frame, shown)
   if MSUF.ResourceVisibility then MSUF.ResourceVisibility.ConfigurePower(frame) end
   if spec and spec.key == "player" then
     Power.SetClassResourceOocHidden(frame, frame._msufClassPowerOocHidden == true)
@@ -1169,7 +1211,7 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if not (bar and unit) then return end
   local shown = bar._msufShown
-  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return nil, nil, nil, nil, nil, frame._msufPowerResourceMissing end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
@@ -1204,7 +1246,7 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if not (bar and unit) then return end
   local shown = bar._msufShown
-  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return nil, nil, nil, nil, nil, frame._msufPowerResourceMissing end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
@@ -1229,7 +1271,7 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if not (bar and unit) then return end
   local shown = bar._msufShown
-  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return nil, nil, nil, nil, nil, frame._msufPowerResourceMissing end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
@@ -1260,7 +1302,7 @@ local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if not (bar and unit) then return end
   local shown = bar._msufShown
-  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
+  if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return nil, nil, nil, nil, nil, frame._msufPowerResourceMissing end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerEventToken ~= nil
     and bar._msufPowerEventToken ~= eventPowerToken
@@ -1337,7 +1379,7 @@ function Power.SceneApply(frame, spec)
   local power = spec and spec.power
   local mode = power and power.mode
   if mode == "class" then power.mode = "power" end
-  Power.Apply(frame, spec)
+  Power.Apply(frame, spec, true)
   if power then power.mode = mode end
 end
 
@@ -1375,6 +1417,77 @@ function Power.Update(frame, event, unit, eventPowerToken)
   return UpdatePercentPath(frame, event, unit, eventPowerToken)
 end
 
+local POWER_PRESENCE_LAYOUT = { "Power" }
+
+local function RefreshPresenceLayout(frame, spec, shown, event)
+  local power = spec.power
+  local util = MSUF.Util
+  local combat = InCombatLockdown and InCombatLockdown()
+  if power.embed ~= false and power.detached ~= true then
+    if combat then
+      UF.RefreshElements(frame.MSUFUnitKey, POWER_PRESENCE_LAYOUT, "MSUF_POWER_LAYOUT")
+    elseif util and util.InCombat and util.InCombat(event) then
+      UF.MarkDirty(frame.MSUFUnitKey)
+      UF.Factory.EnsureDeferredDriver()
+    else
+      if Health and Health.Layout then Health.Layout(frame, spec, shown) end
+      UF.Factory.ApplyBossPhysicalBarGeometry(frame)
+    end
+  end
+  NotifyRoundedPowerBorder(frame, shown)
+end
+
+local function ShowResourcePresence(frame, missing, event)
+  local shown = not missing
+  local bar = frame.targetPowerBar
+  if SetMissingResource(frame, missing) or bar._msufShown ~= shown then
+    if missing then C.StopLossTrailAnimation(frame.powerLossTrail) end
+    SetShown(frame, shown)
+    SetClassResourceOocAlpha(bar.MSUFPowerBorderHost, missing or frame._msufClassPowerOocHidden == true)
+    RefreshPresenceLayout(frame, frame.MSUFSpec, shown, event)
+  end
+end
+
+function Power.SyncPreviewResource(frame, preview)
+  local spec = frame.MSUFSpec
+  local power = spec and spec.power
+  local bar = frame.targetPowerBar
+  if not (bar and power and power.enabled and power.hideMissingResource) or frame._msufPowerEbonMight then return end
+  local missing = not preview and ReadMissingResource(frame, frame.MSUFUnitKey)
+  if not preview then bar._msufShown = nil end
+  ShowResourcePresence(frame, missing)
+end
+
+local function UpdateResourcePresence(frame, event, unit, eventPowerToken)
+  local update = frame._msufPowerPresenceUpdate
+  if frame._msufPreviewAnimUnitRestore or event == "MSUF_POWER_LAYOUT"
+    or event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" then
+    return update(frame, event, unit, eventPowerToken)
+  end
+  -- Identity and metadata updates already resolve the numeric power type
+  -- while the bar is visible. Hidden bars check presence before reseeding.
+  local wasHidden = frame._msufPowerResourceMissing == true
+  local value, maximum, powerType, token, metaChanged
+  if not wasHidden then
+    value, maximum, powerType, token, metaChanged = update(frame, event, unit, eventPowerToken)
+  end
+  local missing = ReadMissingResource(frame, frame.MSUFUnitKey, powerType)
+  ShowResourcePresence(frame, missing, event)
+  if missing then return nil, nil, nil, nil, nil, true end
+  if wasHidden then
+    local reseed = event == "MSUF_DEPENDENT_TARGET_POLL" and "MSUF_UNIT_IDENTITY_SOFT" or event
+    return update(frame, reseed, unit, eventPowerToken)
+  end
+  return value, maximum, powerType, token, metaChanged
+end
+
+function Power.SelectEventUpdate(frame, _, event, update)
+  if update == UpdateResourcePresence and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
+    return frame._msufPowerPresenceUpdate
+  end
+  return update
+end
+
 function Power.SelectUpdate(frame, spec)
   if frame and frame._msufPowerEbonMight == true then
     return Power.Update
@@ -1389,10 +1502,19 @@ function Power.SelectUpdate(frame, spec)
     return UpdatePercentPath
   end
   local plan = PowerValuePlan(frame)
-  if plan == POWER_PLAN_ABSOLUTE then return UpdateAbsolutePath end
-  if plan == POWER_PLAN_CURRENT_PERCENT then return UpdateCurrentPercentPath end
-  if plan == POWER_PLAN_CURRENT then return UpdateCurrentPath end
-  return UpdatePercentPath
+  local update = UpdatePercentPath
+  if plan == POWER_PLAN_ABSOLUTE then
+    update = UpdateAbsolutePath
+  elseif plan == POWER_PLAN_CURRENT_PERCENT then
+    update = UpdateCurrentPercentPath
+  elseif plan == POWER_PLAN_CURRENT then
+    update = UpdateCurrentPath
+  end
+  if spec and spec.power and spec.power.hideMissingResource == true then
+    frame._msufPowerPresenceUpdate = update
+    return UpdateResourcePresence
+  end
+  return update
 end
 
 Power.UpdateValue = Power.Update
@@ -1455,13 +1577,14 @@ if UF.RouteCompiler then
 
   local function Compile(frame, event, list, target)
     local barBase = frame[GetUpdateKey("Power")]
+    local barUpdate = barBase and Power.SelectEventUpdate(frame, frame.MSUFSpec, event, barBase)
     local textBase = frame[GetUpdateKey("PowerText")]
     local textUpdate = textBase and SelectElementEventUpdate(UF.elements.PowerText, frame, event, textBase) or nil
     local barFn, textFn, routeUnitless
     for i = 1, #list, 2 do
       local update, unitless = list[i], list[i + 1] == true
       if routeUnitless == nil then routeUnitless = unitless elseif routeUnitless ~= unitless then return end
-      if update == barBase then barFn = update elseif update == textUpdate then textFn = update else return end
+      if update == barUpdate then barFn = update elseif update == textUpdate then textFn = update else return end
     end
     if barFn or textFn then
       return SharedDirectRoute(RouteCache.directPower, BuildPowerRoute,

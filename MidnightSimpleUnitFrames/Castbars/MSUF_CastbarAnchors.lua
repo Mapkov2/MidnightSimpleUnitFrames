@@ -1045,11 +1045,15 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
     EnsureDB()
     local g = Config.Read().general or {}
     local frame, preview = TargetFocusCastbar(unit)
-    if not frame then return end
-
     if not ShouldUseMSUFCastbar(unit, g) then
         HideCastbar(frame, preview)
         return
+    end
+
+    local positionPreview = unit == "target" and Previews.PositionTargetCastbarPreview or Previews.PositionFocusCastbarPreview
+    if not frame then
+        if preview and positionPreview then positionPreview() end
+        return nil, preview, g
     end
 
     local def = UNIT_CASTBAR[unit]
@@ -1075,7 +1079,6 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
     SetHeight(frame, desiredHeight)
     if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight, preserveWidth) end
 
-    local positionPreview = unit == "target" and Previews.PositionTargetCastbarPreview or Previews.PositionFocusCastbarPreview
     if preview and positionPreview then positionPreview() end
     return frame, preview, g
 end

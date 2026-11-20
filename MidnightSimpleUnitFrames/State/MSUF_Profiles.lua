@@ -102,12 +102,12 @@ local function PrepareProfileMutation(rebindOnly)
     if beforeMutation and not rebindOnly then beforeMutation() end
     if Variants then Variants.Restore() end
 end
-local function BeforeProfileSwitch()
+local function BeforeProfileSwitch(incoming)
     --- Sync rides on top of a profile change: a flush that cannot run is
     --- reported and the change goes ahead. The profile itself is never at
     --- risk; only the propagation to the other members is skipped.
     if ProfileSync then
-        local ok,why=ProfileSync.Flush()
+        local ok,why=ProfileSync.Flush(nil, incoming)
         if not ok then ProfileSync.Report("Profile sync skipped (%s).", why) end
     end
     PrepareProfileMutation()
@@ -248,15 +248,18 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
         profiles[active] = CopyTable(startupSource or {})
     end
     if hadEstablishedOwner and (previousActive~=active or previousDB~=profiles[active]) then
-        local ok,why=BeforeProfileSwitch()
+        local ok,why=BeforeProfileSwitch(active)
         if not ok then return false,why end
     end
+    local dormant
     if MSUF_ProfileIO_TranslateProfilesToCurrent then
-        MSUF_ProfileIO_TranslateProfilesToCurrent(profiles, "init")
+        local keepSparse = MSUF_GlobalDB._compatSave == nil
+        local _, inactive = MSUF_ProfileIO_TranslateProfilesToCurrent(profiles, "init", keepSparse and active or nil)
+        dormant = inactive
     end
     local boundProfile = profiles[active]
     if MSUF.ProfileMigrations then
-        MSUF.ProfileMigrations.ApplyStoredProfiles(profiles)
+        MSUF.ProfileMigrations.ApplyStoredProfiles(profiles, dormant)
         boundProfile = MSUF.ProfileMigrations.PrepareBinding(boundProfile)
     end
     char.activeProfile = active
@@ -285,6 +288,9 @@ function MSUF.PublicGlobals.MSUF_InitProfiles(startup)
     if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
         ApplyProfileRuntime("PROFILE_INIT_REBIND", false)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_INIT_REBIND", active)
+        if previousActive ~= active and profiles[previousActive] == previousDB then
+            MSUF.DefaultsSchema.CompactInactiveProfile(MSUF_GlobalDB, previousActive)
+        end
     end
  end
 ExportPublic("MSUF_InitProfiles", MSUF.PublicGlobals.MSUF_InitProfiles)
@@ -336,6 +342,7 @@ function MSUF_CreateProfile(name)
         profiles[name] = nil
         return false, refusal
     end
+    MSUF.DefaultsSchema.CompactInactiveProfile(MSUF_GlobalDB, name)
     ProfileChat("ok", "Created new profile '%s'.", name)
     return true
  end
@@ -372,7 +379,8 @@ function MSUF_SwitchProfile(name)
     GetCharKey = GetCharKey or MSUF.Require("MSUF_GetCharKey", "State/MSUF_Profiles.lua")
     local charKey = GetCharKey()
     if not charKey then return false, "character identity unavailable" end
-    local prepared,why=BeforeProfileSwitch()
+    local previous = MSUF_ActiveProfile
+    local prepared,why=BeforeProfileSwitch(name)
     if not prepared then return false,why end
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
@@ -397,6 +405,7 @@ function MSUF_SwitchProfile(name)
     MSUF_ProfileIO_RunEnsureDB(false, true)
     ApplyProfileRuntime("PROFILE_SWITCH", false)
     MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_SWITCH", name)
+    if previous and previous ~= name then MSUF.DefaultsSchema.CompactInactiveProfile(MSUF_GlobalDB, previous) end
     ProfileChat("ok", "Switched to profile '%s'.", name)
     return true
  end
@@ -440,6 +449,7 @@ local function MSUF_ResetProfile(name)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_RESET", name)
     end
     MSUF_ProfileIO_NotifySuiteLifecycle("reset", name)
+    if name ~= MSUF_ActiveProfile then MSUF.DefaultsSchema.CompactInactiveProfile(MSUF_GlobalDB, name) end
     ProfileChat("note", "Profile '%s' reset to defaults.", name)
     return true
  end
@@ -571,6 +581,7 @@ local function MSUF_CopyProfile(sourceName, destName)
     local ok,reason=MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
     if ok==false then profiles[destName]=nil
         return false,reason end
+    MSUF.DefaultsSchema.CompactInactiveProfile(MSUF_GlobalDB, destName)
     ProfileChat("ok", "Copied '%s' -> '%s'.", sourceName, destName)
     return true
 end

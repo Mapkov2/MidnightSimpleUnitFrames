@@ -73,6 +73,7 @@ aurasOwnBuffHighlightColor = true,
 -- opacity, and opt-in exclusions for informational elements. They are unit
 -- frame settings, not colours (the registry declares them unitframes).
 local MSUF_UNITFRAME_ALPHA_KEYS = {
+    fadeInOnShow = true,
     hpBarAlpha = true,
     powerBarAlpha = true,
     hpBgAlpha = true,
@@ -81,6 +82,7 @@ local MSUF_UNITFRAME_ALPHA_KEYS = {
     alphaExcludePredictionBars = true,
 }
 local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
+    fadeInOnShow = false,
     hpBarAlpha = 1,
     powerBarAlpha = 1,
     hpBgAlpha = 0.85,
@@ -167,6 +169,8 @@ local function MSUF_ProfileIO_EnsureGroupFramesDB()
 end
 local function MSUF_ProfileIO_EnsureCompleteProfileDB()
     MSUF_ProfileIO_RunEnsureDB()
+    MSUF.DefaultsSchema.Fill(MSUF_DB.general, MSUF.DefaultsSchema.Values.BarsCastbarFeatureFlags)
+    MSUF.DefaultsSchema.FillCastTargetText(MSUF_DB.general, "castbarPlayer")
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_EnsureGroupFramesDB()
     local auras = MSUF and MSUF.MSUF_Auras3

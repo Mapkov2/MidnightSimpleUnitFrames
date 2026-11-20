@@ -624,6 +624,8 @@ function GF.UntrackFrame(frame)
   attrUnit[shell] = nil
   childKind[shell] = nil
   appliedSerial[visual] = nil
+  -- DetachFrame hides numeric regions. Recheck their layout on the next bind.
+  visual._msufTextLayoutRevision = false
   appliedUnit[visual] = nil
   appliedKind[visual] = nil
   appliedWidth[visual] = nil

@@ -33,6 +33,7 @@ local ApplyShown = MSUF.Apply.ShownPlain
 local afkSince = {}        -- guid -> GetTime() stamp of the observed AFK-on edge
 local attached = {}        -- frame -> true while its AFK timer text is visible
 local attachedCount = 0
+local waitingForStart = {} -- frame -> GUID when its AFK text paints before the start is known
 local suspended = {}       -- frames hidden by combat entry, re-poked on combat end
 local combatActive = false
 local ticker = nil
@@ -121,13 +122,16 @@ local AFKTimer = {}
 
 function AFKTimer.Attach(frame)
   if not frame or attached[frame] then return end
+  if waitingForStart[frame] then waitingForStart[frame] = nil end
   attached[frame] = true
   attachedCount = attachedCount + 1
   EnsureTicker()
 end
 
-function AFKTimer.Detach(frame)
-  if not frame or not attached[frame] then return end
+function AFKTimer.Detach(frame, waitingGUID)
+  if not frame then return end
+  if waitingForStart[frame] ~= waitingGUID then waitingForStart[frame] = waitingGUID end
+  if not attached[frame] then return end
   attached[frame] = nil
   attachedCount = attachedCount - 1
   if attachedCount <= 0 then
@@ -138,11 +142,12 @@ end
 
 --- Duration text for the frame's unit, or nil when it must not show:
 --- in combat, unresolvable identity, or no observed AFK-on edge.
+--- Return the observed GUID separately so a newly recorded start can wake its frame.
 function AFKTimer.ResolveText(unit)
   if combatActive then return nil end
   local guid = PlainGUID(unit)
   local stamp = guid and afkSince[guid]
-  if not stamp then return nil end
+  if not stamp then return nil, guid end
   return FormatDuration(Now() - stamp)
 end
 
@@ -169,6 +174,13 @@ local function StampUnit(unit)
   if afk == true then
     if afkSince[guid] == nil then
       afkSince[guid] = Now()
+      -- The frame's flag handler may have painted AFK before this listener ran.
+      for frame, waitingGUID in pairs(waitingForStart) do
+        if waitingGUID == guid then
+          waitingForStart[frame] = nil
+          if PlainGUID(frame.MSUFUnitKey) == guid then PokeFrame(frame) end
+        end
+      end
     end
   elseif afk == false then
     afkSince[guid] = nil
