@@ -1,8 +1,62 @@
 local root = assert(arg[1])
-local mw = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))().Open(root, arg[2] or "Mainline", { page = "home" })
+local badgeTemplate
+local mw = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))().Open(root, arg[2] or "Mainline", {
+    page = "home",
+    beforeOptions = function(world)
+        world.env.NewFeatureLabelMixin = {}
+        local CreateFrame = world.env.CreateFrame
+        world.env.CreateFrame = function(kind, name, parent, template, ...)
+            local frame = CreateFrame(kind, name, parent, template, ...)
+            if template == "NewFeatureLabelTemplate" or template == "NewFeatureLabelNoAnimateTemplate" then
+                badgeTemplate = template
+                frame.Glow = frame:CreateTexture()
+                function frame:GetTextWidth() return 30 end
+            end
+            return frame
+        end
+    end,
+})
 local M = mw.M
-assert(M.OpenSeeNewFeatures())
+local button = assert(mw.win.status.seeNewFeaturesButton)
+local badge = assert(button._msuf2NewBadge)
+local label = button._msuf2Label
+local unreadWidth = button:GetWidth()
+assert(M.HasUnseenChangelog() and button._msuf2Active, "unread release does not emphasize the whole toolbar button")
+assert(badge:IsShown() and badgeTemplate == "NewFeatureLabelNoAnimateTemplate", "unread release badge is missing or pulsing")
+assert(not badge.Glow:IsShown(), "badge glow spills past the button")
+local point, relative, relativePoint, x, y = badge:GetPoint()
+assert(point == "CENTER" and relative == label and relativePoint == "RIGHT" and x > 15 and y == 0,
+    "NEW badge should follow the label on the same line")
+local labelPoint, labelRelative, labelRelativePoint, labelX = label:GetPoint()
+assert(labelPoint == "CENTER" and labelRelative == button and labelRelativePoint == "CENTER", "label is not anchored to button center")
+local labelHalfWidth = label:GetStringWidth() * 0.5
+local left = labelX - labelHalfWidth
+local right = labelX + labelHalfWidth + x + badge:GetTextWidth() * 0.5
+assert(math.abs(left + right) < 0.01, "label and NEW badge are not centered as a group")
+assert(right <= unreadWidth * 0.5 - 12, "label and NEW badge do not fit inside the button")
+button:Click()
 mw:RunTimers()
+assert(M.activeKey == "changelog" and not M.HasUnseenChangelog(), "toolbar click did not acknowledge the open release")
+assert(not button._msuf2Active and not badge:IsShown(), "read release kept the unread style")
+assert(button:GetWidth() == unreadWidth, "click moved the toolbar hit targets")
+local _, _, _, centeredX = label:GetPoint()
+assert(centeredX == 0, "read button label did not return to center")
+mw.win:RefreshStatus()
+assert(not button._msuf2Active and not badge:IsShown(), "refresh resurrected a read release")
+local data = mw.world.options.MSUF_FullChangelog
+local version = data.currentVersion
+data.currentVersion = "next-test-update"
+mw.win:RefreshStatus()
+assert(button._msuf2Active and badge:IsShown() and button._msuf2NewBadge == badge, "next release did not reuse the unread style")
+data.currentVersion = version
+mw.win:RefreshStatus()
+assert(not button._msuf2Active and not badge:IsShown(), "restoring the read version kept the unread style")
+local scroll = assert(M.scrollFrame)
+scroll:SetVerticalScroll(120)
+assert(scroll:GetVerticalScroll() > 0, "changelog fixture did not scroll")
+button:Click()
+mw:RunTimers()
+assert(scroll:GetVerticalScroll() == 0, "toolbar did not return to the latest notes at the top of the changelog")
 local frames, entry = mw:Frames(), M.cache.changelog
 local counts = {}
 for i = 1, 3 do
@@ -84,3 +138,69 @@ assert(text == countdown.text and (link ~= nil) == isForever, "countdown link vi
 if isForever then
     assert(M.OpenChangelogMenuLink(link), "countdown link did not open the Forever setting")
 end
+
+local function FindButton(entry, matches)
+    for _, frame in ipairs(mw.world.widgets.frames) do
+        if frame:GetParent() == entry.wrapper and frame:GetScript("OnClick") and matches(frame) then return frame end
+    end
+end
+
+button:Click()
+mw:RunTimers()
+local current = assert(M.cache.changelog)
+local olderVersion = data.entries[2].version
+local function IsVersion(header, expected)
+    local headerLabel = header._msuf2Label
+    return headerLabel and headerLabel:GetText():find(expected .. "  -  ", 1, true) == 1
+end
+local function Older(header) return IsVersion(header, olderVersion) end
+local older = assert(FindButton(current, Older), "older release button is missing")
+local _, _, _, _, oldY = older:GetPoint()
+scroll:SetVerticalScroll(-oldY - 8)
+older:Click()
+mw:RunTimers()
+local selected = assert(FindButton(M.cache.changelog, Older), "older release disappeared after selection")
+local _, _, _, _, selectedY = selected:GetPoint()
+assert(M.changelogSelectedVersion == olderVersion and scroll:GetVerticalScroll() == -selectedY - 8,
+    "selecting older notes scrolled past their heading")
+button:Click()
+assert(M.cache.changelog == current and scroll:GetVerticalScroll() == 0, "toolbar did not restore the latest cached release")
+
+local function HasCastbarLink(frame)
+    for _, region in ipairs({ frame:GetRegions() }) do
+        if region.GetText and (region:GetText() or ""):find("Player castbar Force Off", 1, true) then return true end
+    end
+end
+if version ~= "7.0.4" then
+    local release = assert(FindButton(current, function(header) return IsVersion(header, "7.0.4") end))
+    release:Click()
+end
+local castbarLink = assert(FindButton(M.cache.changelog, HasCastbarLink), "7.0.4 has no clickable castbar highlight")
+castbarLink:Click()
+assert(M.activeKey == "uf_player" and M.cache.uf_player.sections.castbar._msuf2CollapsibleEntry.open,
+    "rendered castbar highlight did not open its real settings section")
+
+local arenaLink = { pageKey = "uf_arena", sectionId = "arena", controlId = "test.arena" }
+local _, visibleArenaLink = M.GetChangelogBullet({ text = "Arena", link = arenaLink })
+assert((visibleArenaLink ~= nil) == mw.core.Client.SupportsUnit("arena"), "unavailable arena highlight stayed clickable")
+
+mw.core.SuiteLink.GetChangelog = function()
+    return { entries = { { version = "Suite latest" }, { version = "Suite older" } } }
+end
+M.changelogSource = nil
+M.InvalidatePage("changelog")
+assert(M.SelectPage("changelog"))
+local function SourceTab(label)
+    return assert(FindButton(M.cache.changelog, function(frame)
+        return frame._msuf2Label and frame._msuf2Label:GetText() == label
+    end))
+end
+local coreEntry = M.cache.changelog
+SourceTab("MSUF"):Click()
+assert(M.cache.changelog == coreEntry, "clicking the active source discarded its cached entries")
+SourceTab("MSUF Suite"):Click()
+assert(M.suiteChangelogSelectedVersion == "Suite latest" and not M.HasUnseenChangelog(), "Suite notes did not open and clear their badge")
+M.suiteChangelogSelectedVersion = "Suite older"
+assert(M.SelectPage("changelog"))
+button:Click()
+assert(M.suiteChangelogSelectedVersion == "Suite latest", "toolbar did not reopen the newest Suite notes without currentVersion")

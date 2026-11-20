@@ -14,7 +14,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-7.0.3-38C7F0?style=flat-square" alt="MSUF stable version 7.0.3">
+    <img src="https://img.shields.io/badge/Version-7.0.4-38C7F0?style=flat-square" alt="MSUF stable version 7.0.4">
     <img src="https://img.shields.io/badge/WoW-Midnight%20%7C%20Forever%20%7C%20Classic-148EFF?style=flat-square&logo=worldofwarcraft&logoColor=white" alt="World of Warcraft Midnight, WoW Forever and Classic">
     <img src="https://img.shields.io/github/last-commit/Mapkov2/MidnightSimpleUnitFrames?style=flat-square&logo=github" alt="Latest GitHub commit">
   </p>
@@ -26,7 +26,7 @@ Pet HoTs on your own pet and group pet frames, Icon Skins, independent Health an
 
 MSUF 7.0 releases are built from `main`. Each version has a release tag in this repository.
 
-[Stable 7.0.3 on CurseForge](https://www.curseforge.com/wow/addons/midnightsimpleunitframes/files/9687841) · [Wago releases](https://addons.wago.io/addons/midnightsimpleunitframes/versions?stability=stable) · [GitHub releases and betas](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases) · [Changelog](CHANGELOG.md) · [Archived 6.5x branch](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/6.5)
+[Stable releases on CurseForge](https://www.curseforge.com/wow/addons/midnightsimpleunitframes) · [Wago releases](https://addons.wago.io/addons/midnightsimpleunitframes/versions?stability=stable) · [GitHub releases and betas](https://github.com/Mapkov2/MidnightSimpleUnitFrames/releases) · [Changelog](CHANGELOG.md) · [Archived 6.5x branch](https://github.com/Mapkov2/MidnightSimpleUnitFrames/tree/6.5)
 
 > **Arena Frames, Pet Frames and Pet Target are built in.** Customize them alongside your unit and group frames in one consistent interface.
 

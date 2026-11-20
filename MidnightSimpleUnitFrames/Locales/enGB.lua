@@ -5420,6 +5420,14 @@ L["Fade in when shown"] = "Fade in when shown"
 L["Edit positions"] = "Edit positions"
 L["Continue to keep your current positions."] = "Continue to keep your current positions."
 L["Back to %d%%"] = "Back to %d%%"
+L["Outline settings"] = "Outline settings"
+L["All pixel borders"] = "All pixel borders"
+L["All outlines"] = "All outlines"
+L["The same value may render at different widths."] = "The same value may render at different widths."
+L["Screen pixels"] = "Screen pixels"
+L["Scaled UI units"] = "Scaled UI units"
+L["Unavailable with the current settings."] = "Unavailable with the current settings."
+L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

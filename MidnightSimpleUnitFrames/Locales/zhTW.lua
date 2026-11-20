@@ -7663,6 +7663,14 @@ L["Fade in when shown"] = "顯示時淡入"
 L["Edit positions"] = "編輯位置"
 L["Continue to keep your current positions."] = "點選繼續即可保留目前的位置。"
 L["Back to %d%%"] = "還原為 %d%%"
+L["Outline settings"] = "外框設定"
+L["All pixel borders"] = "所有像素邊框"
+L["All outlines"] = "所有外框"
+L["The same value may render at different widths."] = "相同的數值可能顯示為不同寬度。"
+L["Screen pixels"] = "螢幕像素"
+L["Scaled UI units"] = "縮放後的介面單位"
+L["Unavailable with the current settings."] = "目前設定下無法使用。"
+L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

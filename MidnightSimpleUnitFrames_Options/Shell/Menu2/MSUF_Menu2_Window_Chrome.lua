@@ -618,38 +618,35 @@ local function BuildWindowToolbar(state)
     M.RegisterMenuChromeControl(toolbarFeatures, "toolbar.see-new-features", "See New Features", "ephemeral", {
         historyMode = "none", help = "Opens the full changelog with direct links to highlighted features.",
     })
-    -- Blizzard calls out unseen options with NewFeatureLabelTemplate
-    -- (Blizzard_SharedXML/NewFeatureLabel.xml) and anchors it left of the game
-    -- menu's Options label. The template owns the localized NEW_CAPS text, the
-    -- collections-newglow atlas and the pulse, so reusing it - including
-    -- Blizzard's scale and offsets - makes the toolbar badge identical to the
-    -- one players already know instead of an MSUF lookalike.
-    local FEATURES_BADGE_ROOM = 38
+    local FEATURES_BADGE_GAP = 8
     local function RefreshSeeNewFeaturesBadge()
         local unseen = type(M.HasUnseenChangelog) == "function" and M.HasUnseenChangelog() == true
+        if (toolbarFeatures._msuf2Active == true) ~= unseen then
+            toolbarFeatures:SetActive(unseen)
+        end
+
         local badge = toolbarFeatures._msuf2NewBadge
         if unseen and not badge and type(NewFeatureLabelMixin) == "table" then
-            badge = PixelLayoutRegion(CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelTemplate"))
-            badge:SetScale(0.8)
+            -- The button's accent carries the emphasis, with Blizzard's localized badge beside it.
+            badge = PixelLayoutRegion(CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelNoAnimateTemplate"))
             badge:SetFrameLevel(toolbarFeatures:GetFrameLevel() + 5)
+            if badge.Glow then badge.Glow:Hide() end
             toolbarFeatures._msuf2NewBadge = badge
         end
+
         local label = toolbarFeatures._msuf2Label
-        local shown = (unseen and badge and label) and true or false
-        -- The badge needs room left of the label, which localized labels have
-        -- already eaten at the authored 132: measure first, then reserve.
-        local measured = label and label.GetStringWidth and label:GetStringWidth() or 0
-        local width = max(132, (type(measured) == "number" and measured > 0) and (measured + 24) or 0)
-        toolbarFeatures:SetWidth(shown and (width + FEATURES_BADGE_ROOM) or width)
-        if label then
-            label:ClearAllPoints()
-            label:SetPoint("CENTER", toolbarFeatures, "CENTER", shown and (FEATURES_BADGE_ROOM * 0.5) or 0, 0)
-        end
+        local badgeWidth = badge and badge.GetTextWidth and badge:GetTextWidth() or 0
+        local badgeRoom = badgeWidth > 0 and (FEATURES_BADGE_GAP + badgeWidth) or 0
+        -- Keep the hit area stable when the badge goes away on click.
+        toolbarFeatures:SetWidth(max(132, math.ceil(label:GetStringWidth() + 24 + badgeRoom)))
+        label:ClearAllPoints()
+        label:SetPoint("CENTER", toolbarFeatures, "CENTER", unseen and -badgeRoom * 0.5 or 0, 0)
         if badge then
+            local shown = unseen and badgeWidth > 0
             badge:SetShown(shown)
             if shown then
                 badge:ClearAllPoints()
-                badge:SetPoint("BOTTOMRIGHT", label, "LEFT", 16, -10)
+                badge:SetPoint("CENTER", label, "RIGHT", FEATURES_BADGE_GAP + badgeWidth * 0.5, 0)
             end
         end
     end

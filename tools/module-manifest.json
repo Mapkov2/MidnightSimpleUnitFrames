@@ -295,15 +295,15 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5 [AllowLoadGameType standard]\n"
+          "## Version: 7.0.4 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0.4-beta5 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0.4 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
-          "## X-MSUF-Version-Forever: 7.0.4-beta5\n"
+          "## X-MSUF-Version-Forever: 7.0.4\n"
         ],
         [
           9,
@@ -613,7 +613,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -923,7 +923,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -1233,7 +1233,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -1623,11 +1623,11 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5 [AllowLoadGameType standard]\n"
+          "## Version: 7.0.4 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0.4-beta5 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0.4 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
@@ -1677,7 +1677,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -1731,7 +1731,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -1785,7 +1785,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -1959,11 +1959,11 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5 [AllowLoadGameType standard]\n"
+          "## Version: 7.0.4 [AllowLoadGameType standard]\n"
         ],
         [
           7,
-          "## Version: 7.0.4-beta5 [ExcludeLoadGameType standard]\n"
+          "## Version: 7.0.4 [ExcludeLoadGameType standard]\n"
         ],
         [
           8,
@@ -2013,7 +2013,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -2067,7 +2067,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -2121,7 +2121,7 @@
         ],
         [
           6,
-          "## Version: 7.0.4-beta5\n"
+          "## Version: 7.0.4\n"
         ],
         [
           7,
@@ -14068,6 +14068,22 @@
           "document": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2.xml",
           "order": 17,
           "line": "    <Script file=\"{file}\"/>\n"
+        }
+      ]
+    },
+    {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_OutlineOverview.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "loads": [
+        {
+          "document": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2.xml",
+          "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua"
         }
       ]
     },

@@ -8,22 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "C53881658F5D8218B2257D3FBD07A2B1CCB03374F91AE1C484BE061C9AF9EC2F",
-    currentVersion = "7.0.4-beta5",
+    sourceSha256 = "6198286238401700666F8759162DC7834444A2B52628A1E0D077BCC249E5F23B",
+    currentVersion = "7.0.4",
     historyFromVersion = "6.02",
-    previousVersion = "7.0.4-beta4",
-    rangeLabel = "7.0.4-beta4 -> 7.0.4-beta5",
+    previousVersion = "7.0.3",
+    rangeLabel = "7.0.3 -> 7.0.4",
     entries = {
         {
-            version = "7.0.4-beta5",
+            version = "7.0.4",
             date = "2026-11-20",
-            title = "7.0.4 Beta 5",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Player castbar Force Off. Open Unit Frames > Player > Castbar and select Force Off under Castbar Provider to hide the standard Blizzard player castbar, even when the MSUF Player frame is disabled. The section header turns red and shows FORCE OFF. Use this option if Quartz or another addon supplies your player castbar.",
+                            text = "Player castbar Force Off. Hide the Blizzard player castbar even when the MSUF Player frame is disabled. Choose Force Off under Castbar Provider when another addon, such as Quartz, supplies your castbar.",
                             link = {
                                 pageKey = "uf_player",
                                 query = "castbar provider",
@@ -35,6 +34,38 @@ local data = {
                                 prepareValue = "general",
                             },
                         },
+                        {
+                            text = "Party frames in raids. Keep your own subgroup visible alongside the raid frames, including in small raids. Enable the option in Party/Raid Frames > Layout > Advanced.",
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "Show Party Frames in Raid",
+                                label = "Show Party Frames in Raid",
+                                sectionId = "layout_advanced",
+                                controlId = "menu2.gf_layout.group.field.showpartyinraid",
+                                settingKey = "gf_party.showPartyInRaid",
+                                prepareKind = "groupScope",
+                                prepareValue = "party",
+                            },
+                        },
+                        {
+                            text = "Aura bar layouts on Retail and WoW Forever. Choose the direction new bars grow, combine buff and debuff bars, and customize fill colors and outlines. Find these controls in the Buffs or Debuffs workspace under Bars.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Unit frame outlines. Use the gear next to Border thickness to adjust frame outline thickness and colors from one panel.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Fixes and improvements",
+                    bullets = {
+                        "See New Features. Unread notes are highlighted in the toolbar. Clicking the button takes you to the top of the latest notes, with links to highlighted settings.",
+                        "Player channels. Penance and other casts that transition to channels keep their recipient names and spell ranks where ranks are supported.",
+                        "WoW Forever range fading. Hostile targets recover when the initial range check has no result. Warlocks use the highest known Shadow Bolt rank, with Drain Life as a fallback.",
+                        "Profiles. Inactive profiles stay compact, and restore points share identical settings to use less memory. Existing profiles retain supported aura-bar appearance options.",
+                        "Options. Settings search uses less memory. Options and Edit Mode previews reflect the selected aura-bar layout and appearance. Choice popups and themed color fields render correctly.",
+                        "Textures. The Blizzard-style unit frame texture is included in MSUF Core.",
                     },
                 },
             },

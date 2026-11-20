@@ -66,6 +66,7 @@ local function BuildOutlineSection(ctx, b)
         } --[[schema setter: J5.GlobalBars.OutlineTexture]] },
     }, options)
     local outlineSlider, outlineLayer, outlineTexture = controls.barOutlineThickness, controls.barOutlineLayer, controls.texture
+    M.AttachOutlineOverview(outlineSlider, function() return "core.frame." .. CurrentBarsScope() end)
     AttachBarsColorShortcut(outline,
         "Frame Outline Color",
         "Outline color for the selected Bars scope.",

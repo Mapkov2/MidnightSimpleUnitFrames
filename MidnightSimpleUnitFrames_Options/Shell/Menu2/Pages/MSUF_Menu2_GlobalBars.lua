@@ -847,9 +847,10 @@ local function SetOutlineRGB(entry, r, g, b)
     entry.barOutlineColorR, entry.barOutlineColorG, entry.barOutlineColorB, entry.barOutlineColorA = r, g, b, 1
     return true
 end
-local function SetOutlineColorForScope(r, g, b)
+local function SetOutlineColorForScope(r, g, b, scope)
     r, g, b = tonumber(r) or 0, tonumber(g) or 0, tonumber(b) or 0
-    local scope, keys = CurrentBarsScope(), ScopeDBKeys(CurrentBarsScope())
+    scope = scope or CurrentBarsScope()
+    local keys = ScopeDBKeys(scope)
     if scope == "shared" or not keys then return SetOutlineRGB(G(), r, g, b) end
     local db, changed = DB(), false
     for i = 1, #keys do
@@ -859,6 +860,36 @@ local function SetOutlineColorForScope(r, g, b)
     ScopeSetOverride(scope, "hlOverride", true)
     return changed
 end
+local function CollectFrameOutlines(rows)
+    for _, item in ipairs(GP.SCOPE_VALUES) do
+        local scope = item.value
+        local function GetWidth()
+            return GP.ScopeRead(scope, "hlOverride", Bars(), "barOutlineThickness", G().useBarBorder == false and 0 or 1)
+        end
+        rows[#rows + 1] = {
+            id = "core.frame." .. scope, group = "Unit Frames", label = item.text, min = 0, max = 8,
+            batch = function() return scope == "shared" or ScopeHasOverride(scope, "hlOverride") end,
+            getWidth = GetWidth,
+            setWidth = function(width)
+                if GetWidth() == width then return true end
+                GP.ScopeWrite(scope, "hlOverride", Bars(), "barOutlineThickness", width)
+                RequestApply("RequestBarOutline", "MSUF2_BAR_OUTLINE", scope)
+                return true
+            end,
+            getColor = function()
+                return GP.ScopeRead(scope, "hlOverride", G(), "barOutlineColorR", 0),
+                    GP.ScopeRead(scope, "hlOverride", G(), "barOutlineColorG", 0),
+                    GP.ScopeRead(scope, "hlOverride", G(), "barOutlineColorB", 0)
+            end,
+            setColor = function(r, g, b)
+                if SetOutlineColorForScope(r, g, b, scope) then RequestApply("RequestBarOutline", "MSUF2_BAR_OUTLINE", scope) end
+                return true
+            end,
+        }
+    end
+end
+M.RegisterOutlineOverviewProvider("core.frames", CollectFrameOutlines)
+
 local function GeneralBarBackgroundTextureKey()
     local general = G()
     return general.barBackgroundTexture == nil and (general.barBgTexture or "") or general.barBackgroundTexture

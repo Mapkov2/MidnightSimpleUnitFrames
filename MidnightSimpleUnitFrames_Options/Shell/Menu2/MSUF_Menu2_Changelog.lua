@@ -46,8 +46,16 @@ local function SeenField(source)
 end
 
 local function ChangelogLinkSupported(link)
-    return type(link) == "table" and (link.settingKey ~= "player.pvpIndicatorCountdownEnabled"
-        or MSUF.UF.Config.Status.SupportsPVPCountdown("player"))
+    if type(link) ~= "table" or not M.SupportsSearchTarget(link.pageKey, link.settingKey, link.prepareKind, link.prepareValue) then
+        return false
+    end
+    if link.settingKey == "player.pvpIndicatorCountdownEnabled" then
+        return MSUF.UF.Config.Status.SupportsPVPCountdown("player")
+    end
+    if link.pageKey == "classpower" and (link.sectionId == "classpower_resource_pain" or link.sectionId == "classpower_resource_arcane") then
+        return MSUF.Client.IsRetail == true and not MSUF.Client.IsForever
+    end
+    return true
 end
 
 function M.GetChangelogBullet(value)
@@ -85,8 +93,10 @@ local function OpenMenuLink(link)
 end
 M.OpenChangelogMenuLink = OpenMenuLink
 
-local function RebuildKeepingScroll()
-    M.RebuildPageKeepingScroll("changelog")
+local function SelectChangelog(offset)
+    if not M.SelectPage("changelog") then return false end
+    M.scrollFrame:SetVerticalScroll(offset or 0)
+    return true
 end
 
 local function AddSourceTabs(root, contentWidth, y, source)
@@ -98,11 +108,9 @@ local function AddSourceTabs(root, contentWidth, y, source)
         if T.CenterButtonLabel then T.CenterButtonLabel(button) end
         if source == tabKey and T.SkinPrimaryButton then T.SkinPrimaryButton(button) end
         button:SetScript("OnClick", function()
-            if M.BlockCombatAction() then return end
-            if M.changelogSource == tabKey then return end
+            if M.BlockCombatAction() or source == tabKey then return end
             M.changelogSource = tabKey
-            RebuildKeepingScroll()
-            if type(M.MarkChangelogSeen) == "function" then M.MarkChangelogSeen(tabKey) end
+            if SelectChangelog() then M.MarkChangelogSeen(tabKey) end
         end)
     end
     return y - 42
@@ -191,11 +199,12 @@ local function BuildFullChangelog(ctx)
     if not selectedFound then selectedVersion = tostring(entries[1].version or "") end
     M[selectedField] = selectedVersion
 
+    local earlierNotesHeight = 0
     for entryIndex = 1, #entries do
         local entry = entries[entryIndex]
         if type(entry) == "table" then
             local version = tostring(entry.version or "")
-            local targetVersion = version
+            local headerOffset = max(0, -y - earlierNotesHeight - 8)
             local date = tostring(entry.date or "")
             local selected = version == selectedVersion
             local detail = type(entry.title) == "string" and entry.title ~= "" and entry.title or date
@@ -205,9 +214,9 @@ local function BuildFullChangelog(ctx)
             if T.CenterButtonLabel then T.CenterButtonLabel(header) end
             if selected and T.SkinPrimaryButton then T.SkinPrimaryButton(header) end
             header:SetScript("OnClick", function()
-                if M[selectedField] == targetVersion then return end
-                M[selectedField] = targetVersion
-                RebuildKeepingScroll()
+                if M.BlockCombatAction() or M[selectedField] == version then return end
+                M[selectedField] = version
+                SelectChangelog(headerOffset)
             end)
             if type(M.RegisterSearchWidget) == "function" then
                 local token = version:gsub("[^%w]+", "_"):lower()
@@ -227,6 +236,7 @@ local function BuildFullChangelog(ctx)
             y = y - 42
 
             if selected and type(entry.sections) == "table" then
+                local notesTop = y
                 for sectionIndex = 1, #entry.sections do
                     local section = entry.sections[sectionIndex]
                     if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
@@ -251,6 +261,7 @@ local function BuildFullChangelog(ctx)
                     end
                 end
                 y = y - 8
+                earlierNotesHeight = notesTop - y
             end
         end
     end
@@ -315,9 +326,9 @@ function M.OpenSeeNewFeatures()
         or HasUnseenSource("suite") and "suite"
         or (M.changelogSource == "suite" and SuiteChangelogData() and "suite") or "msuf"
     M.changelogSource = source
-    local data = SourceData(source)
-    if data and data.currentVersion then M[SelectedField(source)] = tostring(data.currentVersion) end
-    if M.SelectPage("changelog") then
+    local version = CurrentChangelogVersion(source)
+    if version ~= "" then M[SelectedField(source)] = version end
+    if SelectChangelog() then
         M.MarkChangelogSeen(source)
         return true
     end

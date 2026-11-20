@@ -96,4 +96,28 @@ assert(not lanes.power.root.parent:IsShown(), "party scope kept the unit power l
 db.general.hpPowerTextSelectedKey = "shared"
 panel:RefreshIfStale()
 assert(lanes.power.root.parent:IsShown(), "unit scope did not restore the power lane")
+
+local outline = assert(M.cache.opt_bars.sections.bars_outline)
+outline._msuf2CollapsibleEntry.SetOpenImmediate(true)
+local thickness = assert(Find(function(frame)
+    local schema = frame._msuf2ControlSchema
+    return schema and schema.key == "barOutlineThickness" and frame._msuf2Title ~= nil
+end), "frame outline slider is missing")
+local gear = assert(Find(function(frame)
+    if frame:GetParent() ~= thickness:GetParent() or not frame._msuf2SkipHistoryCheckpoint then return false end
+    local _, relative = frame:GetPoint()
+    return relative == thickness._msuf2Title
+end), "frame outline gear is missing")
+gear:Click()
+local popup
+for _, frame in ipairs(mw.world.widgets.frames) do
+    if frame.anchor == gear and frame.select and frame.slider then popup = frame break end
+end
+assert(popup and popup:IsShown(), "frame outline gear did not open its editor")
+assert(popup.select:GetValue() == "core.frame.shared", "editor did not select the active frame scope")
+local width = popup.slider:GetValue() == 4 and 5 or 4
+popup.slider:SetValue(width)
+MW.FireScript(popup.slider, "OnValueChanged", width)
+popup.apply:Click()
+assert(db.bars.barOutlineThickness == width, "outline editor did not save the shared border thickness")
 print("bars_material_preview_smoke: ok " .. flavor)

@@ -7690,6 +7690,14 @@ L["Fade in when shown"] = "Плавное появление при отобра
 L["Edit positions"] = "Изменить позиции"
 L["Continue to keep your current positions."] = "Нажмите «Далее», чтобы сохранить текущие позиции."
 L["Back to %d%%"] = "Вернуть %d%%"
+L["Outline settings"] = "Настройки контуров"
+L["All pixel borders"] = "Все границы в пикселях"
+L["All outlines"] = "Все контуры"
+L["The same value may render at different widths."] = "При одном и том же значении толщина может различаться."
+L["Screen pixels"] = "Пиксели экрана"
+L["Scaled UI units"] = "Масштабируемые единицы интерфейса"
+L["Unavailable with the current settings."] = "Недоступно при текущих настройках."
+L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

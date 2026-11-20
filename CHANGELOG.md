@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.4 - 2026-11-20
+
+### Highlights
+
+- **Player castbar Force Off.** Hide the Blizzard player castbar even when the MSUF Player frame is disabled. Choose Force Off under Castbar Provider when another addon, such as Quartz, supplies your castbar.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"castbar","controlId":"menu2.uf_player.unit.castbar.provider","settingKey":"general.castbarPlayerBackend","prepareKind":"unitCastbarTab","prepareValue":"general","query":"castbar provider","label":"Castbar provider"} -->
+- **Party frames in raids.** Keep your own subgroup visible alongside the raid frames, including in small raids. Enable the option in Party/Raid Frames > Layout > Advanced.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"layout_advanced","controlId":"menu2.gf_layout.group.field.showpartyinraid","settingKey":"gf_party.showPartyInRaid","prepareKind":"groupScope","prepareValue":"party","query":"Show Party Frames in Raid","label":"Show Party Frames in Raid"} -->
+- **Aura bar layouts on Retail and WoW Forever.** Choose the direction new bars grow, combine buff and debuff bars, and customize fill colors and outlines. Find these controls in the Buffs or Debuffs workspace under Bars.
+<!-- msuf-menu-link: none -->
+- **Unit frame outlines.** Use the gear next to Border thickness to adjust frame outline thickness and colors from one panel.
+<!-- msuf-menu-link: none -->
+
+### Fixes and improvements
+
+- **See New Features.** Unread notes are highlighted in the toolbar. Clicking the button takes you to the top of the latest notes, with links to highlighted settings.
+- **Player channels.** Penance and other casts that transition to channels keep their recipient names and spell ranks where ranks are supported.
+- **WoW Forever range fading.** Hostile targets recover when the initial range check has no result. Warlocks use the highest known Shadow Bolt rank, with Drain Life as a fallback.
+- **Profiles.** Inactive profiles stay compact, and restore points share identical settings to use less memory. Existing profiles retain supported aura-bar appearance options.
+- **Options.** Settings search uses less memory. Options and Edit Mode previews reflect the selected aura-bar layout and appearance. Choice popups and themed color fields render correctly.
+- **Textures.** The Blizzard-style unit frame texture is included in MSUF Core.
+
 ## 7.0.4-beta5 - 2026-11-20
 
 **7.0.4 Beta 5**

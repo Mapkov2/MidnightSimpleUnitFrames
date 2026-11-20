@@ -7826,6 +7826,14 @@ L["Fade in when shown"] = "显示时淡入"
 L["Edit positions"] = "编辑位置"
 L["Continue to keep your current positions."] = "点击继续即可保留当前位置。"
 L["Back to %d%%"] = "恢复到 %d%%"
+L["Outline settings"] = "轮廓设置"
+L["All pixel borders"] = "所有像素边框"
+L["All outlines"] = "所有轮廓"
+L["The same value may render at different widths."] = "相同的数值可能显示为不同的宽度。"
+L["Screen pixels"] = "屏幕像素"
+L["Scaled UI units"] = "缩放后的界面单位"
+L["Unavailable with the current settings."] = "当前设置下不可用。"
+L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

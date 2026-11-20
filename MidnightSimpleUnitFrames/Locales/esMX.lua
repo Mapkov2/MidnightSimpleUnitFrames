@@ -7739,6 +7739,14 @@ L["Fade in when shown"] = "Aparecer suavemente al mostrarse"
 L["Edit positions"] = "Editar posiciones"
 L["Continue to keep your current positions."] = "Continúa para conservar las posiciones actuales."
 L["Back to %d%%"] = "Volver al %d%%"
+L["Outline settings"] = "Ajustes de contorno"
+L["All pixel borders"] = "Todos los bordes en píxeles"
+L["All outlines"] = "Todos los contornos"
+L["The same value may render at different widths."] = "El mismo valor puede producir grosores distintos."
+L["Screen pixels"] = "Píxeles de pantalla"
+L["Scaled UI units"] = "Unidades de interfaz escaladas"
+L["Unavailable with the current settings."] = "No disponible con los ajustes actuales."
+L["%s / %s"] = "%s / %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end
