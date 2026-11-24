@@ -8,12 +8,56 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "1781A1BE8C19A56EB7E718E6D1B860807760F1E9825BD20A81AA81B74E29530E",
-    currentVersion = "7.0.4",
+    sourceSha256 = "27E4F54C5A9244FC8414718359EC0E281DDB872218BF48A756B104821CEF02FE",
+    currentVersion = "7.0.5-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "7.0.3",
-    rangeLabel = "7.0.3 -> 7.0.4",
+    previousVersion = "7.0.4",
+    rangeLabel = "7.0.4 -> 7.0.5-beta1",
     entries = {
+        {
+            version = "7.0.5-beta1",
+            date = "2026-11-24",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "3D portraits for unit frames. In Unit Frames > Player > Portrait, enable the portrait and set Render to 3D portrait. You can also choose 3D for other supported unit frames.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "3D portrait",
+                                label = "Player Portrait Render",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitrender",
+                                settingKey = "player.portraitRender",
+                                prepareKind = "menuTab",
+                                prepareValue = "general",
+                            },
+                        },
+                        {
+                            text = "3D portraits for party frames. In Party > Portrait, enable the portrait and set Render to 3D portrait.",
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "3D portrait",
+                                label = "Party Portrait Render",
+                                sectionId = "portrait",
+                                controlId = "menu2.gf_layout.group.portrait.portraitrender",
+                                settingKey = "gf_party.portraitRender",
+                                prepareKind = "menuTab",
+                                prepareValue = "general",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Portrait options",
+                    bullets = {
+                        "Adjust zoom, framing and 3D rotation in the preview. Portrait backgrounds support custom, class and reaction colors.",
+                        "On Retail and WoW Forever, portraits that need to fall back switch to 2D during instanced combat. The player and pet keep their 3D models, and Party has a Keep 3D in instanced combat option.",
+                    },
+                },
+            },
+        },
         {
             version = "7.0.4",
             date = "2026-11-20",

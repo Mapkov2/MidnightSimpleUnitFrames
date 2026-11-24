@@ -387,7 +387,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Frame.lua",
-          "source_sha256": "d51b1e3cdeeca02106d5b82f6f26d2b11a084bff52389997d13fbcbb12ac6c33"
+          "source_sha256": "028330615b65c15dbd9b4a19f55d9d355045d293c3d6a7d9242e9e176b51dfb6"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Spells.lua",
@@ -546,7 +546,7 @@
       "support_sources": [
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Model.lua",
-          "source_sha256": "7c9877719b853a259bf1b295e7620488efc0d674f7f1a2ef5a5106b5689a03bb"
+          "source_sha256": "5a21969aa5cee7707b688606efdf9282a6e1964374eab36f902281fd50e395d4"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
@@ -583,7 +583,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
-          "source_sha256": "8bba53e418ef62e2190eb69c59533621e94fd677fb35ec348d2ade3205a78f12"
+          "source_sha256": "c2d8e43f48ff1897c803834d4e8cdd9fcd4cbd7d584713be3d606c614fb2e926"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",

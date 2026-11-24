@@ -1,5 +1,19 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.5-beta1 - 2026-11-24
+
+### Highlights
+
+- **3D portraits for unit frames.** In Unit Frames > Player > Portrait, enable the portrait and set Render to 3D portrait. You can also choose 3D for other supported unit frames.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitrender","settingKey":"player.portraitRender","prepareKind":"menuTab","prepareValue":"general","query":"3D portrait","label":"Player Portrait Render"} -->
+- **3D portraits for party frames.** In Party > Portrait, enable the portrait and set Render to 3D portrait.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"portrait","controlId":"menu2.gf_layout.group.portrait.portraitrender","settingKey":"gf_party.portraitRender","prepareKind":"menuTab","prepareValue":"general","query":"3D portrait","label":"Party Portrait Render"} -->
+
+### Portrait options
+
+- Adjust zoom, framing and 3D rotation in the preview. Portrait backgrounds support custom, class and reaction colors.
+- On Retail and WoW Forever, portraits that need to fall back switch to 2D during instanced combat. The player and pet keep their 3D models, and Party has a Keep 3D in instanced combat option.
+
 ## 7.0.4 - 2026-11-20
 
 ### Highlights
