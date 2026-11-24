@@ -1133,6 +1133,9 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.enabled = portraitMode ~= "OFF"
   out.portrait.side = portraitMode == "RIGHT" and "RIGHT" or "LEFT"
   out.portrait.render = Shared.NormalizePortraitRender(conf.portraitRender)
+  -- Instanced combat: player and pet keep 3D; target, ToT, focus, focus target,
+  -- pet target, boss and arena fall back to 2D.
+  out.portrait.modelInstanceCombat = out.key == "player" or out.key == "pet"
   out.portrait.classStyle = Shared.NormalizePortraitClassStyle(conf.portraitClassStyle)
   out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true
   out.portrait.clickable = conf.portraitClickable == true
@@ -1170,6 +1173,8 @@ local function CompileUnitPortrait(out, conf, general)
   if portraitDetails then portraitDetails.Compile(out.portrait, conf) end
   Shared.CompilePortraitTexCoords(out.portrait, conf.portraitZoom, out.portrait.width, out.portrait.height,
     conf.portraitPanX, conf.portraitPanY)
+  Shared.CompilePortraitModel(out.portrait, conf.portraitZoom, conf.portraitPanX, conf.portraitPanY,
+    conf.portraitModelRotation)
   out.portrait.border = out.portrait.border or {}
   out.portrait.border.style = Shared.NormalizePortraitBorder(conf.portraitBorderStyle)
   out.portrait.border.thickness = max(1, Number(conf.portraitBorderThickness, 2))
@@ -1191,7 +1196,10 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.bg.r = Number(general.portraitBgColorR, 0.05)
   out.portrait.bg.g = Number(general.portraitBgColorG, 0.05)
   out.portrait.bg.b = Number(general.portraitBgColorB, 0.05)
-  out.portrait.bg.a = Number(general.portraitBgColorA, 0.85)
+  out.portrait.bg.a = Shared.PortraitBgAlpha(conf.portraitBgAlpha, general.portraitBgColorA)
+  out.portrait.bg.mode = Shared.NormalizePortraitBgColorMode(conf.portraitBgColorMode)
+  -- Class and reaction tints follow the unit, so portrait events repaint them.
+  out.portrait.bg.dynamic = out.portrait.bg.enabled and out.portrait.bg.mode ~= "CUSTOM"
 end
 
 local function ResolveUnitContext(db, unit)

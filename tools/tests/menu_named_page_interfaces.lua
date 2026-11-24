@@ -112,12 +112,13 @@ end
 -- Replayed both the positional owners at 13ac6bd6a and named owners with
 -- the current client graph: every row matches. Dropdown search metadata now
 -- retains semantic labels instead of the selected value and its stale anchor.
+-- 7.0.5 adds 3D Render, rotation and portrait background settings.
 local expectedReceipts = {
-    Mainline = { 54, 2360905105 },
-    Vanilla = { 30, 3256422159 },
-    TBC = { 48, 154764997 },
-    Mists = { 54, 1889948019 },
-    Forever = { 48, 1126950026 },
+    Mainline = { 54, 3420032951 },
+    Vanilla = { 30, 479858721 },
+    TBC = { 48, 3959261312 },
+    Mists = { 54, 630543257 },
+    Forever = { 48, 2231166673 },
 }
 local M, builds, receipts = mw.M, 0, {}
 local function InSection(widget, entry)

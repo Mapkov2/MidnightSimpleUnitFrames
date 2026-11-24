@@ -522,7 +522,7 @@ function Stage.PrepareCellSamples(st, env, sample)
         if portrait.castSpellIcon then
             portrait.texture = scene.S.CurrentSpellTexture(st.kind)
             portrait.l, portrait.r, portrait.t, portrait.b = 0.08, 0.92, 0.08, 0.92
-        elseif cfg.render ~= "CLASS" and SetPortraitTexture then
+        elseif cfg.render == "2D" and SetPortraitTexture then -- 3D draws the player model
             local snapshot = st.self._portraitSnapshot
             if not snapshot then
                 snapshot = PixelLayoutRegion(st.mock:CreateTexture(nil, "ARTWORK"))

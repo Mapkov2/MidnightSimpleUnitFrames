@@ -183,9 +183,33 @@ function Shared.NormalizePortraitMode(conf)
   return "OFF"
 end
 
---- Retired render values, such as the removed "3D" model mode, fall back to 2D.
+--- 2D portrait art, class art or the 3D model. Unknown values fall back to 2D.
 function Shared.NormalizePortraitRender(mode)
-  return mode == "CLASS" and mode or "2D"
+  if mode == "CLASS" or mode == "3D" then
+    return mode
+  end
+  return "2D"
+end
+
+--- Portrait background tint: the configured colour, the unit's class colour
+--- (players only) or its reaction colour. Unknown values fall back to CUSTOM.
+function Shared.NormalizePortraitBgColorMode(mode)
+  if mode == "CLASS" or mode == "REACTION" then
+    return mode
+  end
+  return "CUSTOM"
+end
+
+--- Background opacity: a unit's own 0..100 % value, else the shared 0..1 alpha.
+function Shared.PortraitBgAlpha(percent, sharedAlpha)
+  local value = tonumber(percent)
+  if value then
+    if value < 0 then value = 0 elseif value > 100 then value = 100 end
+    return value / 100
+  end
+  value = tonumber(sharedAlpha) or 0.85
+  if value < 0 then return 0 elseif value > 1 then return 1 end
+  return value
 end
 
 function Shared.NormalizePortraitClassStyle(value)
@@ -327,6 +351,47 @@ function Shared.CompilePortraitTexCoords(p, zoom, width, height, panX, panY)
     -- portrait is the exact mirror image and the zoom centre keeps its spot.
     if p.panOffsetX ~= 0 then p.panOffsetX = -p.panOffsetX end
   end
+end
+
+--- The largest centred square inside each portrait mask, measured from the
+--- shipped mask art (circle_mask, rounded_mask, diamond_mask and the Blizzard
+--- contour). A PlayerModel cannot be masked, so a shaped 3D portrait keeps its
+--- model inside this square while background, ring and border keep the shape.
+local PORTRAIT_MODEL_INSETS = { SQUARE = 1, CIRCLE = 0.70, ROUNDED = 0.90, DIAMOND = 0.49, BLIZZARD = 0.66 }
+--- Facing in radians for the Flip option: a model cannot be mirrored, so Flip
+--- turns it a quarter towards the viewer's right instead.
+local PORTRAIT_MODEL_FLIP_FACING = 0.5
+local PORTRAIT_DEGREES_TO_RADIANS = math.pi / 180
+
+--- 3D head rotation in whole degrees, -180..180; unknown values are 0.
+function Shared.NormalizePortraitModelRotation(degrees)
+  degrees = tonumber(degrees)
+  if not degrees or degrees ~= degrees then return 0 end
+  if degrees < -180 then return -180 elseif degrees > 180 then return 180 end
+  return math.floor(degrees + 0.5)
+end
+
+--- 3D portraits read the same zoom, pan, flip and shape settings as 2D art.
+--- Everything the model needs is baked here, so a portrait event only replays
+--- these numbers. Zoom 100..300 % maps to a camera distance of 1..0.5 with the
+--- portrait camera; pan stays a -1..1 fraction that layout turns into pixels.
+--- Rotation turns the head by -180..180 degrees (positive towards the viewer's
+--- right) on top of Flip's quarter turn.
+--- Run after the portrait details compile, which owns `flip`.
+function Shared.CompilePortraitModel(p, zoom, panX, panY, rotation)
+  if p.render ~= "3D" then
+    p.modelCamScale, p.modelPanX, p.modelPanY, p.modelFacing, p.modelInset = nil, nil, nil, nil, nil
+    return
+  end
+  zoom = Shared.NormalizePortraitZoom(zoom)
+  p.modelCamScale = 1 - ((zoom - 100) / 400)
+  -- CompilePortraitTexCoords mirrors the pan through texL/texR for a flipped
+  -- image; the model turns instead, so it reads the configured pan as is.
+  p.modelPanX = Shared.NormalizePortraitPan(panX) / 100
+  p.modelPanY = Shared.NormalizePortraitPan(panY) / 100
+  p.modelFacing = (p.flip == true and PORTRAIT_MODEL_FLIP_FACING or 0)
+    + Shared.NormalizePortraitModelRotation(rotation) * PORTRAIT_DEGREES_TO_RADIANS
+  p.modelInset = PORTRAIT_MODEL_INSETS[p.shape] or 1
 end
 
 -- Called only while applying layout, shared by live and menu portraits.

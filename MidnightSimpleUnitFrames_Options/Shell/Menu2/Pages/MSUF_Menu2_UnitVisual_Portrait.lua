@@ -53,7 +53,11 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 704, style = 330, dragon = 540 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 494, placement = 382, border = 704, style = 438, dragon = 540 }
+-- Background tint behind the image or 3D model: the shared custom colour, the
+-- class colour of players or the unit's reaction colour.
+local PORTRAIT_BG_COLOR_MODES = VT("CUSTOM", "Custom color", "CLASS", "Class color", "REACTION", "Reaction color")
+local NormalizePortraitBgColorMode = MSUF.UF.Shared.NormalizePortraitBgColorMode
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
@@ -117,7 +121,10 @@ end
 local function BuildPortraitDirection(ctx, card, unit, width, metadata)
     local values = VT("TOPLEFT", "Top left", "TOPRIGHT", "Top right", "BOTTOMLEFT", "Bottom left", "BOTTOMRIGHT", "Bottom right", "AUTO", "Auto")
     local pad = W.Segment(card, "Blizzard frame direction", values, 340, { multiSelect = true })
-    W.MoveWidget(pad, card, 16, -202, 104)
+    -- Placed here instead of by W.MoveWidget: a page resize places a moved
+    -- control again and would narrow this card-wide title to the 104 px pad.
+    pad._msuf2Title:ClearAllPoints()
+    pad._msuf2Title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -202)
     pad._msuf2Title:SetWidth(width - 32)
     pad._msuf2SearchText = "Blizzard portrait ring frame direction mirror corner top bottom left right automatic"
     local theme = M.Theme
@@ -137,17 +144,28 @@ local function BuildPortraitDirection(ctx, card, unit, width, metadata)
         { 41, -7, "^", "Up" }, { 18, -30, "<", "Left" },
         { 64, -30, ">", "Right" }, { 41, -53, "v", "Down" }, { 118, 0, values[5].text, "Auto" },
     }
+    -- W.Segment puts its choices in one row on OnSizeChanged (which also fires
+    -- on the first layout) and on a menu font change; the cross is placed again
+    -- after each of those passes.
+    local function LayoutPad()
+        for i = 1, #pad.buttons do
+            local button, position = pad.buttons[i], positions[i]
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", pad, "TOPLEFT", position[1], position[2])
+            button:SetSize(i == 5 and 80 or 22, i == 5 and 22 or 18)
+        end
+    end
     for i, button in ipairs(pad.buttons) do
         local position = positions[i]
-        button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", pad, "TOPLEFT", position[1], position[2])
-        button:SetSize(i == 5 and 80 or 22, i == 5 and 22 or 18)
         button:SetText(position[3])
         theme.CenterButtonLabel(button)
         if M.AddTooltip then
             M.AddTooltip(button, position[4], "Move the Blizzard frame corner toward this arrow. Auto follows portrait mirroring.", { hook = true })
         end
     end
+    LayoutPad()
+    pad:HookScript("OnSizeChanged", LayoutPad)
+    theme.TrackTabLayout(pad, LayoutPad)
     local selection = {}
     function pad:SetValue(value)
         self.value = value
@@ -357,6 +375,9 @@ function PortraitSection.Controls(p)
     c.zoom = Slide(cards.geometry, "portraitZoom", 100, "Portrait zoom", 100, 300, 1, -278, "MSUF2_PORTRAIT_ZOOM")
     c.panX = Slide(cards.geometry, "portraitPanX", 0, "Zoom center X", -100, 100, 1, -332, "MSUF2_PORTRAIT_PAN_X")
     c.panY = Slide(cards.geometry, "portraitPanY", 0, "Zoom center Y", -100, 100, 1, -386, "MSUF2_PORTRAIT_PAN_Y")
+    -- Turns the 3D head; Flip adds its quarter turn on top.
+    c.modelRotation = Slide(cards.geometry, "portraitModelRotation", 0, "3D rotation", -180, 180, 1, -440,
+        "MSUF2_PORTRAIT_MODEL_ROTATION", { search = "3D portrait rotation turn head face model facing angle" })
     p.StopDragonPreview = StopDragonPreview
 end
 -- Controls of the Placement, Class & Background, Border (rest) and Dragon tabs, in creation order.
@@ -385,15 +406,25 @@ function PortraitSection.MoreControls(p)
         "MSUF2_PORTRAIT_BORDER_DIRECTION", { search = "Portrait border direction rotate light up right down left" })
     c.borderSize = Slide(cards.border, "portraitBorderThickness", 2, "Border thickness", 1, 12, 1, -592, "MSUF2_PORTRAIT_BORDER_SIZE")
     c.fillBorder = Toggle(cards.border, "portraitFillBorder", false, "Fill border into frame gap", -660, "MSUF2_PORTRAIT_FILL_BORDER")
-    c.portraitBg = Toggle(cards.style, "portraitBgEnabled", false, "Portrait background", -112, "MSUF2_PORTRAIT_BG")
+    c.portraitBg = Toggle(cards.style, "portraitBgEnabled", false, "Portrait background", -112, "MSUF2_PORTRAIT_BG",
+        { afterSet = Refresh, search = "Portrait background backdrop behind 3D model class icon" })
+    c.bgColorMode = Drop(cards.style, "portraitBgColorMode", "CUSTOM", "Background color", PORTRAIT_BG_COLOR_MODES, -166,
+        "MSUF2_PORTRAIT_BG_COLOR_MODE", { normalize = NormalizePortraitBgColorMode,
+            search = "Portrait background color custom class reaction 3D model backdrop" })
+    c.bgAlpha = Slide(cards.style, "portraitBgAlpha", 85, "Background opacity", 0, 100, 1, -220, "MSUF2_PORTRAIT_BG_ALPHA",
+        { search = "Portrait background opacity alpha transparency 3D model backdrop" })
+    if M.AddTooltip then
+        M.AddTooltip(c.bgColorMode, "Background color",
+            "Custom uses the Portrait Background Color. Class color tints players; NPCs keep the custom color.", { hook = true })
+    end
     -- The Castbar section's Icon tab hosts a second toggle for this same key on
     -- every unit that has a castbar. Re-run the page refreshers so the twin
     -- surface picks up the new state instead of showing a stale checkbox.
-    c.castSpellIcon = Toggle(cards.style, "portraitCastSpellIcon", false, "Show cast spell icon in portrait", -166, "MSUF2_PORTRAIT_CAST_ICON", {
+    c.castSpellIcon = Toggle(cards.style, "portraitCastSpellIcon", false, "Show cast spell icon in portrait", -274, "MSUF2_PORTRAIT_CAST_ICON", {
         afterSet = CASTBAR_UNITS[p.unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil,
         search = "Portrait cast spell icon casting channel empower" })
-    c.flip = Toggle(cards.style, "portraitFlip", false, "Flip portrait left to right", -220, "MSUF2_PORTRAIT_FLIP", { tab = "advanced" })
-    c.shadow = Slide(cards.style, "portraitInnerShadow", 0, "Inset shadow strength", 0, 100, 1, -274, "MSUF2_PORTRAIT_SHADOW", { tab = "advanced" })
+    c.flip = Toggle(cards.style, "portraitFlip", false, "Flip portrait left to right", -328, "MSUF2_PORTRAIT_FLIP", { tab = "advanced" })
+    c.shadow = Slide(cards.style, "portraitInnerShadow", 0, "Inset shadow strength", 0, 100, 1, -382, "MSUF2_PORTRAIT_SHADOW", { tab = "advanced" })
     c.dragonPreviewExtra = p.DragonPreview(cards.dragon, "dragonPreviewExtra", -58, ReviewedMeta(ctx, "portrait.classification_preview_dragon",
         "ephemeral", "excluded", "Temporary dragon preview while adjusting decoration geometry; no saved setting."),
         "portrait-dragon-preview")
@@ -431,8 +462,9 @@ function PortraitSection.Gates(p)
     local function PortraitPlacementIs(conf, mode)
         return PortraitActive() and ((conf.portraitPlacement or "ATTACHED") == mode)
     end
-    local function PortraitIs2D(conf)
-        return PortraitActive() and ((conf.portraitRender or "2D") == "2D")
+    -- Zoom centre applies to the 2D crop and the 3D camera alike.
+    local function PortraitHasImage(conf)
+        return PortraitActive() and (conf.portraitRender or "2D") ~= "CLASS"
     end
     -- The Blizzard ring shape brings the stock gold ring with it, so every MSUF
     -- border control is inert while it is selected.
@@ -469,9 +501,14 @@ function PortraitSection.Gates(p)
                 and not PortraitFillsBar(conf)
                 and PortraitUsesSeparateSize(conf)
         end },
-        { controls = { c.panX, c.panY }, on = PortraitIs2D },
+        { controls = { c.panX, c.panY }, on = PortraitHasImage },
         { controls = c.zoom, on = function(conf) return PortraitActive() and conf.portraitRender ~= "CLASS" end },
+        { controls = c.modelRotation, on = function(conf) return PortraitActive() and conf.portraitRender == "3D" end,
+            reason = function() return (M.TranslateText or M.Tr)("Choose the 3D portrait render to change this.") end },
         { controls = c.flip, on = PortraitActive },
+        { controls = { c.bgColorMode, c.bgAlpha }, on = function(conf)
+            return PortraitActive() and conf.portraitBgEnabled == true
+        end },
         { controls = c.shadow, on = function(conf) return PortraitActive() and (conf.portraitShape or "SQUARE") == "SQUARE" end },
         { controls = c.dragonArtwork, on = PortraitActive },
         { controls = c.dragonControls, on = function(conf)

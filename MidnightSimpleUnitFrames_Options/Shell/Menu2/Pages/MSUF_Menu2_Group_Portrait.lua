@@ -22,6 +22,7 @@ local CurrentScope = Parts.CurrentScope
 local RefreshContext = Parts.RefreshContext
 local SetSectionHeaderStatus = Parts.SetSectionHeaderStatus
 local GroupPage = Parts.GroupPage
+local Tr = M.TranslateText or M.Tr
 
 --- Party portrait workspace. Bindings are intentionally fixed to gf_party
 --- rather than CurrentScope: the shell is hidden outside Party and Raid/Mythic
@@ -61,7 +62,7 @@ end
 local PortraitBuild = {}
 function PortraitBuild.Shell(ctx, builder)
     local s = { kind = "party", stateKey = "gf_party" }
-    local cardH = { main = 224, geometry = 440, placement = 382, border = 440, style = 330 }
+    local cardH = { main = 262, geometry = 494, placement = 382, border = 440, style = 384 }
     local tabH = {
         general = cardH.main + 116,
         geometry = cardH.geometry + 116,
@@ -70,7 +71,7 @@ function PortraitBuild.Shell(ctx, builder)
         advanced = cardH.style + 116,
     }
     local placementValues = Shared.PortraitPlacementValues()
-    local renderValues = VT("2D", "2D portrait", "CLASS", "Class portrait")
+    local renderValues = VT("2D", "2D portrait", "3D", "3D portrait", "CLASS", "Class portrait")
     local sizeModeValues = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height")
     local shapeValues = VT("SQUARE", "Square", "CIRCLE", "Circle", "ROUNDED", "Rounded", "DIAMOND", "Diamond")
     local borderValues = VT("NONE", "No border", "SOLID", "Solid", "CLASS_COLOR", "Class color", "REACTION", "Reaction color", "CUSTOM", "Custom color")
@@ -292,6 +293,7 @@ function PortraitBuild.Controls(ctx, s)
     local mainCard, geometryCard, placementCard, borderCard, styleCard = s.mainCard, s.geometryCard, s.placementCard, s.borderCard, s.styleCard
     local renderValues, sizeModeValues, shapeValues, borderValues = s.renderValues, s.sizeModeValues, s.shapeValues, s.borderValues
     local placementValues, ClassStyleValues = s.placementValues, s.ClassStyleValues
+    local BgColorModeValues = VT("CUSTOM", "Custom color", "CLASS", "Class color", "REACTION", "Reaction color")
     local RefreshPortraitControls, PortraitMeta, SetValue = s.RefreshPortraitControls, s.PortraitMeta, s.SetValue
     local options, controls = s.rowOptions, {}
     Schema.Build(ctx, mainCard, {
@@ -306,6 +308,10 @@ function PortraitBuild.Controls(ctx, s)
         { "dropdown", "portraitRender", "2D", { "Render", renderValues, 220 }, { 16, -116, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
         { "toggle", "portraitClickable", false, { "Clickable portrait", 16, -174, cardW - 32 },
             flagsAfter = { _msuf2SearchText = "Clickable portrait group frame target right click menu click casting mouseover" } },
+        -- Party members are never identity-restricted, so their models may stay
+        -- through instanced combat; unit frames always switch to 2D there.
+        { "toggle", "portraitModelInstanceCombat", false, { "Keep 3D in instanced combat", 16, -210, cardW - 32 },
+            flagsAfter = { _msuf2SearchText = "3D portrait model instanced combat dungeon raid mythic keep 2D fallback" } },
     }, options, controls)
     Schema.Build(ctx, borderCard, {
         { "dropdown", "portraitShape", "SQUARE", { "Shape", shapeValues, 220 }, { 16, -58, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
@@ -332,6 +338,9 @@ function PortraitBuild.Controls(ctx, s)
         { "slider", "portraitZoom", 100, { "Portrait zoom", 100, 300, 1, 280 }, { 16, -278, cardW - 58, "CENTER" } },
         { "slider", "portraitPanX", 0, { "Zoom center X", -100, 100, 1, 280 }, { 16, -332, cardW - 58, "CENTER" } },
         { "slider", "portraitPanY", 0, { "Zoom center Y", -100, 100, 1, 280 }, { 16, -386, cardW - 58, "CENTER" } },
+        -- Turns the 3D head; Flip adds its quarter turn on top.
+        { "slider", "portraitModelRotation", 0, { "3D rotation", -180, 180, 1, 280 }, { 16, -440, cardW - 58, "CENTER" },
+            flagsAfter = { _msuf2SearchText = "3D portrait rotation turn head face model facing angle" } },
     }, options, controls)
     Schema.Build(ctx, placementCard, {
         { "dropdown", "portraitPlacement", "ATTACHED", { "Placement", placementValues.modes, 220 },
@@ -357,10 +366,16 @@ function PortraitBuild.Controls(ctx, s)
     Schema.Build(ctx, styleCard, {
         { "dropdown", "portraitClassStyle", "BLIZZARD", { "Class portrait style", ClassStyleValues, 220 },
             { 16, -58, min(220, cardW - 32) }, normalize = M.NormalizePortraitClassStyle },
-        { "toggle", "portraitBgEnabled", false, { "Portrait background", 16, -112, cardW - 32 }, afterSet = RefreshPortraitControls },
-        { "color", "portraitBgColor", { 0.05, 0.05, 0.05 }, { "Portrait Background Color" }, { 16, -158, min(260, cardW - 32), "LEFT" } },
-        { "slider", "portraitBgColorA", 0.85, { "Background opacity", 0, 1, 0.05, 280 }, { 16, -210, cardW - 58, "CENTER" }, beforeBind = M.UsePercentInput },
-        { "toggle", "portraitCastSpellIcon", false, { "Show cast spell icon in portrait", 16, -274, cardW - 32 },
+        { "toggle", "portraitBgEnabled", false, { "Portrait background", 16, -112, cardW - 32 }, afterSet = RefreshPortraitControls,
+            flagsAfter = { _msuf2SearchText = "Portrait background backdrop behind 3D model class icon" } },
+        -- Custom uses the colour below; Class tints each member, Reaction uses friend/foe colours.
+        { "dropdown", "portraitBgColorMode", "CUSTOM", { "Background color", BgColorModeValues, 220 },
+            { 16, -158, min(220, cardW - 32) }, normalize = MSUF.UF.Shared.NormalizePortraitBgColorMode,
+            afterSet = RefreshPortraitControls,
+            flagsAfter = { _msuf2SearchText = "Portrait background color custom class reaction 3D model backdrop" } },
+        { "color", "portraitBgColor", { 0.05, 0.05, 0.05 }, { "Portrait Background Color" }, { 16, -212, min(260, cardW - 32), "LEFT" } },
+        { "slider", "portraitBgColorA", 0.85, { "Background opacity", 0, 1, 0.05, 280 }, { 16, -264, cardW - 58, "CENTER" }, beforeBind = M.UsePercentInput },
+        { "toggle", "portraitCastSpellIcon", false, { "Show cast spell icon in portrait", 16, -328, cardW - 32 },
             flagsAfter = { _msuf2SearchText = "Portrait cast spell icon casting channel empower" } },
     }, options, controls)
     s.controls = controls
@@ -402,6 +417,9 @@ function PortraitBuild.Gates(ctx, s)
         end },
         { controls = { c.portraitZoom, c.portraitPanX, c.portraitPanY },
             on = function(conf) return Active(conf) and (conf.portraitRender or "2D") ~= "CLASS" end },
+        { controls = c.portraitModelRotation, on = function(conf)
+            return Active(conf) and (conf.portraitRender or "2D") == "3D"
+        end, reason = function() return Tr("Choose the 3D portrait render to change this.") end },
         { controls = c.portraitEdgeSoftness, on = function(conf)
             return Active(conf)
                 and (conf.portraitShape or "SQUARE") ~= "BLIZZARD"
@@ -419,8 +437,19 @@ function PortraitBuild.Gates(ctx, s)
                 and (conf.portraitBorderArt or "FLAT") ~= "RELIEF"
         end },
         { controls = c.portraitClassStyle, on = function(conf) return Active(conf) and (conf.portraitRender or "2D") == "CLASS" end },
-        { controls = { c.portraitBgColor, c.portraitBgColorA },
+        -- Classic never restricts unit identity: 3D models stay in every fight there.
+        { controls = c.portraitModelInstanceCombat, on = function(conf)
+            return Active(conf) and (conf.portraitRender or "2D") == "3D" and MSUF.Client.IsRetail == true
+        end, reason = function()
+            if MSUF.Client.IsRetail ~= true then return Tr("WoW Classic shows 3D portraits in every fight.") end
+            return Tr("Choose the 3D portrait render to change this.")
+        end },
+        { controls = { c.portraitBgColorMode, c.portraitBgColorA },
             on = function(conf) return Active(conf) and conf.portraitBgEnabled == true end },
+        { controls = c.portraitBgColor, on = function(conf)
+            return Active(conf) and conf.portraitBgEnabled == true
+                and MSUF.UF.Shared.NormalizePortraitBgColorMode(conf.portraitBgColorMode) == "CUSTOM"
+        end },
     }, {
         also = function() SetSectionHeaderStatus(sec, nil) end,
         track = function(c, refresh) return M.TrackCollapsibleRefresh(c, sec, refresh) end,

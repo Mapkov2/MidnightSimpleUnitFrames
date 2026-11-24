@@ -708,6 +708,17 @@
       ]
     },
     {
+      "test": "tools/tests/portrait_model_3d_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/castbar_interrupt_ready_geometry.lua",
       "phase": "runtime"
     },

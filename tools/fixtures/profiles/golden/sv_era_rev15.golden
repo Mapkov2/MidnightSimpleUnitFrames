@@ -304,6 +304,7 @@ profile["Profile01"].gf_party.petsTextSize = 11
 profile["Profile01"].gf_party.petsWidth = 100
 profile["Profile01"].gf_party.petsX = -250
 profile["Profile01"].gf_party.petsY = -150
+profile["Profile01"].gf_party.portraitModelInstanceCombat = false
 profile["Profile01"].gf_party.showPartyInRaid = false
 profile["Profile01"].gf_party.smallRaidAsParty = false
 profile["Profile01"].gf_party.sortAlphabeticalWithinRole = false

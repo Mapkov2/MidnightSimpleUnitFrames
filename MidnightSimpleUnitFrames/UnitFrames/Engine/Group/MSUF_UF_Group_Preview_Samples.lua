@@ -497,7 +497,8 @@ local function ApplyPreviewData(frame, slot, kind, scene)
         isolatedScene.portraitSpecMeta.__index, isolatedScene.portraitConfigMeta.__index = spec, spec.portrait
         spec = isolatedScene.portraitSampleSpec
         local p = spec.portrait
-        p.render = art.texture and "2D" or nil
+        -- 3D keeps its model (the player stands in); sample art only replaces 2D images.
+        p.render = frame.MSUFSpec.portrait and frame.MSUFSpec.portrait.render == "3D" and "3D" or (art.texture and "2D" or nil)
         p.texL, p.texR, p.texT, p.texB = art.l, art.r, art.t, art.b
         local classArt = frame.MSUFSpec.portrait and frame.MSUFSpec.portrait.render == "CLASS"
         p.panOffsetX, p.panOffsetY = classArt and 0 or nil, classArt and 0 or nil

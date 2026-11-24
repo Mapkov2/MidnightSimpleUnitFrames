@@ -342,7 +342,7 @@ local SEPARATORS = VTR [[
 ~=~
 :=:
 ]]
-local PORTRAIT_RENDER = VTP "2D=2D portrait|CLASS=Class portrait"
+local PORTRAIT_RENDER = VTP "2D=2D portrait|3D=3D portrait|CLASS=Class portrait"
 local PORTRAIT_SHAPES = VTP "SQUARE=Square|CIRCLE=Circle|ROUNDED=Rounded|DIAMOND=Diamond|BLIZZARD=Blizzard ring"
 local PORTRAIT_BORDERS = VTP "NONE=No border|SOLID=Solid|CLASS_COLOR=Class color|REACTION=Reaction color|CUSTOM=Custom color"
 local function GetConf(unit)
@@ -374,9 +374,10 @@ local COPY_PORTRAIT_FIELDS = WL [[
     portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitClickable portraitBlizzardElite
     portraitBlizzardCorner portraitBlizzardDirection portraitBlizzardStandaloneRing portraitShape
     portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY
-    portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo
+    portraitZoom portraitPanX portraitPanY portraitModelRotation portraitPlacement portraitDetachedPoint portraitDetachedTo
     portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitEdgeSoftness
-    portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder
+    portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitBgColorMode
+    portraitBgAlpha portraitFillBorder
     portraitDecoOverride portraitFlip portraitInnerShadow portraitDragonArtwork portraitDragonScale
     portraitDragonX portraitDragonY portraitDragonFlip portraitDragonInInstances portraitDragonLayer
     portraitDragonLevel]]

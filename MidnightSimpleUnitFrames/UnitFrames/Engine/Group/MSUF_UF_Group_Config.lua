@@ -1359,9 +1359,12 @@ local function CompilePortrait(kind, conf, frameHeight)
   local portrait = {
     enabled = mode ~= "OFF",
     side = mode == "RIGHT" and "RIGHT" or "LEFT",
-    -- The group page offers 2D and class art only; an imported 3D value would
-    -- otherwise build a native model on every party and raid button.
-    render = conf.portraitRender == "CLASS" and "CLASS" or "2D",
+    -- Only party reaches this table (raid kinds return early above), so a 3D
+    -- value builds at most one native model per party button.
+    render = Shared.NormalizePortraitRender(conf.portraitRender),
+    -- Party members are never identity-restricted, so the party may keep its
+    -- models through instanced combat (player and pet unit frames always do).
+    modelInstanceCombat = conf.portraitModelInstanceCombat == true,
     classStyle = Shared.NormalizePortraitClassStyle(conf.portraitClassStyle),
     castSpellIcon = conf.portraitCastSpellIcon == true,
     clickable = conf.portraitClickable == true,
@@ -1397,11 +1400,16 @@ local function CompilePortrait(kind, conf, frameHeight)
       g = Num(conf.portraitBgColorG, 0.05),
       b = Num(conf.portraitBgColorB, 0.05),
       a = Num(conf.portraitBgColorA, 0.85),
+      mode = Shared.NormalizePortraitBgColorMode(conf.portraitBgColorMode),
     },
   }
+  -- Class and reaction tints follow the unit, so portrait events repaint them.
+  portrait.bg.dynamic = portrait.bg.enabled and portrait.bg.mode ~= "CUSTOM"
   local portraitDetails = MSUF.PortraitDetails
   if portraitDetails then portraitDetails.Compile(portrait, conf) end
   Shared.CompilePortraitTexCoords(portrait, conf.portraitZoom, width, height, conf.portraitPanX, conf.portraitPanY)
+  Shared.CompilePortraitModel(portrait, conf.portraitZoom, conf.portraitPanX, conf.portraitPanY,
+    conf.portraitModelRotation)
   return portrait
 end
 

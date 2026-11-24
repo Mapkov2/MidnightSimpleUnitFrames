@@ -12169,6 +12169,17 @@
       ]
     },
     {
+      "path": "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitModel.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"
+    },
+    {
       "path": "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Prediction_Glow.lua",
       "clients": [
         "Mainline",

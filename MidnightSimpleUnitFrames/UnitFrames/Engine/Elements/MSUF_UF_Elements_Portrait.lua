@@ -207,6 +207,8 @@ local issecretvalue = issecretvalue
 
 local Portrait = {}
 local Details = MSUF.PortraitDetails
+-- Optional 3D render (MSUF_UF_PortraitModel.lua); without it "3D" draws as 2D.
+local Model = MSUF.PortraitModel
 local ApplyUnitPortrait
 local ApplyClassPortrait
 local UpdateCastPortrait
@@ -854,6 +856,19 @@ local function LayoutPortrait(frame, p)
     UF.Shared.LayoutPortraitImage(frame.portrait, holder, p and p.render ~= "CLASS" and p or nil,
       holder._msufLayoutWidth or width, holder._msufLayoutHeight or height)
   end
+  if Model and holder.model3D then
+    local modelWidth, modelHeight = holder._msufLayoutWidth or width, holder._msufLayoutHeight or height
+    if point == "FULL" and holder._msufLayoutWidth == nil then
+      -- A fill-the-bar portrait takes its size from the bar; read it here once
+      -- so the model inset and pan use the real extent, not the size slider.
+      local barWidth = anchor and anchor.GetWidth and tonumber(anchor:GetWidth()) or 0
+      local barHeight = anchor and anchor.GetHeight and tonumber(anchor:GetHeight()) or 0
+      if barWidth > 2 * x then modelWidth = barWidth - (2 * x) end
+      if barHeight > 2 * y then modelHeight = barHeight - (2 * y) end
+    end
+    holder._msufModelWidth, holder._msufModelHeight = modelWidth, modelHeight
+    Model.Layout(holder, p, modelWidth, modelHeight)
+  end
 end
 
 local function UnitClassToken(unit)
@@ -976,6 +991,55 @@ local function BindUnitPortraitTexture(texture, unit, p)
   SetTexCoordCached(texture, Get2DPortraitTexCoords(p))
 end
 
+-- 3D render helpers; one table keeps the main chunk under its local budget.
+local ModelPath = {}
+
+-- The base image hides under an active cast icon and for the invisible anchor.
+function ModelPath.ImageVisible(frame)
+  return frame._msufPortraitCastIconActive ~= true and frame._msufPortraitPositionAnchorOnly ~= true
+end
+
+--- Hands the portrait back from the 3D model to the 2D image. The texture
+--- still holds whatever it showed before the model took over, so its key is
+--- cleared and the next 2D bind resolves the native portrait again.
+function ModelPath.Drop(frame)
+  if frame._msufPortraitModelActive ~= true then return false end
+  frame._msufPortraitModelActive = nil
+  if Model then Model.Hide(frame.MSUFPortraitHolder) end
+  local texture = frame.portrait
+  if texture then
+    texture._msufPortraitKey = nil
+    texture._msufPortraitGUID = nil
+    SetShown(texture, ModelPath.ImageVisible(frame))
+  end
+  return true
+end
+
+--- 3D half of ApplyUnitPortrait; false (instanced combat only) keeps the 2D
+--- path. A visible frame without its unit is either a preview (Edit Mode,
+--- boss/arena test), where the player model stands in, or a live frame about to
+--- be hidden by its unit watch, which simply keeps the model it shows.
+function ModelPath.Apply(texture, unit, frame, p, force, guid, exists)
+  local holder = frame.MSUFPortraitHolder
+  if not (holder and unit) then return false end
+  if exists == nil then exists = UnitExistsPlain(unit) end
+  local bindUnit = unit
+  if not exists then
+    if frame._msufPortraitModelActive == true and holder.model3D and holder.model3D._msufUnit ~= nil then
+      SetShown(texture, false)
+      return true
+    end
+    bindUnit, guid = "player", nil
+  end
+  if not Model.Bind(frame, holder, bindUnit, p, guid, force, ModelPath.ImageVisible(frame),
+    portraitUnitGeneration[bindUnit]) then
+    return false
+  end
+  frame._msufPortraitModelActive = true
+  SetShown(texture, false)
+  return true
+end
+
 ApplyUnitPortrait = function(texture, unit, frame, p, force,
     keyPrepared, preparedKey, preparedGuid, preparedExists)
   if frame then
@@ -983,6 +1047,21 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
     frame._msufPortraitAppliedRevision = frame._msufPortraitModelRevision
   end
   ClearClassPortraitCache(texture)
+  local key, guid, exists
+  if keyPrepared == true then
+    key, guid, exists = preparedKey, preparedGuid, preparedExists
+  end
+  if Model and frame and p and p.render == "3D" then
+    if ModelPath.Apply(texture, unit, frame, p, force, guid, exists) then
+      -- The prepared key lets the next unchanged identity event stop early.
+      texture._msufPortraitKey = key
+      texture._msufPortraitGUID = nil
+      return
+    end
+  end
+  if frame and ModelPath.Drop(frame) then
+    force = true
+  end
   if BossPreviewActive(unit, frame) then
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
     SetTexCoordCached(texture, Get2DPortraitTexCoords(p))
@@ -990,10 +1069,7 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
     texture._msufPortraitKey = "BOSS_PREVIEW|" .. PortraitKeyPart(unit)
     return
   end
-  local key, guid, exists
-  if keyPrepared == true then
-    key, guid, exists = preparedKey, preparedGuid, preparedExists
-  else
+  if keyPrepared ~= true then
     if unit then
       guid = UnitGUID(unit)
       if issecretvalue(guid) == true then
@@ -1064,6 +1140,10 @@ local function ApplyCastPortraitIcon(frame, icon)
   SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
   SetVertexColorCached(texture, 1, 1, 1, 1)
   SetShown(frame.portrait, false)
+  -- The model is a child frame and would draw over this holder texture.
+  if Model and frame._msufPortraitModelActive == true then
+    Model.SetVisible(frame.MSUFPortraitHolder, false)
+  end
   -- The native defensive AuraButton lives on the next absolute frame level.
   -- Keep normal cast state independent underneath it; Blizzard's secret
   -- button visibility reveals this texture automatically when no defensive is
@@ -1083,7 +1163,12 @@ local function RestoreCastPortraitIcon(frame, forceHideIcon)
   frame._msufPortraitCastIconActive = nil
   if active then
     SetShown(texture, false)
-    SetShown(frame.portrait, frame._msufPortraitPositionAnchorOnly ~= true)
+    local imageVisible = frame._msufPortraitPositionAnchorOnly ~= true
+    if Model and frame._msufPortraitModelActive == true then
+      Model.SetVisible(frame.MSUFPortraitHolder, imageVisible)
+      imageVisible = false
+    end
+    SetShown(frame.portrait, imageVisible)
   elseif forceHideIcon == true and texture then
     -- The active flag and the cached shown state can both go stale when the
     -- option is switched off while a cast overlay is up (deferred applies,
@@ -1199,12 +1284,20 @@ local function EnsurePortraitRing(holder)
   return ring
 end
 
-local function LayoutPortraitRing(holder, shape, thick, r, g, b, a)
+local function LayoutPortraitRing(holder, shape, thick, r, g, b, a, p)
   local ring = EnsurePortraitRing(holder)
   if not ring then
     return
   end
-  local key = shape .. "|" .. thick
+  -- A 3D portrait cuts its shape out of the ring (MSUF_UF_PortraitModel.lua).
+  local holeTexture = Model and p and p.render == "3D" and Model.RingHoleTexture(shape) or nil
+  local holeWidth, holeHeight = 0, 0
+  if holeTexture then
+    -- LayoutPortrait already resolved the model extents (including fill-the-bar).
+    holeWidth = tonumber(holder._msufModelWidth) or tonumber(holder._msufLayoutWidth) or tonumber(p.width) or tonumber(p.size) or 36
+    holeHeight = tonumber(holder._msufModelHeight) or tonumber(holder._msufLayoutHeight) or tonumber(p.height) or tonumber(p.size) or 36
+  end
+  local key = shape .. "|" .. thick .. (holeTexture and ("|" .. holeWidth .. "x" .. holeHeight) or "")
   if holder._msufRingKey ~= key then
     local mask = holder.ringMask
     ring:ClearAllPoints()
@@ -1216,6 +1309,7 @@ local function LayoutPortraitRing(holder, shape, thick, r, g, b, a)
       mask:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
       SetTextureCached(mask, PORTRAIT_MASKS[shape] or WHITE)
     end
+    if Model then Model.LayoutRingHole(holder, ring, holeTexture, holeWidth, holeHeight) end
     holder._msufRingKey = key
   end
   SetVertexColorCached(ring, r, g, b, a)
@@ -1479,7 +1573,7 @@ LayoutPortraitBorder = function(holder, p, r, g, b, a)
     for i = 1, 4 do
       SetShown(edges[i], false)
     end
-    LayoutPortraitRing(holder, shape, thick, r, g, b, a)
+    LayoutPortraitRing(holder, shape, thick, r, g, b, a, p)
     return
   end
   if holder.ring then
@@ -1532,7 +1626,11 @@ Portrait.PaintBlizzardBorder = LayoutBlizzardPortraitRing
 Portrait.PaintMask = ApplyPortraitMask
 Portrait.RingInflation = PortraitRingInflation
 
-local function ApplyPortraitBackground(holder, p)
+--- The backdrop behind the portrait image; a 3D model draws over it. CLASS
+--- tints players in their class colour and REACTION any unit in its reaction
+--- colour; an NPC in CLASS, an unknown class or a secret reaction keeps the
+--- configured colour. Cached setters make an unchanged repaint free.
+local function PaintPortraitBackground(holder, p, class, reaction)
   local bg = holder and holder.bg
   local cfg = p and p.bg
   if not bg then
@@ -1542,8 +1640,41 @@ local function ApplyPortraitBackground(holder, p)
     SetShown(bg, false)
     return
   end
-  SetVertexColorCached(bg, cfg.r or 0.05, cfg.g or 0.05, cfg.b or 0.05, cfg.a or 0.85)
+  local r, g, b = cfg.r or 0.05, cfg.g or 0.05, cfg.b or 0.05
+  if cfg.mode == "CLASS" then
+    local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if color then r, g, b = color.r or r, color.g or g, color.b or b end
+  elseif cfg.mode == "REACTION" then
+    if issecretvalue(reaction) == true then reaction = nil else reaction = tonumber(reaction) end
+    if reaction then
+      if reaction <= 2 then
+        r, g, b = 1, 0, 0
+      elseif reaction <= 4 then
+        r, g, b = 1, 0.6, 0
+      else
+        r, g, b = 0, 1, 0
+      end
+    end
+  end
+  SetVertexColorCached(bg, r, g, b, cfg.a or 0.85)
   SetShown(bg, true)
+end
+Portrait.BackgroundColor = PaintPortraitBackground
+
+--- Live frames: reads the class or reaction only when the tint needs it.
+local function ApplyPortraitBackground(frame, p)
+  local cfg = p and p.bg
+  local class, reaction
+  if cfg and cfg.enabled == true then
+    local unit = frame.MSUFUnitKey
+    if cfg.mode == "CLASS" then
+      class = BossPreviewClassToken(unit, frame) or ArenaPreviewClassToken(unit, frame)
+      if not class and PlainUnitBool(UnitIsPlayer, unit, false) then class = UnitClassToken(unit) end
+    elseif cfg.mode == "REACTION" and unit and UnitReaction then
+      reaction = UnitReaction(unit, "player")
+    end
+  end
+  PaintPortraitBackground(frame.MSUFPortraitHolder, p, class, reaction)
 end
 
 -- Blizzard separates its dragon from the base ring. Geometry follows
@@ -1752,6 +1883,8 @@ function Portrait.AcquirePositionAnchor(frame, p)
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
   frame._msufPortraitPositionAnchorOnly = true
+  ModelPath.Drop(frame)
+  if Model then Model.Untrack(frame) end
   if holder.innerShadow then holder.innerShadow:Hide() end
   SetShown(frame.portrait, false)
   if frame.MSUFPortraitCastIcon then SetShown(frame.MSUFPortraitCastIcon, false) end
@@ -1795,9 +1928,17 @@ function Portrait.Apply(frame, spec)
   else
     RestoreCastPortraitIcon(frame, true)
   end
+  -- The model exists before layout so LayoutPortrait sizes and frames it.
+  if Model and p.render == "3D" then
+    Model.Ensure(holder)
+    Model.Track(frame)
+  else
+    ModelPath.Drop(frame)
+    if Model then Model.Untrack(frame) end
+  end
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
-  ApplyPortraitBackground(holder, p)
+  ApplyPortraitBackground(frame, p)
   Details.ApplyShadow(holder, p)
   LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
   UpdatePortraitClassification(frame, p)
@@ -1806,7 +1947,7 @@ function Portrait.Apply(frame, spec)
   -- Base portrait and optional cast texture remain normal background regions.
   -- A visible native defensive AuraButton covers both from the next frame
   -- level; when Blizzard hides it, no MSUF visibility transition is required.
-  SetShown(frame.portrait, true)
+  SetShown(frame.portrait, frame._msufPortraitModelActive ~= true)
   if frame.portrait then
     if PortraitFrameVisible(frame) then
       local force = frame._msufPortraitForceRefresh == true
@@ -1846,15 +1987,30 @@ function Portrait.SceneApply(frame, spec)
   frame._msufPortraitNeedsVisibleRefresh = nil
   frame._msufPortraitForceRefresh = nil
   RestoreCastPortraitIcon(frame, true)
+  if Model and p.render == "3D" then
+    Model.Ensure(holder)
+  else
+    ModelPath.Drop(frame)
+  end
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
-  ApplyPortraitBackground(holder, p)
-  Details.ApplyShadow(holder, p)
   local class = frame._msufPortraitSampleClass
+  PaintPortraitBackground(holder, p, class, frame._msufSampleReaction or 5)
+  Details.ApplyShadow(holder, p)
   LayoutPortraitBorder(holder, p, BorderStyleColor(p.border, class, frame._msufSampleReaction or 5))
   UpdatePortraitClassification(frame, p)
   SetShown(holder, true)
   local texture = frame.portrait
+  -- Live preview: the sample's live unit, otherwise the player stands in. The
+  -- model is bound again only when that unit or its GUID changes, so slider
+  -- drags replay the camera without reloading the model.
+  if Model and p.render == "3D" and Model.BindScene(holder, frame._msufSamplePortraitUnit, p) then
+    frame._msufPortraitModelActive = true
+    ClearClassPortraitCache(texture)
+    SetShown(texture, false)
+    return
+  end
+  ModelPath.Drop(frame)
   SetShown(texture, true)
   local unit = SetPortraitTexture and frame._msufSamplePortraitUnit
   local art = frame._msufSamplePortraitArt
@@ -1889,6 +2045,8 @@ function Portrait.Disable(frame)
   frame._msufPortraitQueuedRevision = nil
   ApplyPortraitClickTarget(frame, nil)
   SyncPlayerPortraitWorldEvent(frame, frame and frame.MSUFSpec, nil)
+  ModelPath.Drop(frame)
+  if Model then Model.Untrack(frame) end
   local holder = frame.MSUFPortraitHolder
   frame._msufPortraitNeedsVisibleRefresh = nil
   frame._msufPortraitForceRefresh = nil
@@ -1932,6 +2090,7 @@ function Portrait.UpdateConnectionState(frame, event, unit)
   if PortraitBorderNeedsUpdate(event, p) then
     LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
   end
+  if p.bg and p.bg.dynamic == true then ApplyPortraitBackground(frame, p) end
 end
 
 function Portrait.Update(frame, event, unit)
@@ -1963,8 +2122,10 @@ function Portrait.Update(frame, event, unit)
     UpdatePortraitClassification(frame, p)
   end
   if event == "UNIT_CLASSIFICATION_CHANGED" then return end
+  local dynamicBg = p.bg and p.bg.dynamic == true
   if event == "UNIT_FACTION" then
     LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
+    if dynamicBg then ApplyPortraitBackground(frame, p) end
     return
   end
 
@@ -1973,6 +2134,7 @@ function Portrait.Update(frame, event, unit)
     if PortraitBorderNeedsUpdate(event, p) then
       LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
     end
+    if dynamicBg then ApplyPortraitBackground(frame, p) end
     return
   end
 
@@ -2028,12 +2190,29 @@ function Portrait.Update(frame, event, unit)
   if PortraitBorderNeedsUpdate(event, p) then
     LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p, class))
   end
+  if dynamicBg then ApplyPortraitBackground(frame, p) end
 end
 
 --- Exposed because it is a load-bearing performance contract, not an internal
 --- detail: a portrait whose border colour is static must answer false here for
 --- every gameplay event, which is what keeps an art border free in combat.
 Portrait.BorderNeedsUpdate = function(event, p) return PortraitBorderNeedsUpdate(event, p) end
+
+--- The 3D model's instanced-combat rule asks for a re-decision here: no forced
+--- SetUnit, the same GUID simply shows its kept model again.
+if Model then
+  Model.SetRefreshHandler(function(frame)
+    local p = frame._msufPortraitRuntimeCfg
+    if not (p and p.enabled == true and p.render == "3D" and frame.portrait and frame.MSUFPortraitHolder) then
+      return
+    end
+    if PortraitFrameVisible(frame) then
+      ApplyPortraitUpdate(frame)
+    else
+      frame._msufPortraitNeedsVisibleRefresh = true
+    end
+  end)
+end
 
 Portrait.Routes = { events = true, identity = true }
 UF.RegisterElement("Portrait", Portrait)

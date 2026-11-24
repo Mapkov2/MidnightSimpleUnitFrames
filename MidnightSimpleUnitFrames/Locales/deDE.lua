@@ -4,6 +4,12 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
+L["3D portrait"] = "3D-Porträt"
+L["Keep 3D in instanced combat"] = "3D im instanzierten Kampf behalten"
+L["WoW Classic shows 3D portraits in every fight."] = "In WoW Classic bleiben 3D-Porträts in jedem Kampf."
+L["Choose the 3D portrait render to change this."] = "Wähle das 3D-Porträt als Darstellung, um dies zu ändern."
+L["3D rotation"] = "3D-Drehung"
+L["Custom uses the Portrait Background Color. Class color tints players; NPCs keep the custom color."] = "Benutzerdefiniert nutzt die Porträt-Hintergrundfarbe. Klassenfarbe färbt Spieler; NPCs behalten die eigene Farbe."
 L["%s / %s"] = "%s / %s"
 L["Outline settings"] = "Rahmeneinstellungen"
 L["Match tooltip border"] = "Tooltip-Rahmen übernehmen"

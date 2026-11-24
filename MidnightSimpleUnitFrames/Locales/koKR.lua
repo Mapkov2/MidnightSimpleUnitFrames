@@ -11,6 +11,12 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
+L["3D portrait"] = "3D 초상화"
+L["Keep 3D in instanced combat"] = "인스턴스 전투 중에도 3D 유지"
+L["WoW Classic shows 3D portraits in every fight."] = "WoW 클래식은 모든 전투에서 3D 초상화를 표시합니다."
+L["Choose the 3D portrait render to change this."] = "변경하려면 렌더링을 3D 초상화로 선택하세요."
+L["3D rotation"] = "3D 회전"
+L["Custom uses the Portrait Background Color. Class color tints players; NPCs keep the custom color."] = "사용자 지정은 초상화 배경 색상을 사용합니다. 직업 색상은 플레이어에게 적용되며 NPC는 사용자 지정 색상을 유지합니다."
 L["%s / %s"] = "%s / %s"
 L["Outline settings"] = "테두리 설정"
 L["Match tooltip border"] = "툴팁 테두리 사용"

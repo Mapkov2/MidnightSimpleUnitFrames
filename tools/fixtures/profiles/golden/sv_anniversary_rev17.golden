@@ -43,6 +43,7 @@ profile["Profile01"].gf_mythicraid.petsHoTsOnlyMine = false
 profile["Profile01"].gf_party.fadeInOnShow = false
 profile["Profile01"].gf_party.petsHoTsEnabled = false
 profile["Profile01"].gf_party.petsHoTsOnlyMine = false
+profile["Profile01"].gf_party.portraitModelInstanceCombat = false
 profile["Profile01"].gf_party.showPartyInRaid = false
 profile["Profile01"].gf_raid.fadeInOnShow = false
 profile["Profile01"].gf_raid.petsHoTsEnabled = false

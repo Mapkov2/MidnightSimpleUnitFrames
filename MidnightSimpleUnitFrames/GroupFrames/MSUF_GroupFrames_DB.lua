@@ -664,6 +664,7 @@ end
 --- clone blocks above: those scopes intentionally do not own portrait config.
 PARTY_DEFAULTS.portraitMode = "OFF"
 PARTY_DEFAULTS.portraitRender = "2D"
+PARTY_DEFAULTS.portraitModelInstanceCombat = false
 PARTY_DEFAULTS.portraitClassStyle = "BLIZZARD"
 PARTY_DEFAULTS.portraitShape = "SQUARE"
 PARTY_DEFAULTS.portraitSizeMode = "UNIFORM"

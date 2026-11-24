@@ -4647,6 +4647,7 @@ profile["Default"].gf_party.portraitFillBorder = false
 profile["Default"].gf_party.portraitHeight = 0
 profile["Default"].gf_party.portraitLevelOffset = 7
 profile["Default"].gf_party.portraitMode = "OFF"
+profile["Default"].gf_party.portraitModelInstanceCombat = false
 profile["Default"].gf_party.portraitOffsetX = 0
 profile["Default"].gf_party.portraitOffsetY = 0
 profile["Default"].gf_party.portraitOverlayAlign = "LEFT"

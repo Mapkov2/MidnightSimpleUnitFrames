@@ -478,6 +478,9 @@ local function SetWidgetEnabled(w, enabled)
     if type(w._msufToggleUpdate) == "function" then w._msufToggleUpdate() end
 end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
+-- The core compiler's normalizer: 2D, 3D or CLASS. A local copy that only knew
+-- 2D/CLASS rewrote a saved 3D render to 2D on every preview layout.
+local NormalizePortraitRender = MSUF.UF.Shared.NormalizePortraitRender
 local function EnsureUnitPortraitStyle(key)
     local u = UnitDB(key)
     if not u then return nil end
@@ -485,7 +488,7 @@ local function EnsureUnitPortraitStyle(key)
     for field, value in pairs(PORTRAIT_STYLE_DEFAULTS) do
         if u[field] == nil then u[field] = value end
     end
-    u.portraitRender = (u.portraitRender == "CLASS") and "CLASS" or "2D"
+    u.portraitRender = NormalizePortraitRender(u.portraitRender)
     u.portraitClassStyle = NormalizePortraitClassStyle(u.portraitClassStyle)
     return u
 end
@@ -500,7 +503,7 @@ local function PortraitStyleSet(key, field, value)
     if field == "portraitClassStyle" then
         value = NormalizePortraitClassStyle(value)
     elseif field == "portraitRender" then
-        value = (value == "CLASS") and "CLASS" or "2D"
+        value = NormalizePortraitRender(value)
     end
     u[field] = value
 end
