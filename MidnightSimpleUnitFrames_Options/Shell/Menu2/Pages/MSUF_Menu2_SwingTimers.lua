@@ -333,5 +333,13 @@ local function Build(ctx)
     BuildCopy(ctx, ui, width)
     ui.builder = b
     SelectHand(ui.selected)
+    M.TrackRefresh(ctx, function()
+        local alpha = Swing.GetEnabled() and 1 or 0.48
+        for i = 1, #HANDS do
+            for _, entry in ipairs(ui.handEntries[HANDS[i]]) do
+                entry.outer:SetAlpha(alpha)
+            end
+        end
+    end)
 end
 M.RegisterPage("swingtimers", { title = "Swing Timers (Forever)", build = Build, version = 4 })

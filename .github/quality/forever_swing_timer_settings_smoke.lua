@@ -739,7 +739,10 @@ ns.MSUF2={
         bind(ctx,widget,get,set,meta)
         return widget
     end,
-    TrackRefresh=function(_,refresh) refresh() end,
+    TrackRefresh=function(ctx,refresh)
+        ctx.refreshers[#ctx.refreshers + 1] = refresh
+        refresh()
+    end,
     BindTextInputAt=function(ctx,parent,label,x,y,width,get,set,commitOnBlur,meta)
         local widget=object(nil,parent);widget.label,widget.commitOnBlur=label,commitOnBlur
         widget:SetPoint("TOPLEFT",parent,"TOPLEFT",x,y);widget:SetWidth(width)
@@ -748,7 +751,9 @@ ns.MSUF2={
     BindNumberWidget=function(ctx,widget,get,set,_,meta) bind(ctx,widget,get,set,meta) end,
     Format=function(text,...) return string.format(text,...) end,
     RegisterPage=function(key,spec) assert(key=="swingtimers"); page=spec end,
-    Refresh=noop,
+    Refresh=function(ctx)
+        for _, refresh in ipairs(ctx.refreshers) do refresh() end
+    end,
 }
 -- Partial standalone fixtures load the production owners rather than inventing defaults/adapters.
 assert(loadfile(root.."/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua"))("MSUF",ns)
@@ -760,9 +765,27 @@ assert(loadstring("local M=...\n"..Slice.Function(supportSource,"function M.Bind
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlSchema.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua"))("MSUF",ns)
-local swingContext = { SetContentHeight = noop }
+assert(swing.SetEnabled(false))
+local swingContext = { SetContentHeight = noop, refreshers = {} }
 page.build(swingContext)
 local swingPreview = assert(swingContext._msuf2SwingTimerPreview)
+local function AssertAccordionAlpha(expected)
+    for id, section in pairs(sections) do
+        local alpha = section._msuf2CollapsibleEntry.outer.alpha or 1
+        assert(alpha == (id == "swing_module" and 1 or expected), id .. " follows the module's accordion opacity")
+    end
+    assert((swingPreview.section.alpha or 1) == 1, "the preview stays at full opacity")
+end
+AssertAccordionAlpha(0.48)
+controls.enabled.set(true)
+assert(swing.GetEnabled())
+AssertAccordionAlpha(1)
+controls.enabled.set(false)
+AssertAccordionAlpha(0.48)
+assert(swingPreview.SelectHand("off"))
+AssertAccordionAlpha(0.48)
+controls.enabled.set(true)
+AssertAccordionAlpha(1)
 for _, hand in ipairs({ "main", "off", "ranged" }) do
     local width, height = controls[hand .. ".width"], controls[hand .. ".height"]
     assert(width.min == 4 and width.max == 1200 and width.step == 1, hand .. " width slider range")
