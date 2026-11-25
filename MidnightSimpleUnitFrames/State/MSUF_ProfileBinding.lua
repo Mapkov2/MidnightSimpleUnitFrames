@@ -21,14 +21,12 @@ local function PreserveUpgradePositions(profile)
     end
 end
 
---- A Forever surname character that has no binding of its own yet copies its
---- 6.5x binding (active profile, spec map, auto switch). The 6.5x entry stays
---- for 6.5x and for other characters that shared it. Without this the first
---- 7.0 login bound Default until the player picked the profile again.
+--- Copy the earlier Forever binding, including specialization assignments.
+--- Retain the original for older clients and any characters that shared it.
 function Binding.AdoptLegacyCharacter(globalDB, charKey)
     local chars = type(globalDB) == "table" and globalDB.char
     if type(chars) ~= "table" or type(charKey) ~= "string" or type(chars[charKey]) == "table" then return false end
-    local legacyKey = MSUF.GetLegacyCharacterProfileKey()
+    local legacyKey = MSUF.GetLegacyCharacterProfileKey(chars, charKey)
     local legacy = legacyKey and chars[legacyKey]
     if type(legacy) ~= "table" or getmetatable(legacy) ~= nil then return false end
     chars[charKey] = CopyTable(legacy)

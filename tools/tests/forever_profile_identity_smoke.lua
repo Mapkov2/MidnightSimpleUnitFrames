@@ -12,10 +12,11 @@ local function Check(value, message)
     assert(value, message)
     checks = checks + 1
 end
-local first, surname = "Mapko", "Main"
+local first, surname, realm = "Mapko", "Main", "Realm"
 UnitName = function() return first, surname end
-GetRealmName = function() return "Realm" end
+GetRealmName = function() return realm end
 GetLocale = function() return "enUS" end
+InCombatLockdown = function() return false end
 issecretvalue = function() return false end
 Constants = { CharacterNameSeparatorConsts = { CHARACTERNAME_SURNAME_SEPARATOR = " " } }
 local ns = { Client = { HasCharacterSurnames = true }, PublicGlobals = {} }
@@ -41,8 +42,10 @@ name, profile = ns.ResolveStartupProfile(store, main, mainKey)
 Check(name == "Main" and profile == main, "main lost its own full-name binding")
 MSUF_GlobalDB = store
 surname = "Main"
+realm = ""
 ns.RegisterLocaleLoader("deDE", function() end)
-Check(ns.FinalizeLocale() == "deDE", "locale lookup used another character binding")
+Check(ns.FinalizeLocale() == "deDE", "locale lookup lost the old realm-qualified binding")
+realm = "Realm"
 store.char[altKey] = { activeProfile = "Default" }
 name = ns.ResolveStartupProfile(store, main, altKey)
 Check(name == "Default", "returning alt did not retain its own binding")
@@ -64,6 +67,42 @@ Check(name == "Default", "6.5x binding replaced the character's own binding")
 first, surname = "Mapko Merged", nil
 Check(Key() == "Mapko Merged-Realm", "already merged names changed")
 Check(ns.GetLegacyCharacterProfileKey() == nil, "a name without surname reported a separate 6.5x key")
+local function Copy(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for key, child in pairs(value) do copy[key] = Copy(child) end
+    return copy
+end
+CopyTable = Copy
+assert(loadfile(product .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileBinding.lua"))("MidnightSimpleUnitFrames", ns)
+local Adopt = ns.ProfileBinding.AdoptLegacyCharacter
+first, surname, realm = "Mapko", "Main", ""
+local old = { activeProfile = "Main", specAutoSwitch = true, specProfileMap = { [62] = "Arcane" } }
+local other = { activeProfile = "Default" }
+local current = Key()
+local saved = { char = { [mainKey] = old, [altKey] = other, ["Mapko-Realm"] = other } }
+Check(current == "Mapko Main-" and Adopt(saved, current), "missing realm lost the full-name binding")
+local adopted = saved.char[current]
+Check(adopted.activeProfile == "Main" and adopted.specAutoSwitch and adopted.specProfileMap[62] == "Arcane",
+    "migration lost active profile or specialization assignments")
+Check(saved.char[mainKey] == old and adopted ~= old and adopted.specProfileMap ~= old.specProfileMap,
+    "migration removed or aliased the older binding")
+adopted.activeProfile = "Default"
+Check(not Adopt(saved, current) and adopted.activeProfile == "Default", "migration replaced a current binding")
+saved.char[current], saved.char["Mapko Main-OtherRealm"], saved.char["Mapko-"] = nil, other, old
+Check(not Adopt(saved, current) and saved.char[current] == nil, "migration guessed between realms")
+saved = { char = { ["Mapko-Realm"] = old, [altKey] = other } }
+Check(not Adopt(saved, current) and saved.char[current] == nil, "realm-free migration guessed from a qualified first name")
+saved.char["Mapko-"] = old
+Check(Adopt(saved, current) and saved.char[current].specProfileMap[62] == "Arcane",
+    "the exact 6.5x key written with an empty realm lost its specialization binding")
+realm = "Realm"
+Check(Adopt(saved, mainKey) and saved.char[mainKey].activeProfile == "Main", "known realm lost its 6.5x binding")
+realm = ""
+first, surname = "Solo", nil
+saved = { char = { ["Solo-Realm"] = old } }
+Check(Adopt(saved, Key()) and saved.char[Key()].activeProfile == "Main", "surname-free character lost its realm binding")
+first, surname, realm = "Mapko Merged", nil, "Realm"
 local secret = {}
 issecretvalue = function(value) return value == secret end
 surname = secret

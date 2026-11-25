@@ -63,7 +63,7 @@ end
 
 -- Pure startup choice shared with profile binding. Locale loading must use
 -- the same donor as a missing-profile repair without initializing runtime UI.
--- legacyKey (optional) names the 6.5x binding of the same character; it is
+-- legacyKey (optional) names an earlier binding of the same character; it is
 -- read only while the character has no binding of its own.
 function MSUF.ResolveStartupProfile(globalDB, legacyDB, charKey, legacyKey)
     local profiles = type(globalDB) == "table" and globalDB.profiles
@@ -116,19 +116,35 @@ function MSUF.GetCharacterProfileKey()
     return name .. "-" .. realm
 end
 
--- MSUF 6.5x keyed every character as first name and realm. On Forever a
--- surname character therefore finds its 6.5x binding under that shorter key.
--- Returns nil when the 6.5x key equals the current key.
-function MSUF.GetLegacyCharacterProfileKey()
+-- When the realm disappears, look for a unique old full-name binding.
+-- Only use the shorter 6.5x key for an exact lookup, as on older clients.
+function MSUF.GetLegacyCharacterProfileKey(characters, charKey)
     if not MSUF.Client.HasCharacterSurnames then return nil end
     local name = UnitName("player")
     local realm = GetRealmName()
     if issecretvalue and (issecretvalue(name) or issecretvalue(realm)) then return nil end
     if type(name) ~= "string" or name == "" then return nil end
-    if type(realm) ~= "string" then realm = "" end
-    local key = name .. "-" .. realm
-    if key == MSUF.GetCharacterProfileKey() then return nil end
-    return key
+    charKey = charKey or MSUF.GetCharacterProfileKey()
+    if not charKey then return nil end
+    local firstNameKey = name .. "-"
+    if type(realm) == "string" and realm ~= "" then
+        local legacyKey = firstNameKey .. realm
+        if legacyKey ~= charKey then return legacyKey end
+        return nil
+    end
+    if type(characters) ~= "table" or type(characters[charKey]) == "table" then return nil end
+    local found
+    for key, entry in pairs(characters) do
+        if type(key) == "string" and #key > #charKey and key:sub(1, #charKey) == charKey
+            and type(entry) == "table" and getmetatable(entry) == nil then
+            if found then return nil end
+            found = key
+        end
+    end
+    if found then return found end
+    if firstNameKey ~= charKey and type(characters[firstNameKey]) == "table" then
+        return firstNameKey
+    end
 end
 
 local function ActiveProfileLocale()
@@ -139,7 +155,7 @@ local function ActiveProfileLocale()
     local key = MSUF.GetCharacterProfileKey()
     if not key then return nil end
     local _, profile = MSUF.ResolveStartupProfile(globalDB, rawget(_G, "MSUF_DB"), key,
-        MSUF.GetLegacyCharacterProfileKey())
+        MSUF.GetLegacyCharacterProfileKey(type(globalDB) == "table" and globalDB.char, key))
     return LocaleFromDB(profile)
 end
 
