@@ -585,6 +585,7 @@ local function SearchClassPowerTokenForText(normalized) return SearchFirstMatch(
 
 local function SearchAuraStyleContainer(normalized)
     if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then return "targetDots" end
+    if SearchRouteHasAny(normalized, "external defensive|external defensives|externals") then return "externals" end
     if SearchRouteHasAny(normalized,
         "player defensive|player defensives|defensive buff|defensive buffs|defensive tracker")
     then
@@ -935,11 +936,11 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
         local container = SearchAuraStyleContainer(normalized)
         if pageKey == "auras3_buffs" then container = "buff"
         elseif pageKey == "auras3_debuffs" then container = "debuff" end
-        -- Global Aura Style exposes four preview contexts. Reserved products
+        -- Global Aura Style exposes five preview contexts. Reserved products
         -- are preview-only here; their Deep Style controls still route through
         -- the owning UnitFrame search records.
         if container ~= "buff" and container ~= "debuff"
-            and container ~= "playerDefensives" and container ~= "targetDots"
+            and container ~= "playerDefensives" and container ~= "targetDots" and container ~= "externals"
         then
             container = nil
         end

@@ -202,6 +202,8 @@ function Shape.SharedValue(shared, kind)
     elseif type(appearanceShapes) == "table" and appearanceShapes[kind] ~= nil then
         return appearanceShapes[kind]
     end
+    -- Unset Externals follow the Buff shape (APPEARANCE_KIND below).
+    if kind == "externals" then return Shape.SharedValue(shared, "buff") end
     return kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"
 end
 
@@ -435,10 +437,10 @@ local function GridShape(maxCount, perRow, verticalGrowth)
 end
 
 -- Appearance icon style (static border + soft shadow) is global per Aura
--- product: Buff, Debuff, Player Defensives, or Dots on Target. Compiled once
--- per product/runtime generation and stamped by reference onto each lane.
+-- product (Group External Defensives follow the named product for each value they do
+-- not store). Compiled once per product/runtime generation, stamped onto each lane.
 local APPEARANCE_KIND = {
-    buff = true, debuff = true, playerDefensives = true, targetDots = true,
+    buff = true, debuff = true, playerDefensives = true, targetDots = true, externals = "buff",
 }
 local function NormalizeAppearanceKind(kind)
     return APPEARANCE_KIND[kind] and kind or "buff"
@@ -458,6 +460,21 @@ local function SharedIconStyle(kind)
     local source = type(styles) == "table" and styles[kind] or nil
     if IconSkins and IconSkins.frozen then source = IconSkins.CommittedSource(kind, source)
     elseif type(source) ~= "table" then source = nil end
+    local parent = APPEARANCE_KIND[kind]
+    if type(parent) == "string" then
+        -- Externals keep each value they store and follow the parent for the rest.
+        local base = type(styles) == "table" and styles[parent] or nil
+        if IconSkins and IconSkins.frozen then base = IconSkins.CommittedSource(parent, base)
+        elseif type(base) ~= "table" then base = nil end
+        if source and base then
+            local merged = {}
+            for key, value in pairs(base) do merged[key] = value end
+            for key, value in pairs(source) do merged[key] = value end
+            source = merged
+        else
+            source = source or base
+        end
+    end
     local function Read(key, fallback)
         if source and source[key] ~= nil then return source[key] end
         return fallback

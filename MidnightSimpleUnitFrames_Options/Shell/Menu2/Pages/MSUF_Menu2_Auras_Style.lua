@@ -870,7 +870,8 @@ local function BuildUnitStyle(ctx, b, scope, options)
         local appearanceShape = AurasPage.Section(b, baseId .. "_appearance_shape", "Icon Shape", 112, false)
         local ssw = BodyWidth(appearanceShape)
         local appearanceLabel = previewContainer == "playerDefensives" and "Player Defensives"
-            or previewContainer == "targetDots" and "Dots on Target" or LaneTitle(lane)
+            or previewContainer == "targetDots" and "Dots on Target"
+            or previewContainer == "externals" and "External Defensive" or LaneTitle(lane)
         local shape = BindStyleDropdown(appearanceShape, M.Format("%s Icon Shape", Tr(appearanceLabel)), 24, -48,
             M.AURA_ICON_SHAPE_VALUES, ssw - 48, ReadScopeIconShape, WriteScopeIconShape, "AURAS3_ICON_SHAPE")
         AddTooltip(shape, "Global icon shape",

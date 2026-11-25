@@ -34,6 +34,7 @@ local PRODUCTS = {
     { kind = "debuff", label = "Debuffs", icon = "Interface\\Icons\\Spell_Shadow_ShadowWordPain" },
     { kind = "playerDefensives", label = "Player Defensives", icon = "Interface\\Icons\\Spell_Holy_PowerWordShield" },
     { kind = "targetDots", label = "Dots on Target", icon = "Interface\\Icons\\Spell_Shadow_AbominationExplosion" },
+    { kind = "externals", label = "External Defensives", icon = "Interface\\Icons\\Spell_Holy_PainSupression" },
 }
 local FAMILIES = { "ALL", "Shadow", "Dark", "Frame", "Metal", "Pixel", "Glass", "Round", "Blizzard" }
 -- Unset follows each skin's own gloss default, so the control has three states.

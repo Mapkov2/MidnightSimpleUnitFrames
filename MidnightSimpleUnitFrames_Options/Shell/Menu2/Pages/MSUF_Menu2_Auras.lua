@@ -116,12 +116,13 @@ local LANE_VALUES = M.AuraControls.LANE_VALUES
 -- Appearance > Auras owns only the genuinely global Aura theme selected
 -- by Aura product. Every layout/filter/deep-Style value remains frame-local.
 M.SHARED_AURA_STYLE_CONTAINER_VALUES = VTP
-    "buff=Buffs|debuff=Debuffs|playerDefensives=Player Defensives|targetDots=Dots on Target"
+    "buff=Buffs|debuff=Debuffs|playerDefensives=Player Defensives|targetDots=Dots on Target|externals=External Defensives"
 -- Optional menu providers own their controls and profile data. No provider
 -- leaves the original selector and all Blizzard visibility controls intact.
 local appearanceTypes, appearanceValues = {}, nil
 function AurasPage.RegisterAppearanceType(value, spec)
-    assert(value ~= "buff" and value ~= "debuff" and value ~= "playerDefensives" and value ~= "targetDots")
+    assert(value ~= "buff" and value ~= "debuff" and value ~= "playerDefensives" and value ~= "targetDots"
+        and value ~= "externals")
     assert(spec.text and spec.build and spec.resetProvider)
     appearanceTypes[value] = spec
     appearanceValues = nil
@@ -431,7 +432,7 @@ local function CurrentAuraStyleContainer(scope)
         or (M.auraStyleContainer or CurrentLane("auraStyleGFLane", "debuff"))
     if scope == "appearance" then
         if container ~= "buff" and container ~= "debuff"
-            and container ~= "playerDefensives" and container ~= "targetDots"
+            and container ~= "playerDefensives" and container ~= "targetDots" and container ~= "externals"
             and not appearanceTypes[container]
         then
             container = CurrentLane("auraStyleGFLane", "debuff")

@@ -188,7 +188,8 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         candidateFilters, candidateFilterSignature,
         spec.nonPlayerKey and source[spec.nonPlayerKey] == true)
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 256)
-    local sharedLane = kind == "debuff" and "debuff" or "buff"
+    -- Externals have their own Appearance (following Buffs until set).
+    local sharedLane = kind == "debuff" and "debuff" or kind == "external" and "externals" or "buff"
     local iconShapeSource = Shape.SharedValue(shared, sharedLane)
     local iconShape, requestedIconShape = Shape.Resolve(iconShapeSource, portraitShape)
     local spacing = ClampNumber(source[spec.spacingKey] or source.spacing, 1, 0, 64)

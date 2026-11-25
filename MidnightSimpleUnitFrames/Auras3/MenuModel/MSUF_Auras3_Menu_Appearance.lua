@@ -5,6 +5,12 @@
 local _, MSUF = ...
 local Factories = MSUF.Auras3MenuModelFactories
 
+-- Group External Defensives wore the Buff Appearance before they had their own.
+-- Each Externals value follows Buffs until it is set for Externals, as the
+-- runtime reads it (Runtime_ConfigValues APPEARANCE_KIND). A write stores only
+-- the edited value.
+local APPEARANCE_PARENT = { externals = "buff" }
+
 function Factories.Appearance(A3, Model, Schema, Common, Storage)
     local type = type
     local tostring = tostring
@@ -79,7 +85,7 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         buff = true,
         debuff = true,
         playerDefensives = true,
-        targetDots = true,
+        targetDots = true, externals = true,
     }
 
     local function NormalizeSharedAppearanceKind(kind)
@@ -95,6 +101,7 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
     local function ReadIconShapeFromShared(shared, kind)
         local shapes = type(shared) == "table" and shared.appearanceIconShapes or nil
         local value = type(shapes) == "table" and shapes[kind] or nil
+        if value == nil and APPEARANCE_PARENT[kind] then return ReadIconShapeFromShared(shared, APPEARANCE_PARENT[kind]) end
         value = tostring(value or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE"))
         return A3.NormalizeAuraIconShape(value)
     end
@@ -128,6 +135,8 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         local styles = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
         local style = type(styles) == "table" and styles[kind] or nil
         if type(style) == "table" and style[key] ~= nil then return style[key] end
+        local parent = APPEARANCE_PARENT[kind] and styles and styles[APPEARANCE_PARENT[kind]]
+        if type(parent) == "table" and parent[key] ~= nil then return parent[key] end
         return defaultValue
     end
 

@@ -340,7 +340,7 @@ local function ResetFontsPage(db, defaults)
     end
     RetireLegacyUnitAliases(db)
 end
-local AURA_APPEARANCE_KINDS = KS("buff", "debuff", "playerDefensives", "targetDots")
+local AURA_APPEARANCE_KINDS = KS("buff", "debuff", "playerDefensives", "targetDots", "externals")
 local function ActiveAuraAppearanceKind(info)
     local kind = info and info.appearanceKind or M.auraAppearanceContainer
     kind = tostring(kind or "buff")
@@ -351,6 +351,7 @@ local AURA_APPEARANCE_LABELS = {
     debuff = "Debuff Appearance",
     playerDefensives = "Player Defensives Appearance",
     targetDots = "Dots on Target Appearance",
+    externals = "External Defensives",
 }
 local function BlizzardVisibilityIsShared()
     return not M.AurasPage or not M.AurasPage.BlizzardVisibilityType()
@@ -381,6 +382,11 @@ local function ResetAuraAppearancePage(db, defaults, info)
     dst.appearanceIconStyles = type(dst.appearanceIconStyles) == "table" and dst.appearanceIconStyles or {}
     local srcShapes = type(src.appearanceIconShapes) == "table" and src.appearanceIconShapes or {}
     local srcStyles = type(src.appearanceIconStyles) == "table" and src.appearanceIconStyles or {}
+    if kind == "externals" then
+        -- Unset Externals follow the Buff Appearance again (Menu_Appearance).
+        dst.appearanceIconShapes.externals, dst.appearanceIconStyles.externals = nil, nil
+        return
+    end
     dst.appearanceIconShapes[kind] = DeepCopy(srcShapes[kind])
         or (kind == "playerDefensives" and "FOLLOW_PORTRAIT" or "RECTANGLE")
     dst.appearanceIconStyles[kind] = DeepCopy(srcStyles[kind]) or {}

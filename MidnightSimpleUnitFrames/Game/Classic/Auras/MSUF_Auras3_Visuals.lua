@@ -90,6 +90,39 @@ local ICON_STYLE_OFF = {
     shadowSize = 0,
 }
 
+-- Group External Defensives follow the Buff Appearance for each value they do
+-- not store (Runtime_ConfigValues APPEARANCE_KIND, Menu_Appearance).
+local APPEARANCE_PARENT = { externals = "buff" }
+
+-- A product's appearance table, or its combat snapshot while frozen.
+local function CommittedStyle(stylesByKind, kind)
+    local style = stylesByKind and stylesByKind[kind]
+    if type(style) ~= "table" then style = nil end
+    if Skins and Skins.frozen then style = Skins.CommittedSource(kind, style) end
+    return style
+end
+
+-- An Externals style over its parent's, merged once per runtime generation.
+local mergedOwn, mergedBase, mergedGen, merged
+local function InheritedStyle(own, base)
+    if not (own and base) then return own or base end
+    local gen = A3._runtimeConfigGen
+    if own ~= mergedOwn or base ~= mergedBase or gen ~= mergedGen then
+        merged = {}
+        for key, value in pairs(base) do merged[key] = value end
+        for key, value in pairs(own) do merged[key] = value end
+        mergedOwn, mergedBase, mergedGen = own, base, gen
+    end
+    return merged
+end
+
+local function CommittedShape(shapes, kind)
+    local own = shapes and shapes[kind]
+    if Skins and Skins.frozen then own = Skins.CommittedShape(kind, own) end
+    if own == nil and APPEARANCE_PARENT[kind] then return CommittedShape(shapes, APPEARANCE_PARENT[kind]) end
+    return own
+end
+
 --- lane (optional) is the lane being compiled: its skin draws only while the
 --- lane shows its icon (Skins.Paint reads the lane's final settings).
 function V.SharedIconStyle(shared, scope, appearanceKind, lane)
@@ -99,15 +132,15 @@ function V.SharedIconStyle(shared, scope, appearanceKind, lane)
     local disabled = type(shared.styleScopeDisabled) == "table" and shared.styleScopeDisabled
     if normalized ~= "" and disabled and disabled[normalized] == true then return ICON_STYLE_OFF end
     local stylesByKind = type(shared.appearanceIconStyles) == "table" and shared.appearanceIconStyles or nil
-    local style = stylesByKind and type(stylesByKind[appearanceKind]) == "table"
-        and stylesByKind[appearanceKind] or shared
     -- Skins and the combat snapshot: Auras3/MSUF_Auras3_IconSkins.lua. Every lane
     -- compiles here, so both calls are skipped while nothing is frozen or no skin is set.
-    local defaults = shared.iconSkinDefault
-    if Skins and Skins.frozen then
-        style = Skins.CommittedSource(appearanceKind, style ~= shared and style or nil) or shared
-        defaults = Skins.CommittedDefault(shared)
+    local style = CommittedStyle(stylesByKind, appearanceKind)
+    if APPEARANCE_PARENT[appearanceKind] then
+        style = InheritedStyle(style, CommittedStyle(stylesByKind, APPEARANCE_PARENT[appearanceKind]))
     end
+    style = style or shared
+    local defaults = shared.iconSkinDefault
+    if Skins and Skins.frozen then defaults = Skins.CommittedDefault(shared) end
     local borderR, borderG, borderB, borderA = Color(style.styleBorderColor, 0, 0, 0, 1)
     local shadowR, shadowG, shadowB, shadowA = Color(style.styleShadowColor, 0, 0, 0, 0.8)
     local styles = MSUF.BorderStyles
@@ -146,8 +179,7 @@ local function Enrich(lane, layout, shared, prefix, portraitShape, scope, appear
     appearanceKind = appearanceKind or prefix
     local shapes = type(shared) == "table" and type(shared.appearanceIconShapes) == "table"
         and shared.appearanceIconShapes or nil
-    local own = shapes and shapes[appearanceKind]
-    if Skins and Skins.frozen then own = Skins.CommittedShape(appearanceKind, own) end
+    local own = CommittedShape(shapes, appearanceKind)
     local shapeValue = own or Read(shared, nil, prefix .. "IconShape", Read(shared, nil, "iconShape", "RECTANGLE"))
     lane.iconShape = Shape.Resolve(shapeValue, portraitShape)
     lane.iconZoom = Clamp(Read(layout, nil, prefix .. "IconZoom", 100), 100, 100, 200)
@@ -180,8 +212,9 @@ function V.EnrichUnitLane(lane, layout, sharedLayout, shared, kind, frameSpec)
     return lane
 end
 
---- Tracked buffs and externals wear the Buff appearance, as on Retail
---- (Runtime_LaneConfig sharedLane); only their layout keys are their own.
+--- Tracked buffs wear the Buff appearance and externals their own (following
+--- Buffs until set), as on Retail (Runtime_LaneConfig sharedLane); only their
+--- layout keys are their own.
 local function SharedAuraSettings()
     local db = MSUF_DB
     local root = db and db.auras3
@@ -192,7 +225,7 @@ function V.EnrichGroupLane(lane, source, kind, frameSpec, scope)
     local prefix = kind
     local shared = SharedAuraSettings()
     return Enrich(lane, source, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, scope,
-        kind == "debuff" and "debuff" or "buff")
+        kind == "debuff" and "debuff" or kind == "external" and "externals" or "buff")
 end
 
 function V.EnrichCustomLane(lane, entry, frameSpec)

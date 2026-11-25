@@ -65,7 +65,7 @@ function M.ResolveAuraStylePreviewIconShape(scope, requested, effective)
     return effective or requested or "RECTANGLE"
 end
 local function ApplySharedAppearanceStyleToPreview(cfg, kind)
-    if kind ~= "debuff" and kind ~= "playerDefensives" and kind ~= "targetDots" then kind = "buff" end
+    if kind ~= "debuff" and kind ~= "playerDefensives" and kind ~= "targetDots" and kind ~= "externals" then kind = "buff" end
     if type(Model.ReadSharedAppearanceBool) == "function" then
         cfg.styleBorderEnabled = Model.ReadSharedAppearanceBool(kind, "styleBorderEnabled", false)
         cfg.styleShadowEnabled = Model.ReadSharedAppearanceBool(kind, "styleShadowEnabled", false)
@@ -134,7 +134,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         durationBarDisplay = "BAR_ONLY", durationBarPosition = "BOTTOM", durationBarDirection = "REMAINING",
         iconZoom = 100, iconShape = "RECTANGLE",
     }
-    local appearanceKind = lane == "debuff" and "debuff" or "buff"
+    local appearanceKind = lane == "debuff" and "debuff" or lane == "externals" and "externals" or "buff"
     ApplySharedAppearanceStyleToPreview(cfg, appearanceKind)
     if isGroup then
         local group = GFReadGroup(scope, lane or "debuff")
@@ -275,7 +275,8 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
 end
 local function ReadSharedSpecialAuraPreviewConfig(container, width, height)
     local playerDefensives = container == "playerDefensives"
-    local cfg = ReadMiniAuraPreviewConfig("shared", playerDefensives and "buff" or "debuff", width, height)
+    local targetDots = container == "targetDots"
+    local cfg = ReadMiniAuraPreviewConfig("shared", targetDots and "debuff" or "buff", width, height)
     -- Appearance previews never read a UnitFrame's deep Style. They show only
     -- the global theme for this Aura product on stable dummy geometry.
     cfg.actualSize, cfg.size = 32, 32
@@ -284,6 +285,8 @@ local function ReadSharedSpecialAuraPreviewConfig(container, width, height)
         and Model.ReadSharedAppearanceIconShape(container) or cfg.iconShape
     ApplySharedAppearanceStyleToPreview(cfg, container)
     cfg.pandemicEnabled = false
+    -- External Defensives show the ordinary helpful samples.
+    if not (playerDefensives or targetDots) then return cfg end
     cfg.previewTextures = {}
     local entries = {}
     if playerDefensives then
@@ -499,6 +502,7 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane, previewContai
     local panelW = width - (pad * 2)
     local box
     local specialPreview = previewContainer == "playerDefensives" or previewContainer == "targetDots"
+        or previewContainer == "externals"
     local previewLane = previewContainer == "playerDefensives" and "buff"
         or previewContainer == "targetDots" and "debuff" or lane
     box, refreshPreview = BuildMiniAuraPreview(ctx, section, scope, pad, panelY, panelW, panelH, previewLane, {

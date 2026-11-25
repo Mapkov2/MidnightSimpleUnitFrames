@@ -270,11 +270,13 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
         end
     end
     local sharedLane = lane == "debuff" and "debuff" or "buff"
+    -- External Defensives open their own Appearance (border, shadow, shape).
+    local appearanceContainer = lane == "externals" and "externals" or sharedLane
     local openStyle = T.Button(section, "Global Aura Appearance", 170, 22)
     openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, layout.footerY)
     if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
     openStyle:SetScript("OnClick", function()
-        M.SetMenuStateValue("auraAppearanceContainer", sharedLane)
+        M.SetMenuStateValue("auraAppearanceContainer", appearanceContainer)
         M.SetMenuStateValue("auraStyleGFLane", sharedLane)
         if M.SelectPage then M.SelectPage("auras3_styling") end
     end)

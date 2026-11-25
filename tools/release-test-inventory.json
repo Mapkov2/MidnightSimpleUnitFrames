@@ -2,6 +2,10 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/aura_externals_appearance_smoke.lua",
+      "phase": "runtime"
+    },
+    {
       "test": "tools/tests/frame_outline_class_color_smoke.lua",
       "phase": "menu",
       "clients": [
