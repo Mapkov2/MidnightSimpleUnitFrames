@@ -604,22 +604,22 @@ local COMMON_FALLBACKS = {
 }
 M.Fallbacks = M.Fallbacks or COMMON_FALLBACKS
 function M.SetMenuStateValue(field, value)
+    local previous = M[field]
     local result
     if type(M.PersistMenuStateValue) == "function" then
         result = M.PersistMenuStateValue(field, value)
     else
-    local previous = M[field]
         M[field] = value
         result = value
     end
     if (field == "gfScope" or field == "auraScope") and type(M.RefreshLayerOverviewContext) == "function" then
         M.RefreshLayerOverviewContext()
     end
+    if previous ~= M[field] and M.CloseOutlineOverview then M.CloseOutlineOverview() end
     return result
 end
 -- The slot key prefix is resolved inline in both lookups: text-handle drags and
 -- the font size slider ask for their keys on every move.
-    if previous ~= M[field] and M.CloseOutlineOverview then M.CloseOutlineOverview() end
 function M.TextSlotOffsetKeys(kind, slot)
     if kind == "name" then return "nameOffsetX", "nameOffsetY" end
     if kind == "hp" and not slot then return "hpOffsetX", "hpOffsetY" end
