@@ -362,7 +362,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "e39ea044deec22f807abf113a5e8ca0cd2ec559d18f17ee4f46b783cc3e55a50",
+          "source_sha256": "f5341a3a5633fde022724123210603b0fbe7940f67c869601dc2c22332ddafab",
           "review_note": "2026-11-17: independently reviewed searchIndexed metadata on the existing ephemeral gradient opener; renderer unchanged."
         },
         {
@@ -379,7 +379,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
-          "source_sha256": "6d8c1e029c2ad2247d7577f45ca5ed7afc9e69ce003203aecf529530ba56e4d4"
+          "source_sha256": "211636c1791b00ef8710557c62ef226e3b4326f6e5e5c99bd68a8c9b28f13b89"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Auras.lua",
@@ -489,7 +489,7 @@
           607
         ]
       ],
-      "source_sha256": "8a8967a86ea521cf35a63395e25ba7df53990bc16b2ab37398833f5782ee4fc8",
+      "source_sha256": "b8542130938b93a3ee4395a9c357f4a8e4dbea4289e3f2a4a789a587ba9ae9a7",
       "adapter_exclusions": [
         {
           "name": "WorkbenchRefresh",
@@ -583,7 +583,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
-          "source_sha256": "c2d8e43f48ff1897c803834d4e8cdd9fcd4cbd7d584713be3d606c614fb2e926"
+          "source_sha256": "efb9f94c31c2dd1449e3a4b52b310af89afbb87a6ab9b54de35eed1fd4ae1de7"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",
@@ -698,7 +698,7 @@
           1934
         ]
       ],
-      "source_sha256": "82a16aba6a7894a18abc0eadbc31a2fe14ecec380919fa2d4d81b714b27e771b",
+      "source_sha256": "e2d06b7e7e1748680923c29350eb57334627cd9fe6e9296f48751200051fc477",
       "adapter_exclusions": [
         {
           "name": "CreateRoundedTexturePreview",
@@ -721,11 +721,11 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
-          "source_sha256": "57770896699855e179f8453b297b42278305b68d9a05decda7c0f74c002c2e8e"
+          "source_sha256": "f0cf0f640bb1b38798e4c99b2e831c4e06813373fa54e69998f051734d37c26b"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Highlights.lua",
-          "source_sha256": "f3ca8f420988f86629d34d8f38539da24c1a5025c69768904afc0a251b7bfaad"
+          "source_sha256": "04bb3705bf43586fbb48b3f24098703a8d77747f83c1e13293a6323fcf6e84f4"
         }
       ],
       "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."

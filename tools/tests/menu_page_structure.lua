@@ -73,9 +73,9 @@ end
 -- Both current generated indexes retain all 8 relocated action identities below.
 -- 7.0.3: 28 Mainline and 27 Classic additions; all 7.021 identities retained.
 local indexes = {
-    -- 7.0.5 adds 30 portrait settings rows per index, preserving prior identities.
-    { "", 4909, 1936332984 },
-    { "_Classic", 4285, 2027047592 },
+    -- Beta 2 adds outline class color and External Defensives appearance. Existing identities are retained.
+    { "", 4911, 4223664233 },
+    { "_Classic", 4287, 3499897391 },
 }
 local moved = {
     { "opt_colors", "workbench_accessibility", "accessibility", "preview review" },
