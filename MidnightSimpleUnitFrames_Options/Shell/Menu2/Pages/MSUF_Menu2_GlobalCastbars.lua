@@ -206,7 +206,7 @@ local function BuildTexturesSection(PageState, secBuilder)
         if applyQueued ~= true then ApplyCastbarTextures(reason) end
         RequestCastPreviewRefresh()
     end
-    BuildCastControlSpecs(textures, {
+    local controls = BuildCastControlSpecs(textures, {
         { "dropdown", "castbarTexture", "Blizzard", { "Castbar texture", function() return TextureValues(nil) end, 300 }, { texLeftX, -42, 300 },
             reason = "MSUF2_CASTBAR_TEXTURE", afterWrite = ApplyTexturesAndPreview },
         { "dropdown", "castbarBackgroundTexture", "Blizzard", { "Castbar background texture",
@@ -233,6 +233,7 @@ local function BuildTexturesSection(PageState, secBuilder)
         Flow("castbarShowLatencyText", false, "Show network latency in milliseconds", texRightX, -196, 360,
             "MSUF2_CASTBAR_LATENCY_TEXT", ApplyTexturesAndPreview),
     }, "textures")
+    M.AttachOutlineOverview(controls.castbarOutlineThickness, function() return "core.castbar.outline" end)
 end
 local function BuildEmpoweredSection(PageState, secBuilder)
     local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ShowEmpoweredPreview = PageState.ctx,

@@ -397,6 +397,7 @@ function CastbarSection.Cards(s)
             title = "Castbar Icon Border Color",
             note = "Used by the Castbar icon-border style.",
             historySource = "menu:unit-castbar-icon-border-color",
+            outlineReferences = { "cast.border" },
         })
         local function AttachCastTextSettings(card, colorId, title, source)
             if not (card and W.AttachContextColorShortcut) then return end

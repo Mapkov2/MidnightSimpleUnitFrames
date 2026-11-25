@@ -358,6 +358,9 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         end,
     }
     widget._msuf2CommandAction = command
+    if M.ConsiderOutlineOverview and kind ~= "textinput" then
+        M.ConsiderOutlineOverview(widget, opts)
+    end
     M.RegisterRuntimeControl(widget, {
         controlId = command.controlId,
         pageKey = ctx and ctx.key,

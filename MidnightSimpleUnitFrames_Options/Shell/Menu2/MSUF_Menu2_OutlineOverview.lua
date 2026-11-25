@@ -2,12 +2,17 @@ local _, MSUF = ...
 local M = MSUF.MSUF2
 local W, T = M.Widgets, M.Theme
 local providers = {}
+local settingResolvers = {}
 local popup
 
 -- Providers describe settings only when this menu opens. The regular settings
 -- pages continue to own profile values, history and repaint requests.
 function M.RegisterOutlineOverviewProvider(id, collect)
     providers[id] = collect
+end
+
+function M.RegisterOutlineSettingResolver(namespace, resolve)
+    settingResolvers[namespace] = resolve
 end
 
 local function CollectCastbarOutline(rows)
@@ -32,9 +37,16 @@ local function CollectCastbarOutline(rows)
 end
 M.RegisterOutlineOverviewProvider("core.castbars", CollectCastbarOutline)
 
-local function Collect()
+local function Collect(focused)
     local rows = {}
     for _, collect in pairs(providers) do collect(rows) end
+    if focused then
+        local found
+        for _, row in ipairs(rows) do
+            if row.id == focused.id then found = true break end
+        end
+        if not found then rows[#rows + 1] = focused end
+    end
     table.sort(rows, function(a, b)
         if a.group ~= b.group then return a.group < b.group end
         if a.label ~= b.label then return a.label < b.label end
@@ -82,13 +94,19 @@ local function SelectRow(panel, id, retainedWidth)
     panel.widthChanged, panel.colorChanged, panel.matchChanged = false, false, false
     panel.refreshing = true
     panel.select:SetValue(id)
-    panel.slider:SetMinMaxValues(row.min, row.max)
-    panel.slider:SetValue(retainedWidth or (row.getWidth and row.getWidth()) or math.max(row.min, 1))
-    panel.initialWidth = panel.slider:GetValue()
+    local hasWidth = row.getWidth ~= nil or row.targets ~= nil
+    if hasWidth then
+        panel.slider:SetMinMaxValues(row.min, row.max)
+        panel.slider:SetValue(retainedWidth or (row.getWidth and row.getWidth()) or math.max(row.min, 1))
+        panel.initialWidth = panel.slider:GetValue()
+    end
     panel.refreshing = false
+    W.SetControlShown(panel.slider, hasWidth)
+    panel.units:SetShown(hasWidth)
     panel.color:SetShown(row.getColor ~= nil)
     panel.color._msuf2Title:SetShown(row.getColor ~= nil)
     if row.getColor then panel.color:SetRGB(row.getColor()) end
+    panel.open:SetShown(row.open ~= nil)
     panel.initialMatch = row.getMatchTooltip and row.getMatchTooltip() or false
     panel.match:SetChecked(panel.initialMatch)
     panel.matchHost:SetShown(row.getMatchTooltip ~= nil)
@@ -169,7 +187,7 @@ local function BuildPopup()
         panel:Hide()
         return true
     end
-    M.frame:HookScript("OnHide", function() panel:Hide() end)
+    if M.frame then M.frame:HookScript("OnHide", function() panel:Hide() end) end
     panel._msuf2ContentX, panel._msuf2CursorY = 16, -45
     local heading = T.Font(panel, "GameFontNormal", "Outline settings", T.colors.accent)
     heading:SetPoint("TOPLEFT", 16, -15)
@@ -222,13 +240,24 @@ local function BuildPopup()
     panel.apply:SetPoint("BOTTOMRIGHT", -16, 12)
     panel.apply._msuf2SkipHistoryCheckpoint = true
     panel.apply:SetScript("OnClick", function() Apply(panel) end)
+    panel.open = T.Button(panel, "Open settings", 124, 24, { noSearch = true })
+    panel.open:SetPoint("BOTTOMLEFT", 16, 12)
+    panel.open._msuf2SkipHistoryCheckpoint = true
+    panel.open:SetScript("OnClick", function()
+        if M.BlockCombatAction() then return end
+        local open = panel.current.open
+        panel:Hide()
+        if open then open() end
+    end)
     return panel
 end
 
-local function Show(anchor, focus)
+local function Show(anchor)
     if M.BlockCombatAction() then return end
     if popup and popup:IsShown() and popup.anchor == anchor then popup:Hide() return end
-    local rows, choices, byID = Collect(), {}, {}
+    local id = anchor._msuf2OutlineFocus and anchor._msuf2OutlineFocus()
+    local describe = anchor._msuf2OutlineDescribe
+    local rows, choices, byID = Collect(id and describe and describe(id)), {}, {}
     local function Add(id, row, label)
         byID[id] = row
         choices[#choices + 1] = { value = id, text = label, translate = false }
@@ -243,7 +272,6 @@ local function Show(anchor, focus)
     popup = popup or BuildPopup()
     popup.anchor, popup.rows = anchor, byID
     popup.select:SetValues(choices)
-    local id = focus and focus()
     SelectRow(popup, byID[id] and id or rows[1].id)
     popup:ClearAllPoints()
     popup:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -5)
@@ -251,20 +279,146 @@ local function Show(anchor, focus)
     popup:Show()
 end
 
-function M.AttachOutlineOverview(slider, focus)
-    local parent, title = slider:GetParent(), slider._msuf2Title
-    if not title then return end
-    local gear = T.Button(parent, "", 20, 18, { noSearch = true })
+function M.AttachOutlineOverview(control, focus, placement, describe)
+    local gear = control._msuf2OutlineGear
+    if gear then
+        if gear._msuf2OutlinePositioned and not (placement or describe) then return gear end
+        gear._msuf2OutlineFocus, gear._msuf2OutlineDescribe = focus, describe
+        return gear
+    end
+    local title = control._msuf2Title or control._msuf2Label
+    if not (placement or title) then return end
+    local parent = placement and control or control:GetParent()
+    gear = T.Button(parent, "", 20, 18, { noSearch = true })
+    control._msuf2OutlineGear = gear
+    gear._msuf2OutlineFocus, gear._msuf2OutlineDescribe = focus, describe
+    gear._msuf2OutlinePositioned = placement ~= nil
     gear._msuf2SkipHistoryCheckpoint = true
-    gear:SetPoint("TOPRIGHT", title, "TOPRIGHT", 0, 2)
-    gear:SetFrameLevel(slider:GetFrameLevel() + 4)
+    if placement == true then
+        gear:SetPoint("LEFT", control, "RIGHT", 4, 0)
+    elseif placement then
+        gear:SetPoint("RIGHT", placement.anchor or control, "RIGHT", placement.offsetX, 0)
+    else
+        if title:IsShown() then gear:SetPoint("TOPRIGHT", title, "TOPRIGHT", 0, 2)
+        else gear:SetPoint("RIGHT", control, "LEFT", -5, 0) end
+        control:HookScript("OnShow", function() gear:Show() end)
+        control:HookScript("OnHide", function() gear:Hide() end)
+        gear:SetShown(control:IsShown())
+    end
+    gear:SetFrameLevel(control:GetFrameLevel() + 4)
     local icon = gear:CreateTexture(nil, "ARTWORK")
     icon:SetSize(12, 12)
     icon:SetPoint("CENTER")
     icon:SetTexture("Interface\\Buttons\\UI-OptionsButton")
-    gear:SetScript("OnClick", function(self) Show(self, focus) end)
+    gear:SetScript("OnClick", Show)
     gear:SetScript("OnHide", function(self)
         if popup and popup.anchor == self then popup:Hide() end
     end)
     M.AddTooltip(gear, "Outline settings", nil, { hook = true, owner = "ANCHOR_RIGHT" })
+    return gear
+end
+
+function M.CloseOutlineOverview()
+    if popup then popup:Hide() end
+end
+
+local function IsFrameBorder(key, label)
+    if label:find("text outline", 1, true) or label:find("font outline", 1, true) then return false end
+    if key:find("nooutline", 1, true) or key:find("fontoutline", 1, true)
+        or key:find("textoutline", 1, true) or key:find("text.outline", 1, true) then return false end
+    if key:match("castoutline$") or (key:find("font", 1, true) and not key:find("border", 1, true)) then return false end
+    return key:find("border", 1, true) or key:find("outerframe", 1, true) or key:match("%.rim$")
+        or key:find("outline", 1, true)
+end
+
+local function CoreFocus(key)
+    if key:match("%.castbarOutlineThickness$") or key == "general.castbarBorder"
+        or key == "general.castbarBorderColor" or key == "cast.border" then return "core.castbar.outline" end
+    if key == "general.barOutlineColor" then return "core.frame.shared" end
+    if key == "bar.outline" then return "core.frame.shared" end
+    if key == "group.border" then return function() return "core.group.border." .. M.GroupPage.CurrentScope() end end
+    if key == "group.focus" then return function() return "core.group.focus." .. M.GroupPage.CurrentScope() end end
+end
+
+function M.ConsiderOutlineColorShortcut(shortcut, setting, label, getTarget, focus)
+    if not shortcut then return end
+    return M.ConsiderOutlineOverview(shortcut, {
+        settingKey = setting, label = label, outlineFocus = focus, describeOutline = function(id)
+            local target = getTarget()
+            local row = { id = id, group = "Frame Outline", label = target and target.label or label or "Border",
+                open = function() shortcut:Click() end }
+            local get = target and (target.getRGB or target.get)
+            local set = target and (target.setRGB or target.set)
+            if get and set then
+                row.getColor, row.colorEnabled = get, target.isEnabled
+                row.setColor = function(r, g, b)
+                    local _, _, _, a = get()
+                    return set(r, g, b, a)
+                end
+            end
+            return row
+        end,
+    }, shortcut, -34)
+end
+
+local function IsWidthKey(key)
+    return key:find("thickness", 1, true) or key:find("size", 1, true)
+        or key:match("borderwidth$") or key:match("outlinewidth$")
+        or key:match("outline$") or key:match("border$")
+end
+
+-- A bound control carries the gear only when the popup edits its value: a
+-- thickness slider or a color. Styles, opacity, distance, edge toggles and
+-- section switches keep their own controls without a gear.
+local function EditsOutline(control, key)
+    local command = control._msuf2CommandAction
+    local kind = command and command.kind
+    return kind == "color" or (kind == "slider" and IsWidthKey(key) ~= nil)
+end
+
+local function DescribeControl(control, id, label, key)
+    local command = control._msuf2CommandAction
+    local parent = control:GetParent()
+    local row = { id = id, group = parent and parent._msuf2ControlCardTitle or "Frame Outline", label = label,
+        open = function() T.PlayNeonFlash(control, "success") end }
+    if not (command and command.get and command.set) then return row end
+    local function Enabled() return control:IsVisible() and (not control.IsEnabled or control:IsEnabled()) end
+    if command.kind == "slider" and IsWidthKey(key) then
+        local minimum, maximum = control:GetMinMaxValues()
+        if minimum % 1 == 0 and maximum % 1 == 0 then
+            row.min, row.max = minimum, maximum
+            row.getWidth, row.setWidth, row.widthEnabled = command.get, command.set, Enabled
+        end
+    elseif command.kind == "color" then
+        row.getColor, row.colorEnabled = command.get, Enabled
+        row.setColor = function(r, g, b)
+            local _, _, _, a = command.get()
+            return command.set(r, g, b, a)
+        end
+    end
+    return row
+end
+
+function M.ConsiderOutlineOverview(control, info, anchor, offsetX)
+    if info.outlineFocus == false then return end
+    local key = type(info.settingKey) == "string" and info.settingKey or nil
+    local resolver = key and settingResolvers[key:match("^([^.]+)%.")]
+    local focus = info.outlineFocus or (resolver and resolver(key)) or (key and CoreFocus(key))
+    local label = info.label or control._msuf2SearchText or control._msuf2SearchTitle or "Border"
+    if type(label) ~= "string" then label = "Border" end
+    local identity = key or (type(info.controlId) == "string" and info.controlId)
+    if not identity and (label == "Outline thickness" or label == "Border thickness" or label == "Window outline") then
+        identity = (M.PageKeyForWidget(control) or "outline") .. "." .. label
+    end
+    if not focus and (not identity or not IsFrameBorder(identity:lower(), label:lower())) then return end
+    local actualKey = (identity or ""):lower()
+    -- Color shortcuts describe their own row (ConsiderOutlineColorShortcut).
+    if not info.describeOutline and not EditsOutline(control, actualKey) then return end
+    if not focus then focus = "outline." .. identity end
+    local resolveFocus = focus
+    if type(focus) ~= "function" then resolveFocus = function() return focus end end
+    local placement = anchor and { anchor = anchor, offsetX = offsetX } or nil
+    return M.AttachOutlineOverview(control, resolveFocus, placement, info.describeOutline or function(id)
+        return DescribeControl(control, id, label, actualKey)
+    end)
 end

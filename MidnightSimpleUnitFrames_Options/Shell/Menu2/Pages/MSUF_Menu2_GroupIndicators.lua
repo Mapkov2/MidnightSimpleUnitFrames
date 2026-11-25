@@ -260,6 +260,30 @@ local function SharedColors(card, reference, title, historySource)
         title = title, note = "Shared by Party, Raid and Mythic Raid.", historySource = historySource, offsetX = -76,
     })
 end
+
+local function CollectGroupOutline(rows, name, label, sizeKey, enabledKey, defaultSize, limit)
+    local colors = M.ResolveContextColorReferences({ "group." .. name }, {})[1]
+    for _, item in ipairs(GP.SCOPE_VALUES) do
+        local scope = item.value
+        rows[#rows + 1] = {
+            id = "core.group." .. name .. "." .. scope, group = label, label = item.text, min = 1, max = limit,
+            getWidth = function() return Num(scope, sizeKey, defaultSize) end,
+            setWidth = function(value) return Set(scope, sizeKey, value, "visual") end,
+            widthEnabled = function() return Bool(scope, enabledKey, name == "focus") end,
+            getColor = colors and colors.getRGB,
+            setColor = colors and function(r, g, b)
+                local _, _, _, a = colors.getRGB()
+                return colors.setRGB(r, g, b, a)
+            end,
+        }
+    end
+end
+
+M.RegisterOutlineOverviewProvider("core.group", function(rows)
+    CollectGroupOutline(rows, "border", "Group Border", "groupBorderSize", "groupBorderEnabled", 1, 12)
+    CollectGroupOutline(rows, "focus", "Focus Highlight", "hlFocusSize", "hlFocusEnabled", 2, 6)
+end)
+
 local function BuildIndicatorsSection(ctx, b)
     local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 710, true)
     local leftX, leftW, rightX, rightW, innerW = Schema.Columns(indicators, ctx.width, 20, 16, 0.48)
@@ -311,6 +335,7 @@ local function BuildIndicatorsSection(ctx, b)
     local focusControls = { Schema.Build(ctx, focusCard, {
         { "slider", "hlFocusSize", 2, { "Border Thickness", 1, 6, 1, rightW }, { 16, -88, rightW - 58, "CENTER" } },
     }, ROW_OPTIONS).hlFocusSize }
+    M.AttachOutlineOverview(focusControls[1], function() return "core.group.focus." .. CurrentScope() end)
     local focusColorHint = W.Text(focusCard, M.Format("Focus color is in %s.",
         M.NavPath("opt_colors", "Party & Raid Frames")), 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
@@ -323,6 +348,9 @@ local function BuildIndicatorsSection(ctx, b)
         { "slider", "groupBorderPadding", 2, { "Padding", 0, 40, 1, leftW }, { 16, -116, leftW - 58, "CENTER" } },
     }, ROW_OPTIONS)
     local groupBorderToggle = groupBorder.groupBorderEnabled
+    local function GroupBorderFocus() return "core.group.border." .. CurrentScope() end
+    M.AttachOutlineOverview(groupBorder.groupBorderSize, GroupBorderFocus)
+    M.AttachOutlineOverview(groupBorder.groupBorderPadding, GroupBorderFocus)
     local groupBorderControls = { groupBorder.groupBorderSize, groupBorder.groupBorderPadding }
     local groupBorderColorHint = W.Text(groupBorderCard, M.Format("Border color and opacity are in %s.",
         M.NavPath("opt_colors", "Party & Raid Frames")), 16, -168, leftW - 32, T.colors.muted)

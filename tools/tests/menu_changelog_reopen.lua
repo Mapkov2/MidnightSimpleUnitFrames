@@ -199,6 +199,43 @@ local outline = M.RuntimeControlCatalog.Get("menu2.opt.bars.global.outline.thick
 assert(M.activeKey == "opt_bars" and outline and outline.widget:IsVisible(),
     "outline highlight did not open the Frame Outline thickness slider")
 
+do
+    local CreatePopup, popup = M.CreateMenuPopupPanel
+    M.CreateMenuPopupPanel = function(...)
+        popup = CreatePopup(...)
+        return popup
+    end
+    local function CheckGear(widget, id)
+        local gear = assert(widget._msuf2OutlineGear, "missing outline gear for " .. id)
+        assert(gear:IsVisible() and not M.RuntimeControlCatalog.GetForWidget(gear), "invalid outline gear")
+        gear:Click()
+        assert(popup and popup:IsShown() and popup.select:GetValue() == id, "the gear selected the wrong outline")
+        gear:Click()
+        assert(not popup:IsShown(), "clicking the outline gear again did not close it")
+    end
+    CheckGear(outline.widget, "core.frame.shared")
+    assert(M.SelectPage("opt_castbar"))
+    local castbar = assert(M.cache.opt_castbar.sections.castbar_textures)
+    M.Widgets.FocusCollapsibleSection(castbar, { persist = true })
+    mw:RunTimers()
+    local _, castOutline = M.RuntimeControlCatalog.FindBySettingKey("general.castbarOutlineThickness", "opt_castbar")
+    CheckGear(assert(castOutline), "core.castbar.outline")
+    assert(M.SelectPage("gf_indicators"))
+    local groupOutline
+    for _, record in ipairs(M.RuntimeControlCatalog.GetRecords()) do
+        if record.pageKey == "gf_indicators" and record.controlId:lower():gsub("[^%w]", ""):match("groupbordersize$") then
+            groupOutline = M.RuntimeControlCatalog.Get(record.controlId).widget
+            break
+        end
+    end
+    CheckGear(assert(groupOutline), "core.group.border.party")
+    assert(popup.rows["core.group.border.raid"].getColor, "group border color is absent from the overview")
+    M.SetMenuStateValue("gfScope", "raid")
+    CheckGear(groupOutline, "core.group.border.raid")
+    M.SetMenuStateValue("gfScope", "party")
+    M.CreateMenuPopupPanel = CreatePopup
+end
+
 local arenaLink = { pageKey = "uf_arena", sectionId = "arena", controlId = "test.arena" }
 local _, visibleArenaLink = M.GetChangelogBullet({ text = "Arena", link = arenaLink })
 assert((visibleArenaLink ~= nil) == mw.core.Client.SupportsUnit("arena"), "unavailable arena highlight stayed clickable")

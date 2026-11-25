@@ -276,7 +276,19 @@ function W.AttachContextColorReferences(card, references, opts)
     -- An explicit semantic mapping owns this card. A later generic BindColor
     -- must not replace its curated 1-4 target set merely because controls are
     -- laid out after the card shortcut was attached.
-    if shortcut then shortcut._msuf2BoundColorShortcut = nil end
+    if shortcut then
+        shortcut._msuf2BoundColorShortcut = nil
+        if M.ConsiderOutlineColorShortcut then
+            local outlineReferences = options.outlineReferences or ResolveContextColorOption(references, {})
+            if type(outlineReferences) == "string" then outlineReferences = { outlineReferences } end
+            for _, reference in ipairs(type(outlineReferences) == "table" and outlineReferences or {}) do
+                if type(reference) == "string" and M.ConsiderOutlineColorShortcut(shortcut, reference, nil, function()
+                    local context = ResolveContextColorOption(options.context, {})
+                    return M.ResolveContextColorReferences({ reference }, context)[1]
+                end) then break end
+            end
+        end
+    end
     return shortcut
 end
 
@@ -376,6 +388,13 @@ local function AttachBoundColorToContextCard(colorControl)
     if shortcut then
         colorControl._msuf2ContextColorSearchAnchor = shortcut
         shortcut._msuf2BoundColorShortcut = true
+        if settingKey ~= "" and M.ConsiderOutlineColorShortcut and not shortcut._msuf2OutlineGear then
+            M.ConsiderOutlineColorShortcut(shortcut, settingKey, colorControl._msuf2ColorLabel, function()
+                local binding = colorControl._msuf2CommandAction
+                return { label = colorControl._msuf2ColorLabel, getRGB = binding.get, setRGB = binding.set,
+                    isEnabled = function() return colorControl:IsEnabled() end }
+            end)
+        end
         if colorControl.HookScript and not colorControl._msuf2ContextShortcutEnableHooks then
             colorControl._msuf2ContextShortcutEnableHooks = true
             colorControl:HookScript("OnEnable", function()

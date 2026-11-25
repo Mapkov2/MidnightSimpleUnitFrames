@@ -1184,7 +1184,8 @@ local function BuildCardControl(ctx, card, row, set, x, y, width)
     local kind = row.kind or row.type
     local widget
     if kind == "toggle" then
-        widget = W.ToggleAt(card, CardResolve(row.label), x, y, width)
+        -- ToggleAt measures its label separately from the 28 px box and 8 px gap.
+        widget = W.ToggleAt(card, CardResolve(row.label), x, y, max(20, width - 36))
         M.BindBoolWidget(ctx, widget, row.get, set, row)
         return widget
     elseif kind == "color" then
@@ -1219,6 +1220,12 @@ end
 --- then top-to-bottom, optional per-row reset-to-default action. Uses the same
 --- row specs, constructors and binders as hand-placed controls, so converted sections
 --- keep their control behavior and Search metadata unchanged.
+        local gear = widget._msuf2OutlineGear
+        if gear then
+            widget._msuf2Label:SetWidth(max(20, width - 62))
+            gear:ClearAllPoints()
+            gear:SetPoint("RIGHT", widget, "LEFT", width - 4, 0)
+        end
 ---
 --- spec = {
 ---   x?, y?, width?, columns? (default 2), colGap?, rowGap?,

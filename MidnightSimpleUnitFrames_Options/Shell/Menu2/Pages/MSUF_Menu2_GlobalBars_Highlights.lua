@@ -417,7 +417,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
     { sectionId = "bars_absorb", prepareShell = Rows.PrepareSection,
         title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
     { sectionId = "bars_outline", prepareShell = Rows.PrepareSection,
-        title = "Frame Outline", height = 226, build = BuildOutlineSection },
+        title = "Frame Outline", height = 258, build = BuildOutlineSection },
     { sectionId = "bars_rounded", prepareShell = Rows.PrepareSection,
         title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
     { sectionId = "bars_slanted", prepareShell = Rows.PrepareSection,

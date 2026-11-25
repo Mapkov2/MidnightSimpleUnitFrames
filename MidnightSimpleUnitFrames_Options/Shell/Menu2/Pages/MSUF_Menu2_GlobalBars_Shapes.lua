@@ -69,8 +69,9 @@ local function BuildOutlineSection(ctx, b)
             tip = "Uses each player character's class color when available. All other units use the selected outline color." },
     }, options)
     local outlineSlider, outlineLayer, outlineTexture = controls.barOutlineThickness, controls.barOutlineLayer, controls.texture
-    M.AttachOutlineOverview(outlineSlider, function() return "core.frame." .. CurrentBarsScope() end)
-    AttachBarsColorShortcut(outline,
+    local function FocusOutline() return "core.frame." .. CurrentBarsScope() end
+    M.AttachOutlineOverview(outlineSlider, FocusOutline)
+    local shortcut = AttachBarsColorShortcut(outline,
         "Frame Outline Color",
         "Outline color for the selected Bars scope.",
         "Outline color",
@@ -91,6 +92,7 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         Meta("outline.color"))
+    if shortcut then M.AttachOutlineOverview(shortcut, FocusOutline, { offsetX = -34 }) end
     local turnOn = W.TurnOnReason
     local scopeReason = turnOn and turnOn("Use custom settings for this scope", ScopedControls)
     -- Rounded and slanted frames draw the selected style along their shape.
