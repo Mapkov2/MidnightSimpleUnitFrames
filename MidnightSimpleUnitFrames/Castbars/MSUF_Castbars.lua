@@ -141,12 +141,7 @@ end
 
 local function SetPlayerCastbarEventsRegistered(frame, enabled)
     if not frame then return end
-    local sent = enabled and Config.Read("player").showTargetName == true
-    if frame._msufPlayerSentRegistered ~= sent then
-        frame._msufPlayerSentRegistered = sent
-        if sent then frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player", "vehicle")
-        else frame:UnregisterEvent("UNIT_SPELLCAST_SENT") end
-    end
+    Player.SyncSentEvent(frame, enabled)
     Player.SyncSuccessEvent(frame, enabled)
 
     if enabled then
@@ -158,6 +153,8 @@ local function SetPlayerCastbarEventsRegistered(frame, enabled)
             frame:RegisterUnitEvent(PLAYER_CAST_EVENTS[index], "player", "vehicle")
         end
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        frame:RegisterEvent("QUEST_ACCEPTED")
+        frame:RegisterEvent("QUEST_REMOVED")
         frame:SetScript("OnEvent", PlayerCastbarOnEvent)
         frame._msufPlayerEventsRegistered = true
         return
@@ -171,6 +168,8 @@ local function SetPlayerCastbarEventsRegistered(frame, enabled)
         frame:UnregisterEvent(PLAYER_CAST_EVENTS[index])
     end
     frame:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    frame:UnregisterEvent("QUEST_ACCEPTED")
+    frame:UnregisterEvent("QUEST_REMOVED")
     frame:SetScript("OnEvent", nil)
     frame._msufPlayerEventsRegistered = nil
 end

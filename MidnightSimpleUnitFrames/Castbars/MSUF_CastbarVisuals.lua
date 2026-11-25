@@ -536,6 +536,8 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     local y = DetailNum(g, prefix, "IconOffsetY", "castbarIconOffsetY", 0)
     local position = NormalizeIconPosition(DetailString(g, prefix, "IconPosition", "castbarIconPosition", "LEFT"))
     local frameInset = CastbarFrameInset(frame, g)
+    -- Shaped outlines extend out from the fill and need their own clearance.
+    local fillExtension = frame._msufRoundedCastbarActive ~= true and frameInset or 0
     local shape = Visuals.IconShape(g, prefix)
     local layoutKey = KeyPart(unit) .. "|" .. shape .. "|"
         .. BoolKey(icon ~= nil) .. "|"
@@ -549,6 +551,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
         .. KeyPart(y) .. "|"
         .. position .. "|"
         .. KeyPart(frameInset) .. "|"
+        .. KeyPart(fillExtension) .. "|"
         .. KeyPart(DetailString(g, prefix, "IconBorderStyle", nil, "NONE")) .. "|"
         .. KeyPart(DetailNum(g, prefix, "IconBorderThickness", nil, 0)) .. "|"
         .. KeyPart(g.castbarBorderR) .. "|"
@@ -603,8 +606,13 @@ local function ApplyIconLayout(frame, g, unit, prefix)
             rightInset = size + spacing
         end
     end
+    -- Extend the adjacent fill within the reserved slot. Keep the icon's original anchor.
     if leftInset + rightInset > barW - 8 then
         leftInset, rightInset = 0, 0
+    elseif leftInset > 0 then
+        leftInset = Clamp(leftInset + x - fillExtension, 0, leftInset)
+    elseif rightInset > 0 then
+        rightInset = Clamp(rightInset - x - fillExtension, 0, rightInset)
     end
     statusBar:ClearAllPoints()
     statusBar:SetPoint("TOPLEFT", frame, "TOPLEFT", leftInset + frameInset, -frameInset)

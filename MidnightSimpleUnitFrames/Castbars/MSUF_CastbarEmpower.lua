@@ -544,9 +544,14 @@ local function PlayerCastbarEmpowerStart(frame)
     end
 
     Utils.CapturePlayerSpellRank(frame, nil)
-    if frame.icon and icon then
-        frame.icon:SetTexture(icon)
+    if frame.icon then
+        if issecretvalue(icon) or icon then
+            frame.icon:SetTexture(icon)
+        elseif frame._msufPickupIconShown then
+            frame.icon:SetTexture(nil)
+        end
     end
+    if frame._msufPickupIconShown then frame._msufPickupIconShown = false end
     if frame.castText then
         Utils.CB_ApplyTexts(frame, nil, spellName or "", nil)
     end

@@ -57,6 +57,196 @@ local INTERRUPTED = INTERRUPTED
 local castbarEngine
 local castDebug = false
 
+local CapturePickupTarget, ResolvePickupTexture
+do
+    -- Opening and Herb Gathering spells with an Open Lock effect targeting a game object.
+    local pickupSpells = {
+        [3365] = true, [3366] = true, [6247] = true, [6249] = true,
+        [6477] = true, [6478] = true, [21651] = true, [22810] = true, [26868] = true,
+        [1221363] = true, [1269930] = true, [1308379] = true,
+        [2366] = true, [2368] = true, [2369] = true, [2371] = true, [3570] = true,
+        [11993] = true, [28695] = true, [50300] = true, [74519] = true, [110413] = true,
+    }
+    -- Object 645233 / item 271431 (Forever) and object 171938 / item 11583.
+    -- Both items use INV_Misc_Food_19. These are localized object names.
+    local modernCactusQuest = MSUF.Client.IsMists or (MSUF.Client.IsRetail and not MSUF.Client.IsForever)
+    local cactusAppleQuest = modernCactusQuest and 25136 or 4402
+    local freshAppleQuest = MSUF.Client.IsForever and 95561
+    local appleTexture = 133975
+    -- Foreman's Plight uses item 271620 from object 645449 in Forever.
+    local foremansQuest = MSUF.Client.IsForever and 95943
+    local foremansItem, foremansTexture = 271620, 132594
+    -- Some clients report an untranslated Fresh Apple label.
+    local names = ({
+        enUS = { "Fresh Apple", "Cactus Apple" },
+        deDE = { "Frischer Apfel", "Kaktusapfel" },
+        esES = { "Manzana fresca", "Manzana de cactus" },
+        esMX = { "Fresh Apple", "Manzana de cactus" },
+        frFR = { "Pomme fraîche", "Pomme de cactus" },
+        itIT = { "Fresh Apple", MSUF.Client.IsRetail and not freshAppleQuest and "Cactus" or "Cactus Apple" },
+        koKR = { "신선한 사과", "선인장 사과" },
+        ptBR = { "Maçã Fresca", "Sabra" },
+        ruRU = { "Свежее яблоко", "Плод кактуса" },
+        zhCN = { "新鲜的苹果", "仙人掌果" },
+        zhTW = { "新鮮的蘋果", "仙人掌果" },
+    })[GetLocale()]
+    local questLog = C_QuestLog
+    local IsOnQuest = questLog and questLog.IsOnQuest
+    local item = C_Item
+    local GetItemInfo = item and item.GetItemInfo
+    local GetItemInfoInstant = item and item.GetItemInfoInstant
+    local GetItemNameByID = item and item.GetItemNameByID
+    local RequestLoadItemDataByID = item and item.RequestLoadItemDataByID
+    local canResolveInstant = GetItemInfoInstant and GetItemNameByID
+    local canResolveItems = GetItemInfo ~= nil or canResolveInstant ~= nil
+    local spell = C_Spell
+    local GetSpellName = spell and spell.GetSpellName
+    local map = C_Map
+    local GetBestMapForUnit = map and map.GetBestMapForUnit
+    local referenceSpells = { 3365, 22810, 2366, 2575 }
+    local pickupSpellNames = {}
+    local spellNamesReady = false
+
+    local function RefreshPickupSpellNames()
+        if spellNamesReady or not GetSpellName then return end
+        local missingName = false
+        for index = 1, #referenceSpells do
+            local name = GetSpellName(referenceSpells[index])
+            if not issecretvalue(name) and type(name) == "string" and name ~= "" then
+                pickupSpellNames[name] = true
+            else
+                missingName = true
+            end
+        end
+        spellNamesReady = not missingName
+    end
+
+    local function QuestIsActive(questID, changedQuest, accepted)
+        -- The event can arrive before the quest log reflects this change.
+        if questID == changedQuest then return accepted end
+        local active = IsOnQuest(questID)
+        return not issecretvalue(active) and active == true
+    end
+
+    function Player.SyncSentEvent(frame, enabled, changedQuest, accepted)
+        if changedQuest and changedQuest ~= freshAppleQuest and changedQuest ~= cactusAppleQuest and changedQuest ~= foremansQuest then
+            return
+        end
+        local freshActive, cactusActive, foremansActive = false, false, false
+        if enabled and IsOnQuest then
+            freshActive = freshAppleQuest and QuestIsActive(freshAppleQuest, changedQuest, accepted) or false
+            cactusActive = QuestIsActive(cactusAppleQuest, changedQuest, accepted)
+            foremansActive = foremansQuest and QuestIsActive(foremansQuest, changedQuest, accepted) or false
+        end
+        if foremansActive and not frame._msufForemansCrateActive and RequestLoadItemDataByID then
+            RequestLoadItemDataByID(foremansItem)
+        end
+        if frame._msufFreshAppleActive ~= freshActive or frame._msufCactusAppleActive ~= cactusActive
+            or frame._msufForemansCrateActive ~= foremansActive then
+            frame._msufPickupPendingGUID, frame._msufPickupActiveGUID = false, false
+        end
+        frame._msufFreshAppleActive, frame._msufCactusAppleActive = freshActive, cactusActive
+        frame._msufForemansCrateActive = foremansActive
+        frame._msufPickupEnabled = enabled and (canResolveItems or freshActive or cactusActive or foremansActive)
+        if frame._msufPickupEnabled then
+            RefreshPickupSpellNames()
+        else
+            frame._msufPickupPendingGUID, frame._msufPickupActiveGUID = false, false
+        end
+
+        local sent = enabled and Config.Read("player").showTargetName == true and "player-and-vehicle"
+            or frame._msufPickupEnabled and "player" or false
+        if frame._msufPlayerSentRegistered == sent then return end
+        frame._msufPlayerSentRegistered = sent
+        if sent == "player-and-vehicle" then
+            frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player", "vehicle")
+        elseif sent == "player" then
+            frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player")
+        else
+            frame:UnregisterEvent("UNIT_SPELLCAST_SENT")
+        end
+    end
+
+    local function PickupLabel(label)
+        if not issecretvalue(label) and type(label) == "string" and label ~= "" and not pickupSpellNames[label] then
+            return label
+        end
+    end
+
+    local function TextureForPickupLabel(frame, label)
+        if not label then return nil end
+        if names and ((frame._msufFreshAppleActive and label == names[1])
+            or (frame._msufCactusAppleActive and label == names[2])) then
+            return appleTexture
+        end
+        if frame._msufForemansCrateActive then
+            if label == "Foreman's Crate" then return foremansTexture end
+            local itemName = GetItemNameByID and GetItemNameByID(foremansItem)
+            if not issecretvalue(itemName) and itemName == label then return foremansTexture end
+        end
+        if GetItemInfo then
+            local itemName, _, _, _, _, _, _, _, _, texture = GetItemInfo(label)
+            if not issecretvalue(itemName) and itemName == label
+                and not issecretvalue(texture) and type(texture) == "number" and texture > 0 then
+                return texture
+            end
+        end
+        if canResolveInstant then
+            local itemID, _, _, _, texture = GetItemInfoInstant(label)
+            if not issecretvalue(itemID) and type(itemID) == "number" and itemID > 0
+                and not issecretvalue(texture) and type(texture) == "number" and texture > 0 then
+                local itemName = GetItemNameByID(itemID)
+                if not issecretvalue(itemName) and itemName == label then return texture end
+            end
+        end
+    end
+
+    local function IsRiverglades()
+        local mapID = GetBestMapForUnit and GetBestMapForUnit("player")
+        return not issecretvalue(mapID) and mapID == 2548
+    end
+
+    function CapturePickupTarget(frame, unit, target, guid, spellID)
+        if unit ~= "player" or issecretvalue(spellID) or issecretvalue(guid) or type(guid) ~= "string" or guid == "" then return end
+        local label = PickupLabel(target)
+        if label then
+            frame._msufPickupPendingGUID, frame._msufPickupPendingLabel = guid, label
+        end
+    end
+
+    function ResolvePickupTexture(frame, state)
+        if state.unit ~= "player" or state.castType ~= "CAST" then return nil end
+        local spellID, spellName = state.spellId, state.spellName
+        if issecretvalue(spellID) then return nil end
+        if not pickupSpells[spellID] and (issecretvalue(spellName) or not pickupSpellNames[spellName]) then return nil end
+
+        local guid = state.castID
+        local publicGUID = not issecretvalue(guid) and type(guid) == "string" and guid ~= ""
+        if publicGUID and frame._msufPickupActiveGUID == guid then return frame._msufPickupActiveTexture or nil end
+
+        local target
+        if publicGUID and frame._msufPickupPendingGUID == guid then
+            target = frame._msufPickupPendingLabel
+            frame._msufPickupPendingGUID, frame._msufPickupPendingLabel = false, false
+        end
+        local display = PickupLabel(state.text)
+        local texture
+        -- The engine uses the spell name as display text when the native label is absent.
+        -- This Forever interaction exposes the spell ID even when its target is secret.
+        if not target and spellID == 1308379 and frame._msufFreshAppleActive
+            and (not display or (not issecretvalue(spellName) and display == spellName)) and IsRiverglades() then
+            texture = appleTexture
+        else
+            texture = TextureForPickupLabel(frame, target)
+            if not texture and display ~= target then texture = TextureForPickupLabel(frame, display) end
+        end
+        if publicGUID then
+            frame._msufPickupActiveGUID, frame._msufPickupActiveTexture = guid, texture or false
+        end
+        return texture
+    end
+end
+
 local function ScheduleDelayed(callback, delay)
     return ScheduleAfter(callback, delay, callback)
 end
@@ -389,6 +579,7 @@ end
 
 local function ClearActiveCastIdentity(frame)
     if not frame then return end
+    if frame._msufPickupActiveGUID then frame._msufPickupActiveGUID = false end
     frame._msufActiveCastGUID = nil
     frame._msufActiveSpellID = nil
     frame._msufActiveCastBarID = nil
@@ -548,8 +739,10 @@ local function HasSentTarget(target)
 end
 
 local function CaptureSentTarget(frame, unit, target, guid, spellID)
+    if frame._msufPickupEnabled then CapturePickupTarget(frame, unit, target, guid, spellID) end
+    if not Config.playerTargetName then return end
     ClearPendingTarget(frame)
-    if not Config.playerTargetName or not HasSentTarget(target) then return end
+    if not HasSentTarget(target) then return end
     frame._msufSentTarget, frame._msufSentUnit = target, unit
     frame._msufSentGUID = nil
     if not issecretvalue(guid) then frame._msufSentGUID = guid end
@@ -700,7 +893,8 @@ local function ApplyActiveCast(
         state.unit = unit
         state.castType = castType
         state.spellName = spellName
-        state.text = text or spellName
+        if not issecretvalue(text) and not text then text = spellName end
+        state.text = text
         state.icon = icon
         state.spellId = spellID
         state.startTimeMS = startMS
@@ -715,9 +909,10 @@ local function ApplyActiveCast(
         frame.MSUF_durationObj = nil
         frame.MSUF_isChanneled = isChannel
         frame.MSUF_timerDriven = nil
-        if frame.icon then frame.icon:SetTexture(icon or nil) end
+        if frame.icon then frame.icon:SetTexture(icon) end
         if frame.castText then
-            Utils.CB_ApplyTexts(frame, nil, spellName or "", nil)
+            if not issecretvalue(spellName) and not spellName then spellName = "" end
+            Utils.CB_ApplyTexts(frame, nil, spellName, nil)
         end
     end
 
@@ -803,13 +998,25 @@ local function ApplyCastState(frame, state)
     elseif frame._msufChannelSequenceID then
         frame._msufChannelRankSpellID, frame._msufChannelSequenceID = nil, nil
     end
+    local icon = state.icon
+    local pickupIcon = frame._msufPickupEnabled and ResolvePickupTexture(frame, state)
+    if pickupIcon then
+        frame._msufPickupIconShown = true
+        icon = pickupIcon
+    elseif frame._msufPickupIconShown then
+        frame._msufPickupIconShown = false
+        -- The duration painter preserves the previous texture if the next cast has none.
+        if state.durationObj and frame.icon and not issecretvalue(icon) and not icon then
+            frame.icon:SetTexture(nil)
+        end
+    end
     ApplyActiveCast(
         frame,
         state.unit or frame.unit or "player",
         castType,
         state.spellName,
         state.text,
-        state.icon,
+        icon,
         state.startTimeMS,
         state.endTimeMS,
         state.apiNotInterruptibleRaw,
@@ -1225,6 +1432,14 @@ function Player.UpdateTargetText(frame)
     playerTargetPainter(frame, frame)
     frame._msufPlayerTargetPainted = PlayerTargetActive(frame)
 end
+local function HandlePickupQuestEvent(frame, event, questID, classicQuestID)
+    local accepted = event == "QUEST_ACCEPTED"
+    if accepted and MSUF.Client.IsClassic then questID = classicQuestID end
+    if not issecretvalue(questID) and type(questID) == "number" then
+        Player.SyncSentEvent(frame, true, questID, accepted)
+    end
+end
+
 local function PlayerCastbarOnEventImpl(frame, event, ...)
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
         local sentGUID = frame._msufSentGUID
@@ -1238,6 +1453,10 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         DisablePlayerCastbar(frame)
         return
     end
+    if event == "QUEST_ACCEPTED" or event == "QUEST_REMOVED" then
+        return HandlePickupQuestEvent(frame, event, ...)
+    end
+    if event == "PLAYER_ENTERING_WORLD" then Player.SyncSentEvent(frame, true) end
     if frame.MSUF_testMode then return end
 
     local eventUnit = select(1, ...)
@@ -1400,6 +1619,7 @@ local function TracePlayerCastEvent(frame, event, unit, castGUID, spellID, arg4,
 end
 
 local function TracedPlayerCastbarOnEvent(frame, event, ...)
+    if event == "QUEST_ACCEPTED" or event == "QUEST_REMOVED" then return PlayerCastbarOnEventImpl(frame, event, ...) end
     TracePlayerCastEvent(frame, event, ...)
     PlayerCastbarOnEventImpl(frame, event, ...)
     local feedback = frame.interruptFeedbackEndTime and GetTime() < frame.interruptFeedbackEndTime
@@ -1417,7 +1637,7 @@ local function PlayerCastbarOnEvent(frame, event, ...)
 end
 
 function Player.SyncSuccessEvent(frame, enabled)
-    local hasTargetOption = frame._msufPlayerSentRegistered == true
+    local hasTargetOption = frame._msufPlayerSentRegistered == "player-and-vehicle"
     if not hasTargetOption then
         ClearPendingTarget(frame)
         ClearConfirmedTarget(frame)

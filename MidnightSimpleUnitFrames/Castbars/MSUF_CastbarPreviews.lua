@@ -346,6 +346,7 @@ local function StartPreviewTest(frame)
     ApplyPreviewCastText(frame, Translate(PREVIEW_LABELS.test))
     if frame.icon then
         frame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        if frame._msufPickupIconShown then frame._msufPickupIconShown = false end
         if frame.icon.Show then frame.icon:Show() end
     end
 

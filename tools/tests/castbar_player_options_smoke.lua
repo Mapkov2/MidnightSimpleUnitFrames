@@ -232,13 +232,20 @@ ChannelWithSuccess(false, 128, 127)
 Check(not player.castTargetText:IsShown(), "late confirmation changed a different active channel")
 
 local applySettings = world.core.Require("MSUF_Castbars_OnSettingsChanged", "castbar recipient registration test")
+local sentPlayer, sentVehicle
+local registerUnitEvent = player.RegisterUnitEvent
+function player:RegisterUnitEvent(event, first, second, ...)
+    if event == "UNIT_SPELLCAST_SENT" then sentPlayer, sentVehicle = first, second end
+    return registerUnitEvent(self, event, first, second, ...)
+end
 g.castbarPlayerShowTargetName = false
 applySettings()
-Check(not player.events.UNIT_SPELLCAST_SENT and not player.events.UNIT_SPELLCAST_SUCCEEDED,
-    "player target event listeners remained active with the option disabled")
+Check(player.events.UNIT_SPELLCAST_SENT and sentPlayer == "player" and sentVehicle == nil
+    and not player.events.UNIT_SPELLCAST_SUCCEEDED, "target text listeners remained active beyond the player pickup listener")
 g.castbarPlayerShowTargetName = true
 applySettings()
-Check(player.events.UNIT_SPELLCAST_SENT, "enabling the player target option did not restore SENT capture")
+Check(player.events.UNIT_SPELLCAST_SENT and sentPlayer == "player" and sentVehicle == "vehicle"
+    and player.events.UNIT_SPELLCAST_SUCCEEDED, "enabling target text did not restore its event subscriptions")
 
 world.channeling.player = nil
 C.Runtime:Stop(player, "STOPPED")

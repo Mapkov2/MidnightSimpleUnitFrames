@@ -502,19 +502,22 @@ local function StartGCDBar(frame, spellName, iconID, durationObj, general)
     frame.interrupted = nil
 
     local g = general or GeneralDB()
-    local showTime = g == nil or g.showGCDBarTime ~= false
-    local showSpell = g == nil or g.showGCDBarSpell ~= false
-
     local castText = ""
-    if showSpell then
+    if g == nil or g.showGCDBarSpell ~= false then
         castText = spellName
-        if frame.icon and iconID then
-            frame.icon:SetTexture(iconID)
-        end
+    else
+        iconID = nil
     end
+    local icon = frame.icon
+    if icon and iconID then
+        icon:SetTexture(iconID)
+    elseif icon and frame._msufPickupIconShown then
+        icon:SetTexture(nil)
+    end
+    if frame._msufPickupIconShown then frame._msufPickupIconShown = false end
     ApplyTexts(frame, nil, castText, nil)
 
-    if showTime and frame.timeText then
+    if (g == nil or g.showGCDBarTime ~= false) and frame.timeText then
         runtime:BindNativeTimeText(frame, stable, "CURRENT")
     else
         runtime:DisableNativeTimeText(frame)

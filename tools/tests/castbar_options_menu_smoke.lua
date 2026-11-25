@@ -97,6 +97,65 @@ M.SetCastbarPreviewUnit("player")
 M.SetCastbarPreviewType("normal")
 preview:Refresh()
 local frame = assert(preview.frame)
+do
+    core.Castbars.Manager.InitSafePlayerCastbar()
+    local live = assert(core.Castbars.Frames.Get("player"))
+    local applyLayout = core.Castbars.Visuals.ApplyCastbarDetailLayout
+    local keys = { "castbarPlayerShowIcon", "castbarPlayerIconSize", "castbarPlayerIconPosition",
+        "castbarPlayerIconSpacing", "castbarPlayerIconOffsetX", "castbarPlayerIconOffsetY", "castbarOutlineThickness" }
+    local saved = {}
+    for i, key in ipairs(keys) do saved[i] = g[key] end
+    g.castbarPlayerShowIcon, g.castbarPlayerIconSize = true, 24
+    g.castbarPlayerIconOffsetY, g.castbarOutlineThickness = 3, 6
+    local outlineInset = core.Castbars.Style.GetCastbarOutlineInset
+    local function CheckGap(bar, left, expected, label)
+        local host = assert(bar._msufDetailIconHost)
+        local side = left and "LEFT" or "RIGHT"
+        local point, relative, anchor, iconX, iconY = host:GetPoint(1)
+        assert(point == side and relative == bar and anchor == side
+            and iconX == g.castbarPlayerIconOffsetX and iconY == g.castbarPlayerIconOffsetY,
+            label .. " moved the 7.0.4 icon anchor")
+        local _, _, _, barX = bar.statusBar:GetPoint(left and 1 or 2)
+        local _, _, _, farX = bar.statusBar:GetPoint(left and 2 or 1)
+        local expectedFarX = left and -outlineInset(bar, g) or outlineInset(bar, g)
+        assert(math.abs(farX - expectedFarX) < .01, label .. " moved the opposite bar edge")
+        local width = host:GetWidth()
+        local gap = left and (barX - iconX - width) or (iconX - width - barX)
+        assert(math.abs(gap - expected) < .01, label .. " icon spacing: expected " .. expected .. ", got " .. gap)
+    end
+    for _, side in ipairs({ "LEFT", "RIGHT" }) do
+        g.castbarPlayerIconPosition = side
+        local outward = side == "LEFT" and -1 or 1
+        for _, case in ipairs({ { 0, 1 }, { 0, 0 }, { 0, -1 }, { 4, 1 }, { 4, 0 } }) do
+            g.castbarPlayerIconSpacing, g.castbarPlayerIconOffsetX = case[1], case[2] * outward
+            core.Castbars.Config.Compile("style")
+            applyLayout(live, "player", g)
+            preview:Refresh()
+            CheckGap(live, side == "LEFT", case[1], "runtime " .. side)
+            CheckGap(frame, side == "LEFT", case[1], "preview " .. side)
+        end
+    end
+    local bars = env.MSUF_DB.bars
+    local savedRounded, savedRoundedCastbars, savedSlantedCastbars =
+        bars.roundedFramesEnabled, bars.roundedCastbars, bars.slantedCastbars
+    bars.roundedFramesEnabled, bars.roundedCastbars, bars.slantedCastbars = true, true, false
+    core.RoundedCastbarsApplyAll(true)
+    preview:Refresh()
+    assert(live._msufRoundedCastbarActive and frame._msufRoundedCastbarActive, "rounded castbar was not applied")
+    CheckGap(live, false, 4 + outlineInset(live, g), "rounded runtime")
+    CheckGap(frame, false, 4 + outlineInset(frame, g), "rounded preview")
+    bars.roundedFramesEnabled, bars.roundedCastbars, bars.slantedCastbars =
+        savedRounded, savedRoundedCastbars, savedSlantedCastbars
+    core.RoundedCastbarsApplyAll(false)
+    preview:Refresh()
+    CheckGap(live, false, 4, "square runtime after switching back")
+    CheckGap(frame, false, 4, "square preview after switching back")
+
+    for i, key in ipairs(keys) do g[key] = saved[i] end
+    core.Castbars.Config.Compile("style")
+    applyLayout(live, "player", g)
+    preview:Refresh()
+end
 assert(frame.castTargetText and frame.castTargetText:IsShown(), "global player preview lacks target text")
 assert(frame.castText:GetText():find("Rank 4", 1, true) ~= nil or not ranked, "global player preview lacks spell rank")
 assert(frame._msufFadeDriver, "global preview lacks shared fade")
