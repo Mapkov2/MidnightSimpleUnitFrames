@@ -740,6 +740,26 @@ local function RegisterUnitContextFactories()
         local globalPage = M.GlobalPage or {}
         local scope = ContextValue(context and context.scope, context) or "shared"
         if type(globalPage.NormalizeScopeKey) == "function" then scope = globalPage.NormalizeScopeKey(scope) end
+        if scope == "nameplates" then
+            local function Apply()
+                globalPage.ApplyFontsFor(scope, "MSUF2_CONTEXT_NAMEPLATE_FONT_COLOR")
+            end
+            local function Enabled()
+                return globalPage.FontOverrideGetFor(scope) == true
+            end
+            local state = ContextDBRowsState({ "nameplates" }, { "fontColorR", "fontColorG", "fontColorB" }, Apply)
+            state.isEnabled = Enabled
+            return ContextTarget("font.default.nameplates", "Default font", function()
+                local color = MSUF.UF.Config.ResolveNameplateFont({}).textColor
+                return color.r, color.g, color.b
+            end, function(r, g, b)
+                if not Enabled() then return end
+                globalPage.FontScopeSetFor(scope, "fontColorR", r, nil, nil, true)
+                globalPage.FontScopeSetFor(scope, "fontColorG", g, nil, nil, true)
+                globalPage.FontScopeSetFor(scope, "fontColorB", b, nil, nil, true)
+                Apply()
+            end, state)
+        end
         local localColor = type(globalPage.IsGFScope) == "function" and globalPage.IsGFScope(scope) == true
             and type(globalPage.FontOverrideGetFor) == "function" and globalPage.FontOverrideGetFor(scope) == true
             and type(globalPage.FontScopeGetFor) == "function"
