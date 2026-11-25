@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.5-beta2 - 2026-11-25
+
+### Highlights
+
+- **Class-colored frame outlines.** In Bars > Frame Outline, turn on Class Color Outline to use each player character's class color. NPCs keep the outline color you picked. Set it once in Shared or override it for a unit, party or raid scope.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_outline","controlId":"menu2.opt.bars.global.outline.class.color","settingKey":"","prepareKind":"","prepareValue":"","query":"class color outline","label":"Class Color Outline"} -->
+
+### Frames and portraits
+
+- Joining a group while already in combat could block the health bar layout and leave a party portrait missing. The frame now retries protected layout when it becomes writable.
+- Party members whose names arrive late when entering a dungeon appear in the roster and move into the configured sort order when their names are ready.
+- The animated party preview now shows the spell icon while a sample cast is active and restores the 3D portrait afterwards.
+
+### Colors and appearance
+
+- Open the outline settings from the gear beside a border control or color shortcut. The overview also lets you adjust the shared group-border and focus-highlight colors and set thickness for the selected group scope.
+- External Defensives have their own aura icon style and shape. Each setting inherits the Buffs appearance until you override it.
+- The player castbar can show the collected item's icon for recognized pickups. Icon spacing is consistent on either side of the bar and in its preview.
+
+### Options and compatibility
+
+- The Nameplates font preview shows the selected color. Reset restores the inherited color, and searching for character name parts opens Shared.
+- On WoW Forever, hand settings in Swing Timer reflect the module's enabled state. Characters whose realm is temporarily unavailable can recover an existing profile and its specialization assignments.
+- The Misc tooltip shortcut opens the Suite's unit-frame tooltip settings when available. Core provides its own tooltip controls when used on its own.
+- Added the Midnight 12.1.7 interface alongside 12.1.5.
+
 ## 7.0.5-beta1 - 2026-11-24
 
 ### Highlights

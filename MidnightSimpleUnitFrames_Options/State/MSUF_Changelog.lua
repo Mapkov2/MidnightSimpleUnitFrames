@@ -8,52 +8,55 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "27E4F54C5A9244FC8414718359EC0E281DDB872218BF48A756B104821CEF02FE",
-    currentVersion = "7.0.5-beta1",
+    sourceSha256 = "3D0F741BEEE5C08474C65566513B5399571C5DEDE08CBB09E4605521FF0CBB35",
+    currentVersion = "7.0.5-beta2",
     historyFromVersion = "7.021",
     previousVersion = "7.0.4",
-    rangeLabel = "7.0.4 -> 7.0.5-beta1",
+    rangeLabel = "7.0.4 -> 7.0.5-beta2",
     entries = {
         {
-            version = "7.0.5-beta1",
-            date = "2026-11-24",
+            version = "7.0.5-beta2",
+            date = "2026-11-25",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "3D portraits for unit frames. In Unit Frames > Player > Portrait, enable the portrait and set Render to 3D portrait. You can also choose 3D for other supported unit frames.",
+                            text = "Class-colored frame outlines. In Bars > Frame Outline, turn on Class Color Outline to use each player character's class color. NPCs keep the outline color you picked. Set it once in Shared or override it for a unit, party or raid scope.",
                             link = {
-                                pageKey = "uf_player",
-                                query = "3D portrait",
-                                label = "Player Portrait Render",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitrender",
-                                settingKey = "player.portraitRender",
-                                prepareKind = "menuTab",
-                                prepareValue = "general",
-                            },
-                        },
-                        {
-                            text = "3D portraits for party frames. In Party > Portrait, enable the portrait and set Render to 3D portrait.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "3D portrait",
-                                label = "Party Portrait Render",
-                                sectionId = "portrait",
-                                controlId = "menu2.gf_layout.group.portrait.portraitrender",
-                                settingKey = "gf_party.portraitRender",
-                                prepareKind = "menuTab",
-                                prepareValue = "general",
+                                pageKey = "opt_bars",
+                                query = "class color outline",
+                                label = "Class Color Outline",
+                                sectionId = "bars_outline",
+                                controlId = "menu2.opt.bars.global.outline.class.color",
+                                settingKey = "",
                             },
                         },
                     },
                 },
                 {
-                    title = "Portrait options",
+                    title = "Frames and portraits",
                     bullets = {
-                        "Adjust zoom, framing and 3D rotation in the preview. Portrait backgrounds support custom, class and reaction colors.",
-                        "On Retail and WoW Forever, portraits that need to fall back switch to 2D during instanced combat. The player and pet keep their 3D models, and Party has a Keep 3D in instanced combat option.",
+                        "Joining a group while already in combat could block the health bar layout and leave a party portrait missing. The frame now retries protected layout when it becomes writable.",
+                        "Party members whose names arrive late when entering a dungeon appear in the roster and move into the configured sort order when their names are ready.",
+                        "The animated party preview now shows the spell icon while a sample cast is active and restores the 3D portrait afterwards.",
+                    },
+                },
+                {
+                    title = "Colors and appearance",
+                    bullets = {
+                        "Open the outline settings from the gear beside a border control or color shortcut. The overview also lets you adjust the shared group-border and focus-highlight colors and set thickness for the selected group scope.",
+                        "External Defensives have their own aura icon style and shape. Each setting inherits the Buffs appearance until you override it.",
+                        "The player castbar can show the collected item's icon for recognized pickups. Icon spacing is consistent on either side of the bar and in its preview.",
+                    },
+                },
+                {
+                    title = "Options and compatibility",
+                    bullets = {
+                        "The Nameplates font preview shows the selected color. Reset restores the inherited color, and searching for character name parts opens Shared.",
+                        "On WoW Forever, hand settings in Swing Timer reflect the module's enabled state. Characters whose realm is temporarily unavailable can recover an existing profile and its specialization assignments.",
+                        "The Misc tooltip shortcut opens the Suite's unit-frame tooltip settings when available. Core provides its own tooltip controls when used on its own.",
+                        "Added the Midnight 12.1.7 interface alongside 12.1.5.",
                     },
                 },
             },
