@@ -970,7 +970,7 @@ function Borders.Apply(frame, spec)
     end
     ConfigureBossPresence(frame, cfg)
   end
-  if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
+  if not (frame and (frame._msufBorderRuntimeNormal or frame._msufBorderRuntimeHighlight)) then
     LayoutBorder(frame, 1)
     HideResolvedBorder(frame)
   elseif frame._msufBorderRuntimeHighlight == true then
