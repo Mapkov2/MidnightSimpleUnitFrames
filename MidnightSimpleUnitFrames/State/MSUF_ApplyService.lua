@@ -813,6 +813,9 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
     if opt and opt.dispelPurgeBorder == true then
         ApplyAuraScope(scope or "shared", opt.reason or "MSUF2_DISPEL_BORDER")
     end
+    if opt and opt.barOutline == true then
+        MSUF.EventBus:Publish("CONFIG_APPLIED", opt.reason)
+    end
     return castbarTexturesApplied
 end
 local function ApplyCastbarRuntime(opt)
