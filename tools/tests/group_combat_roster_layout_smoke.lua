@@ -3,7 +3,7 @@ local root, flavor = assert(arg[1]), assert(arg[2])
 local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 local compiledChunks = {}
 
-local function World(zone, raid, partyMode)
+local function World(zone, raid, partyMode, configure)
   local h = Harness.New(root, flavor, { compiledChunks = compiledChunks, nativeLayout = true, beforeBoot = function(world)
     local env = world.env
     env.IsInInstance = function() return zone ~= "none", zone end
@@ -38,6 +38,7 @@ local function World(zone, raid, partyMode)
       env.UnitPowerMax = function() return 100 end
       env.AbbreviateNumbers, env.AbbreviateLargeNumbers, env.BreakUpLargeNumbers = tostring, tostring, tostring
     end
+    if configure then configure(world) end
   end })
   for _, kind in ipairs({ "party", "raid" }) do
     local conf = h.GF.GetConf(kind)
@@ -343,7 +344,15 @@ local function FrozenRoster(zone, raidAsParty)
 end
 
 local function OpenWorldInvite(partyMode)
-  local h = World("none", false, partyMode)
+  local h = World("none", false, partyMode, function(world)
+    world.env.SetPortraitTexture = function(texture, unit) texture.portraitUnit = unit end
+  end)
+  if partyMode == "solo" then
+    local conf = h.GF.GetConf("party")
+    conf.portraitMode, conf.portraitRender = "RIGHT", "2D"
+    h.GF.Rebuild("party")
+    h:RunDeferred()
+  end
   local unit = partyMode == "solo" and "party1" or "party2"
   local roster = partyMode == "solo" and {"player", "party1"} or {"player", "party1", "party2"}
   local previous = h.GF.FrameForUnit("party1")
@@ -368,6 +377,11 @@ local function OpenWorldInvite(partyMode)
   end
   assert(newcomer.nameText and Visible(newcomer.nameText) and newcomer.nameText:GetText() == "Arrival",
     "newcomer's name missing before regen")
+  if partyMode == "solo" then
+    assert(Visible(newcomer.MSUFPortraitHolder) and newcomer.portrait.portraitUnit == unit,
+      "first invite after a solo pull did not paint the 2D portrait during combat")
+    assert(newcomer:GetAttribute("*type1") == "target", "first invite lost secure targeting")
+  end
   local layouts, born = h.headerUpdates, #h.born
   for i = 1, 8 do
     h:Event("UNIT_HEALTH", unit)
@@ -382,6 +396,150 @@ local function OpenWorldInvite(partyMode)
     local names = h.GF.headers.party:GetAttribute("nameList")
     assert(names and names:find("Arrival", 1, true), "regen did not restore the saved sort with the new member")
   end
+end
+
+local function SoloCombatPortraitInvite()
+  local secrets = dofile(root .. "/tools/tests/classpower_secrets.lua")
+  local h = World("none", false, nil, function(world)
+    world.env.issecretvalue = secrets.IsSecret
+    world.widgets.Methods.SetUnit = function(model, unit) model.boundUnit = unit end
+  end)
+  local gf, conf = h.GF, h.GF.GetConf("party")
+  conf.portraitMode, conf.portraitRender, conf.portraitClickable = "RIGHT", "3D", true
+  conf.powerBarEnabled, conf.powerHeight, conf.powerShowDamager = true, 7, true
+  gf.Rebuild("party")
+  h:RunDeferred()
+  local child = assert(gf.FrameForUnit("party1"))
+  local bar, holder, button = child.hpBar, child.MSUFPortraitHolder, child.MSUFPortraitClickTarget
+  local model = assert(holder.model3D)
+  local inset = bar._msufHealthPowerInset
+  assert(inset > 0 and model.boundUnit == "party1" and button:IsShown(), "initial clickable party portrait missing")
+
+  local function CheckHitBounds()
+    assert(button:GetNumPoints() == holder:GetNumPoints() and holder:GetNumPoints() > 0)
+    for i = 1, holder:GetNumPoints() do
+      local point, anchor, relPoint, x, y = holder:GetPoint(i)
+      local bp, ba, br, bx, by = button:GetPoint(i)
+      assert(bp == point and ba == anchor and br == relPoint and bx == x and by == y,
+        "secure hit target does not match the portrait anchors")
+    end
+    if holder:GetNumPoints() == 1 then
+      assert(button:GetWidth() == holder:GetWidth() and button:GetHeight() == holder:GetHeight(), "wrong portrait hit size")
+    end
+  end
+
+  -- A secure click button also protects the regions it is anchored to. The ordinary
+  -- header fixture models parent protection only. Refuse the reported native writes.
+  local blocked = {}
+  local function Guard(region, method, restricted)
+    local original = region[method]
+    region[method] = function(self, ...)
+      if h.env.InCombatLockdown() and restricted() then
+        blocked[#blocked + 1] = self:GetObjectType() .. ":" .. method
+        return
+      end
+      return original(self, ...)
+    end
+  end
+  -- The client can retain protection on a previously anchored health bar.
+  h.Protect(bar)
+  bar.IsProtected = function() return true, false end
+  bar.CanChangeProtectedState = function() return not h.env.InCombatLockdown() end
+  Guard(bar, "ClearAllPoints", bar.IsProtected)
+  Guard(bar, "SetPoint", bar.IsProtected)
+  local function HolderAnchorsSecureButton()
+    return button.allPoints == holder or select(2, button:GetPoint()) == holder
+  end
+  Guard(holder, "Show", HolderAnchorsSecureButton)
+  Guard(holder, "SetShown", HolderAnchorsSecureButton)
+  Guard(holder, "ClearAllPoints", HolderAnchorsSecureButton)
+
+  h:SetRoster({"player"})
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:RunDeferred()
+  assert(not gf.FrameForUnit("party1") and not holder:IsShown(), "leaving the group did not retire the slot")
+  local _, _, _, _, oldOffset = bar:GetPoint(2)
+  assert(oldOffset == 0, "retired slot still reserves the old occupant's power bar")
+  model.boundUnit = nil
+  h.rosterNames = { party1 = "Incoming" }
+  h:EnterCombat()
+  h:SetRoster({"player", "party1"})
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:RunDeferred()
+  assert(#blocked == 0, "solo combat invite attempted protected geometry: " .. tostring(blocked[1]))
+  assert(gf.FrameForUnit("party1") == child and child:GetAttribute("unit") == "party1"
+    and Visible(holder) and Visible(model) and model.boundUnit == "party1"
+    and child.nameText:GetText() == "Incoming", "retired portrait did not display the new occupant during combat")
+  local _, _, _, _, combatOffset = bar:GetPoint(2)
+  assert(combatOffset == oldOffset and bar._msufHealthPowerInset == oldOffset, "locked bar committed an unapplied inset")
+  h:SetRoster({"player", "party1", "party2"})
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:RunDeferred()
+  local fresh = assert(gf.FrameForUnit("party2"))
+  assert(fresh.hpBar._msufHealthPowerInset == inset and Visible(fresh.MSUFPortraitHolder.model3D)
+    and fresh.MSUFPortraitHolder.model3D.boundUnit == "party2", "fresh combat child lost its health geometry or portrait")
+
+  -- The native widget-security answer can itself be secret.
+  local secret = secrets.New("boolean")
+  local function Opaque() return secret end
+  local stop = secrets.Watch(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua", { strict = true })
+  bar.CanChangeProtectedState = Opaque
+  h.core.UF.elements.Health.Layout(child)
+  bar.CanChangeProtectedState, bar.IsProtected = nil, Opaque
+  h.core.UF.elements.Health.Layout(child)
+  local misuse = stop()
+  assert(#misuse == 0, misuse[1])
+  assert(#blocked == 0, "opaque protection state allowed a health anchor write")
+
+  h:LeaveCombat()
+  h:RunDeferred()
+  local _, _, _, _, restoredOffset = bar:GetPoint(2)
+  assert(restoredOffset == inset and bar._msufHealthPowerInset == inset, "regen did not restore the current health inset")
+  CheckHitBounds()
+  conf.portraitOffsetX, conf.portraitOffsetY = 6, -4
+  for _, placement in ipairs({"OVERLAY", "DETACHED", "ATTACHED"}) do
+    conf.portraitPlacement, conf.portraitOverlayAlign = placement, "FULL"
+    gf.Rebuild("party")
+    CheckHitBounds()
+  end
+  -- A reapply may see new placement before the already-active secure target can move.
+  h:EnterCombat()
+  conf.portraitOffsetX = 19
+  gf.InvalidateCompiledSpecs("party")
+  assert(gf.ApplyButton(child, "party", "UNIT_CHANGED"))
+  CheckHitBounds()
+  h:LeaveCombat()
+  h:RunDeferred()
+  CheckHitBounds()
+  assert(holder._msufX == 19, "regen lost deferred portrait placement")
+  assert(button:IsShown() and button:GetAttribute("useparent-unit") and Visible(model), "regen did not restore portrait targeting")
+  assert(#h.violations == 0, h.violations[1])
+end
+
+local function SoloInviteWorldTransition()
+  local h = World("none", false, "solo")
+  h:EnterCombat()
+  h:SetRoster({"player", "party1"})
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:Event("PLAYER_LEAVING_WORLD")
+  h:RunDeferred()
+  h:Event("PLAYER_ENTERING_WORLD")
+  h:RunDeferred()
+  local child = h.GF.FrameForUnit("party1")
+  assert(child and Visible(child) and child:GetAttribute("unit") == "party1" and child.nameText:GetText() == "Arrival",
+    "returning to the outdoor world lost the invite queued during combat")
+
+  h:SetRoster({"player", "party1", "party2"})
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:Event("PLAYER_LEAVING_WORLD")
+  h.env.IsInInstance = function() return true, "party" end
+  h:Event("PLAYER_ENTERING_WORLD")
+  h:RunDeferred()
+  assert(not h.GF.FrameForUnit("party2"), "an outdoor binding was applied inside the instance in combat")
+  h:LeaveCombat()
+  h:RunDeferred()
+  assert(h.GF.FrameForUnit("party2"), "regen lost the member on entry to the instance")
+  assert(#h.violations == 0, h.violations[1])
 end
 
 local function OpenWorldRaidReinvite()
@@ -604,6 +762,8 @@ local function NativeRaidFallbackAlongsideParty()
   assert(#h.violations == 0, h.violations[1])
 end
 
+SoloCombatPortraitInvite()
+SoloInviteWorldTransition()
 LateDungeonPartyName("playerFirstInRole")
 LateDungeonPartyName("sortClassPriority")
 PartyNameBurst("playerFirstInRole")

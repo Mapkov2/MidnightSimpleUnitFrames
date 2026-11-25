@@ -880,6 +880,24 @@ local function RunOpenWorldChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
   return RunChildUnitRebind(self, visual, rawUnit, oldUnit, kind)
 end
 
+-- A loading screen can discard a pending first paint while the secure button
+-- keeps its unit. Resume from the current header, including recycled children.
+function GF.QueueUnappliedHeaderChildren(header)
+  if not header:IsShown() then return end
+  local index = 1
+  local child = header:GetAttribute("child1")
+  while child do
+    if child:IsShown() then
+      local unit = child:GetAttribute(UNIT_ATTR)
+      if IsUnitToken(unit) and (appliedSerial[child] == nil or appliedUnit[child] ~= unit) then
+        GF.QueueCombatRosterBinding(child, header._msufGFKind)
+      end
+    end
+    index = index + 1
+    child = header:GetAttribute("child" .. index)
+  end
+end
+
 local rebindChild = RunChildUnitRebind
 local suspendConsumptionAuraScan = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.SuspendConsumptionAuraScan
 

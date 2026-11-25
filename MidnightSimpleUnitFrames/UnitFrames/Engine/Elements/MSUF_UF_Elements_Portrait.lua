@@ -611,6 +611,33 @@ local function PortraitMouseLeave(button)
   if callback then callback(button._msufUnitFrameOwner) end
 end
 
+-- Group visuals and their secure click targets use the same anchor recipe.
+-- Anchoring the button to the holder would protect a recycled portrait's Show.
+local function SetPortraitBounds(region, anchor, point, relPoint, x, y, width, height, locked)
+  -- FULL overlay derives its size from its two anchors.
+  local resize = point ~= "FULL" and (region._msufWidth ~= width or region._msufHeight ~= height)
+  local reanchor = region._msufPoint ~= point or region._msufRelPoint ~= relPoint
+    or region._msufX ~= x or region._msufY ~= y or region._msufAnchor ~= anchor
+  if locked and (resize or reanchor) then return false end
+  if resize then
+    region:SetSize(width, height)
+    region._msufWidth, region._msufHeight = width, height
+  end
+  if reanchor then
+    region:ClearAllPoints()
+    if point == "FULL" then
+      region:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -y)
+      region:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -x, y)
+      region._msufWidth, region._msufHeight = nil, nil
+    else
+      region:SetPoint(point, anchor, relPoint, x, y)
+    end
+    region._msufPoint, region._msufRelPoint = point, relPoint
+    region._msufX, region._msufY, region._msufAnchor = x, y, anchor
+  end
+  return true
+end
+
 local pendingPortraitClicks = setmetatable({}, { __mode = "k" })
 local portraitClickReplay
 local function ApplyPortraitClickTarget(frame, p)
@@ -632,11 +659,18 @@ local function ApplyPortraitClickTarget(frame, p)
     portraitClickReplay:RegisterEvent("PLAYER_REGEN_ENABLED")
     return
   end
-  local button = frame.MSUFPortraitClickTarget
-  local enabled = p and p.enabled == true and p.clickable == true
-    and frame._msufGFIsPreviewFrame ~= true
+  local button, holder = frame.MSUFPortraitClickTarget, frame.MSUFPortraitHolder
+  local group = frame._msufIsGroupFrame
+  local enabled = p and p.enabled == true and p.clickable == true and holder
+    and (not group or holder._msufPoint) and frame._msufGFIsPreviewFrame ~= true
   if not enabled then
-    if button then button:Hide() end
+    if button then
+      button:Hide()
+      if button._msufAnchor then
+        button:ClearAllPoints()
+        button._msufAnchor = nil
+      end
+    end
     pendingPortraitClicks[frame] = nil
     return
   end
@@ -647,7 +681,7 @@ local function ApplyPortraitClickTarget(frame, p)
     button:SetAttribute("useparent-unit", true)
     button:RegisterForClicks("AnyUp")
     button:EnableMouse(true)
-    button:SetAllPoints(frame.MSUFPortraitHolder)
+    if not group then button:SetAllPoints(holder) end
     local hoverOwner = frame._msufIsGroupFrame and MSUF.GF or UF
     button._msufPortraitEnter = hoverOwner and hoverOwner.PortraitMouseEnter
     button._msufPortraitLeave = hoverOwner and hoverOwner.PortraitMouseLeave
@@ -663,7 +697,11 @@ local function ApplyPortraitClickTarget(frame, p)
   elseif clickOwner and clickOwner.RegisterClickCastFrame then
     clickOwner.RegisterClickCastFrame(button)
   end
-  button:SetFrameLevel(frame.MSUFPortraitHolder:GetFrameLevel() + 1)
+  if group then
+    SetPortraitBounds(button, holder._msufAnchor, holder._msufPoint, holder._msufRelPoint,
+      holder._msufX, holder._msufY, holder._msufWidth, holder._msufHeight)
+  end
+  button:SetFrameLevel(holder:GetFrameLevel() + 1)
   button:Show()
   pendingPortraitClicks[frame] = nil
 end
@@ -833,23 +871,13 @@ local function LayoutPortrait(frame, p)
     holder._msufHolderAlpha = alpha
   end
 
-  -- FULL overlay derives its size from the two anchors, so skip SetSize there.
-  if point ~= "FULL" and (holder._msufWidth ~= width or holder._msufHeight ~= height) then
-    holder:SetSize(width, height)
-    holder._msufWidth, holder._msufHeight = width, height
-  end
-  if holder._msufPoint ~= point or holder._msufRelPoint ~= relPoint
-    or holder._msufX ~= x or holder._msufY ~= y or holder._msufAnchor ~= anchor then
-    holder:ClearAllPoints()
-    if point == "FULL" then
-      holder:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, -y)
-      holder:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -x, y)
-      holder._msufWidth, holder._msufHeight = nil, nil
-    else
-      holder:SetPoint(point, anchor, relPoint, x, y)
-    end
-    holder._msufPoint, holder._msufRelPoint = point, relPoint
-    holder._msufX, holder._msufY, holder._msufAnchor = x, y, anchor
+  -- An armed group hit target cannot move during combat. Keep the art aligned
+  -- with it and let the normal group refresh apply the current spec on regen.
+  local button = frame._msufGFKind and frame.MSUFPortraitClickTarget
+  local locked = button and button._msufAnchor and InCombatLockdown()
+  if not SetPortraitBounds(holder, anchor, point, relPoint, x, y, width, height, locked) then
+    MSUF.GF.DeferGroupRuntime("refresh", frame._msufGFKind, MSUF.GF.DIRTY_GEOMETRY)
+    return
   end
   CachePortraitLayoutExtents(holder, anchor, frame, point, p, width, height, x, y)
   if UF.Shared and UF.Shared.LayoutPortraitImage then

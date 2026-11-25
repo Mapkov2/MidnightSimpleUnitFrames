@@ -1132,6 +1132,10 @@ local function RuntimeOnEvent(self, event, unit)
       and not GF._instanceRosterFrozen and IsOpenWorldRosterLocation() or nil
     if GF._openWorldCombatRoster ~= resume then GF.SetOpenWorldCombatRoster(resume) end
     pendingCombatBindings = nil
+    if resume then
+      GF.ForEachHeader("party", GF.QueueUnappliedHeaderChildren)
+      GF.ForEachHeader("raid", GF.QueueUnappliedHeaderChildren)
+    end
     SyncCombatState(InCombat() == true)
     GF.RefreshHeaderLayout()
     if event == "PLAYER_ENTERING_WORLD" then

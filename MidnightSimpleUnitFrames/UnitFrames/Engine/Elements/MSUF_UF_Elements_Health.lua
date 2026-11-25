@@ -6,6 +6,7 @@ local UF = C.UF
 if not UF then return end
 
 local CreateFrame = C.CreateFrame or CreateFrame
+local InCombatLockdown = C.InCombatLockdown or InCombatLockdown
 local UnitHealth = C.UnitHealth or UnitHealth
 local UnitHealthMax = C.UnitHealthMax or UnitHealthMax
 local UnitHealthPercent = C.UnitHealthPercent or UnitHealthPercent
@@ -322,6 +323,17 @@ local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
   frame._msufHealthBackgroundNeedsValue = frame._msufHealthBackgroundFillMissing == true and not active
 end
 
+local HEALTH_POWER_LAYOUT = { "Health", "Power" }
+
+local function HealthAnchorsLocked(bar)
+  if bar.CanChangeProtectedState then
+    local writable = bar:CanChangeProtectedState()
+    return issecretvalue(writable) or writable ~= true
+  end
+  local protected = bar.IsProtected and bar:IsProtected()
+  return issecretvalue(protected) or protected
+end
+
 function Health.Layout(frame, spec, powerEnabled)
   local bar = frame and frame.hpBar
   if not bar then return end
@@ -339,6 +351,17 @@ function Health.Layout(frame, spec, powerEnabled)
   if not IsFiniteNumber(topInset) or topInset < 0 then topInset = 0 end
   if spec and type(spec.height) == "number" then topInset = math.max(0, math.min(topInset, spec.height - powerInset - 1)) end
   if bar._msufHealthPowerInset == powerInset and bar._msufHealthTopInset == topInset and bar._msufHealthLayoutFrame == frame then return end
+  -- A secure click target can protect an otherwise ordinary status bar.
+  -- Keep the last committed anchors while the current unit and its art bind.
+  if InCombatLockdown and InCombatLockdown() and HealthAnchorsLocked(bar) then
+    if frame._msufGFKind then
+      local group = MSUF.GF
+      group.DeferGroupRuntime("refresh", frame._msufGFKind, group.DIRTY_GEOMETRY)
+    elseif frame.MSUFUnitKey then
+      UF.RefreshElements(frame.MSUFUnitKey, HEALTH_POWER_LAYOUT, "MSUF_POWER_LAYOUT")
+    end
+    return
+  end
   bar:ClearAllPoints()
   bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -topInset)
   bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, powerInset)
