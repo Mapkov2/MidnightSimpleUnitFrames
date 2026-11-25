@@ -2,6 +2,15 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/menu_unit_tooltip_suite_link_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/castbar_player_pickup_icon_smoke.lua",
       "phase": "runtime",
       "clients": [

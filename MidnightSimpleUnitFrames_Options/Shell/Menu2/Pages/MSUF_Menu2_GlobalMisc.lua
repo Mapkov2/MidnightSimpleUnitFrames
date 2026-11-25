@@ -596,11 +596,8 @@ function MiscSection.FrameHighlights(s)
     M.TrackRefresh(ctx, RefreshMouseoverControls)
 
 end
-function MiscSection.Tooltips(s)
-    local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
-    -- Classic has no aura tooltip switch rows below the help text (-226 and -252).
-    local tooltips = Schema.Section(b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", IS_MAINLINE and 290 or 226, false), ctx.key)
-    local tooltipW = tooltips._msuf2Width or ctx.width or 720
+local function BindUnitTooltipControls(s, tooltips, tooltipW)
+    local ctx, BindMiscDropdown = s.ctx, s.BindMiscDropdown
     local tooltipLeftX = 30
     local tooltipRightX = max(tooltipLeftX + 300, floor(tooltipW * 0.52))
     local tooltipLeftW = max(240, min(300, tooltipRightX - tooltipLeftX - 48))
@@ -634,17 +631,31 @@ function MiscSection.Tooltips(s)
         "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. " ..
             "Auras only reuse the selected Blizzard/MSUF look and cursor placement.",
         tooltipLeftX, -174, tooltipW - 68)
+end
+
+function MiscSection.Tooltips(s)
+    local ctx, b, BindMiscToggle = s.ctx, s.b, s.BindMiscToggle
+    local moved = MSUF.SuiteLink.HasUnitFrameTooltipSettings()
+    local height = moved and 146 or IS_MAINLINE and 290 or 226
+    local tooltips = Schema.Section(b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", height, false), ctx.key)
+    if moved then
+        local button = T.Button(tooltips, "Skinning", 220, 26)
+        button:SetPoint("TOPLEFT", 30, -39)
+        button:SetScript("OnClick", MSUF.SuiteLink.OpenUnitFrameTooltipSettings)
+    else
+        BindUnitTooltipControls(s, tooltips, tooltips._msuf2Width or ctx.width or 720)
+    end
     -- Both aura tooltip switches drive client options through
     -- Runtime/MSUF_TooltipSpellIDs.lua, and only the Mainline TOC loads that file.
     -- Classic clients would get switches that write settings and change nothing.
     if IS_MAINLINE then
         local tooltipSpellIDs = BindMiscToggle(tooltips, "Show spell IDs in aura tooltips", "tooltipShowAuraSpellIDs", false,
-            "MSUF2_TOOLTIP_SPELL_IDS", 14, -226, 360, PREVIEW_FALSE,
+            "MSUF2_TOOLTIP_SPELL_IDS", 14, moved and -79 or -226, 360, PREVIEW_FALSE,
             function(v)
                 Core.MSUF_ApplyTooltipSpellIDs(v and true or false)
             end)
         local tooltipCasterNames = BindMiscToggle(tooltips, "Show caster names in aura tooltips", "tooltipShowAuraCasterNames", false,
-            "MSUF2_TOOLTIP_CASTER_NAMES", 14, -252, 360, PREVIEW_FALSE,
+            "MSUF2_TOOLTIP_CASTER_NAMES", 14, moved and -105 or -252, 360, PREVIEW_FALSE,
             function(v)
                 Core.MSUF_ApplyTooltipCasterNames(v and true or false)
             end)

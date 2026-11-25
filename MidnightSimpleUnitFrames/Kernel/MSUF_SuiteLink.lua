@@ -68,10 +68,12 @@ end
 
 function Link.GetOverview()
     local current = API()
-    if current then return current.GetOverview() end
-    local suite = Suite()
-    local getOverview = suite and suite.GetOverview
-    if type(getOverview) == "function" then return getOverview() end
+    local getOverview = OptionalFunction(current and current.GetOverview)
+    if not getOverview then
+        local suite = Suite()
+        getOverview = OptionalFunction(suite and suite.GetOverview)
+    end
+    if getOverview then return getOverview() end
     return nil
 end
 
@@ -243,6 +245,26 @@ function Link.HasNameplateKickReady()
     local current = API()
     local has = current and current.HasNameplateKickReady
     if has then return has() == true end
+    return false
+end
+
+-- Misc links to the Suite's Tooltips page when the Suite can open it.
+local function UnitFrameTooltipSettingsOpener()
+    local current = API()
+    local open = OptionalFunction(current and current.OpenUnitFrameTooltipSettings)
+    if not open then return nil end
+    local has = OptionalFunction(current.HasUnitFrameTooltipSettings)
+    if has and has() == true then return open end
+    return nil
+end
+
+function Link.HasUnitFrameTooltipSettings()
+    return UnitFrameTooltipSettingsOpener() ~= nil
+end
+
+function Link.OpenUnitFrameTooltipSettings()
+    local open = UnitFrameTooltipSettingsOpener()
+    if open then return open() end
     return false
 end
 
