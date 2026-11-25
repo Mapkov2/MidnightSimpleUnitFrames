@@ -330,7 +330,9 @@ local function ResetBarsPage(db, defaults)
     RetireLegacyUnitAliases(db)
 end
 local function ResetFontsPage(db, defaults)
-    ResetUnitFiltered(db, defaults, "nameplates", function(key) return FONT_SCOPE_KEYS[key] == true end)
+    ResetUnitFiltered(db, defaults, "nameplates", function(key)
+        return FONT_SCOPE_KEYS[key] == true or key == "fontColorR" or key == "fontColorG" or key == "fontColorB"
+    end)
     ResetRootFiltered(db, defaults, "general", function(key) return FONT_GENERAL_KEYS[key] == true end)
     ResetKeySet(db, defaults, FONT_ROOT_KEYS)
     for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do

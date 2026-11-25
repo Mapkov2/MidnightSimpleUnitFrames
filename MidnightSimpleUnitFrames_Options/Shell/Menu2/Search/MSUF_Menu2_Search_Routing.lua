@@ -1264,6 +1264,11 @@ local function SearchRouteExactView(route, pageKey, exactTarget)
 end
 local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return route end
+    if pageKey == "opt_fonts" and exactTarget.settingKey == "general.characterNameParts" then
+        route = type(route) == "table" and route or {}
+        SearchRouteSetGeneral(route, "_fontScopeKey", "shared")
+        return route
+    end
     local workspaceKind = exactTarget.prepareKind == "classPowerStyleTab" and "class"
         or exactTarget.prepareKind == "classPowerWorkspace" and exactTarget.prepareValue
         or ("|" .. tostring(exactTarget.prepareContracts or "") .. "|"):match("|classPowerWorkspace=([^=|]+)=%*|")
