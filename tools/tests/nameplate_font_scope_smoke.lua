@@ -27,11 +27,30 @@ local mw = MenuWorld.Open(root, flavor, { page = "opt_fonts", beforeCore = funct
 end })
 local M, db = mw.M, mw.env.MSUF_DB
 local globalKey, globalSize = db.general.fontKey, db.general.fontSize
+local characterParts = "name_shortening.character_name_parts"
+assert((rows[characterParts] ~= nil) == (flavor == "Forever"), "wrong Shared character-name visibility")
+rows[characterParts], rows["menu2.opt_fonts.name_shortening.scopeNotice"] = nil, nil
 scopeOptions.setValue("nameplates")
 mw:RunTimers()
 assert(M.GlobalPage.CurrentFontScope() == "nameplates", "nameplate font scope not selectable")
+assert(not rows[characterParts], "Nameplates duplicates Shared character names")
+assert(not rows["menu2.opt_fonts.name_shortening.scopeNotice"], "Nameplates repeats the scope notice in Name Shortening")
+local target = assert(M.ResolveContextColorReferences({ "font.default.current" }, { scope = "nameplates" })[1])
+local original = target.captureState()
+local sharedR, sharedG, sharedB = db.general.fontColorCustomR, db.general.fontColorCustomG, db.general.fontColorCustomB
+assert(not target.isEnabled(), "the inherited default font color is editable")
+target.setRGB(.2, .4, .6)
+assert(not db.nameplates or not db.nameplates.fontColorR, "a disabled nameplate color was stored")
 scopeOptions.setOverride(true)
 mw:RunTimers()
+assert(target.isEnabled(), "the nameplate default color stayed locked")
+target.setRGB(.2, .4, .6)
+local tinted = mw.core.UF.Config.ResolveNameplateFont({}).textColor
+assert(tinted.r == .2 and tinted.g == .4 and tinted.b == .6, "the picker did not change the nameplate runtime font color")
+assert(db.general.fontColorCustomR == sharedR and db.general.fontColorCustomG == sharedG and db.general.fontColorCustomB == sharedB,
+    "editing nameplate font color changed Shared")
+target.restoreState(original)
+assert(not db.nameplates.fontColorR, "cancel retained the scoped color")
 assert(not rows["font.nameplate_size"] and not rows["font.nameplate_name_size"], "Fonts still builds nameplate size controls")
 db.nameplates.fontSize, db.nameplates.nameFontSize = 19, 23
 rows["font.family"].set("EXPRESSWAY")
@@ -55,10 +74,18 @@ assert(db.general.fontKey == globalKey and db.nameplates.fontKey == selectedFont
 local api = M.Search._CoreAPI
 api.GetSearchRecords()
 mw:RunTimers(1000)
+local foundCharacterNames
 for _, row in ipairs(api.GetSearchRecords()) do
     local key = row.exactTarget and row.exactTarget.settingKey
     assert(key ~= "nameplates.fontSize" and key ~= "nameplates.nameFontSize", "removed Fonts size is still in search")
+    if key == "general.characterNameParts" then
+        foundCharacterNames = true
+        local routed, shown, exact = (M.Search._RoutingAPI or api).OpenSearchTarget(row.key, row.label, row.label,
+            row.anchor, row.route, row.exactTarget)
+        assert(routed and shown and exact and M.GlobalPage.CurrentFontScope() == "shared", "character names search missed Shared")
+    end
 end
+assert((foundCharacterNames == true) == (flavor == "Forever"), "wrong character-name search visibility")
 print("nameplate font scope " .. flavor .. ": scoped family, saved size inheritance and search passed")
 
 -- Compare the portable field resolver to the actual unit-frame typography

@@ -206,6 +206,10 @@ local function ConfiguredFontColorPreview(scope)
     scope = NormalizeScopeKey(scope or CurrentFontScope())
     local getFor = GP.FontScopeGetFor
     local overrideFor = GP.FontOverrideGetFor
+    if scope == "nameplates" then
+        local color = MSUF.UF.Config.ResolveNameplateFont({}).textColor
+        return RGB(color.r, color.g, color.b)
+    end
     if IsGFScope(scope) and type(overrideFor) == "function" and overrideFor(scope)
         and type(getFor) == "function" and getFor(scope, "useGlobalFontColor", true) == false
     then
@@ -571,8 +575,10 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
     if IsGFScope(nameScope) then
         BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
     else
+        local hasNameParts = nameScope == "shared" and CharacterNameParts
+        local height = nameScope == "nameplates" and 382 or 426
         local names = Schema.Section(b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-            426 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
+            height + (hasNameParts and CharacterNameParts.rowHeight or 0), true), ctx.key)
         local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
         local function CanEditNameShortening()
             return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
@@ -976,7 +982,7 @@ local function FontNameControls(ctx, parent, label, minChars, noticeFallbackY, g
             get = editor.GetNoEllipsis, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
                 set = editor.SetNoEllipsis, meta = Meta("name_shortening.no_ellipsis"), domain = "global" },
     }
-    if CharacterNameParts then
+    if CharacterNameParts and CurrentFontScope() == "shared" then
         rows[#rows + 1] = { "segment", "name_shortening.character_name_parts", nil,
             { "Character names (all frames)", CharacterNameParts.values, 430 },
             get = CharacterNameParts.Get, customSetReason = "Updates per-scope font overrides and their matching legacy alias fields.",
@@ -999,12 +1005,14 @@ local function FontNameControls(ctx, parent, label, minChars, noticeFallbackY, g
             "Choose a method, then use Max name length for limited names. Abbreviated words keep the last word. The preview follows every change.",
             { hook = true })
     end
-    local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
-    controls.scopeNotice = Schema.Build(ctx, parent, {
-        { "text", "menu2.opt_fonts.name_shortening.scopeNotice", nil, { "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted } },
-    })["menu2.opt_fonts.name_shortening.scopeNotice"]
-    if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
-    if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
+    if CurrentFontScope() ~= "nameplates" then
+        local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
+        controls.scopeNotice = Schema.Build(ctx, parent, {
+            { "text", "menu2.opt_fonts.name_shortening.scopeNotice", nil, { "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted } },
+        })["menu2.opt_fonts.name_shortening.scopeNotice"]
+        if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
+        if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
+    end
     if M.AddControlTooltip then
         M.AddControlTooltip(controls.side, "Truncation style",
             "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
@@ -1038,12 +1046,18 @@ local function BuildFontTextColors(ctx, b)
         powerColor = BindFontColorModeDropdown(colors, "Power Text Color", PowerColorValues, "power", "colors.colorPowerTextByType")
     end
     if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(colors, { "font.default.current" }, {
+        local defaultColor = W.AttachContextColorReferences(colors, { "font.default.current" }, {
             title = "Default Font Color",
             note = "Uses this Fonts scope's effective Default font color.",
             historySource = "menu:fonts-global-font-color",
             context = function() return { scope = CurrentFontScope() } end,
         })
+        if defaultColor and CurrentFontScope() == "nameplates" then
+            M.TrackRefresh(ctx, function() SetControlEnabled(defaultColor, CurrentFontScopeCanEdit()) end)
+            if W.SetControlDisabledReason and W.TurnOnReason then
+                W.SetControlDisabledReason(defaultColor, W.TurnOnReason("Use custom settings for this scope", CurrentFontScopeCanEdit))
+            end
+        end
     end
     local gradientColors
     if healthColor then
