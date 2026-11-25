@@ -371,6 +371,16 @@ local function PaintSceneHealth(frame, hp, hpMax, animState, class, hpPct)
   bar:Show()
 end
 
+local function SetPreviewClass(frame, class, sample)
+  local classPinned = sample and sample.class and frame._msufPortraitSampleClass ~= class
+  if classPinned then frame._msufPortraitSampleClass = class end
+  if frame._msufGFPreviewClass ~= class then
+    frame._msufGFPreviewClass = class
+    if frame._msufBorderRuntimeClassColor then MSUF.UF.elements.Borders.RefreshClassColor(frame) end
+  end
+  return classPinned
+end
+
 local function ApplyPreviewData(frame, slot, kind, scene)
   if InCombat() then return false end
   if not frame then return false end
@@ -391,17 +401,13 @@ local function ApplyPreviewData(frame, slot, kind, scene)
   -- sample as an unavailable name, before shortening or caching it.
   if issecretvalue(playerName) then playerName = nil end
   local name = sample and sample.name or (index == 1 and playerName) or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
-  -- The pinned class is also the class the frame's name colour and portrait art draw (a scene frame holds no unit).
-  local classPinned = sample and sample.class and frame._msufPortraitSampleClass ~= class
-  if classPinned then frame._msufPortraitSampleClass = class end
-
   frame._msufGFPreviewActive = true
   frame._msufGFPreviewIndex = index
-  frame._msufGFPreviewClass = class
   frame._msufGFPreviewRole = role
   frame._msufGFIsPreviewFrame = true
   frame._msufIsGroupFrame = true
   frame._msufGFKind = kind
+  local classPinned = SetPreviewClass(frame, class, sample)
 
   local textLayerOn = PreviewLayerOn("text", scene)
   local showPreviewName = frame.nameText and frame.nameText:IsShown() and textLayerOn

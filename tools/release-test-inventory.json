@@ -2,6 +2,21 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/frame_outline_class_color_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
       "test": "tools/tests/menu_unit_tooltip_suite_link_smoke.lua",
       "phase": "runtime",
       "clients": [

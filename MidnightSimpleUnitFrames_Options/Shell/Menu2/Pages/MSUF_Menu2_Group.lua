@@ -394,7 +394,7 @@ local GF_COPY_CATEGORIES = {
             powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol
             powerTextDelimiter powerFullValueShort powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill
             powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled
-            powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture fadeInOnShow oocFadeEnabled oocFadeAlpha
+            powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture barOutlineClassColor fadeInOnShow oocFadeEnabled oocFadeAlpha
             healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB
             deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX
             powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX

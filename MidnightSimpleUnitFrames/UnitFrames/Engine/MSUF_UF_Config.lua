@@ -1763,6 +1763,7 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.g = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
   border.b = Number(ScopedValue(conf, general, "barOutlineColorB", general.barBorderB), 0)
   border.a = Number(ScopedValue(conf, general, "barOutlineColorA", general.barBorderA), 1)
+  border.classColor = ScopedValue(conf, bars, "barOutlineClassColor", false) == true
   border.highlightThickness = Number(
     ScopedValue(conf, general, "highlightBorderThickness",
       bars.highlightBorderThickness or general.highlightBorderThickness),

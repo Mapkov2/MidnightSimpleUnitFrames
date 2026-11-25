@@ -99,6 +99,30 @@ assert(lanes.power.root.parent:IsShown(), "unit scope did not restore the power 
 
 local outline = assert(M.cache.opt_bars.sections.bars_outline)
 outline._msuf2CollapsibleEntry.SetOpenImmediate(true)
+local classOutline = Control("barOutlineClassColor")
+assert(classOutline.get() == false, "class outline must default off")
+local classToggle = assert(Find(function(frame) return frame._msuf2ControlSchema == classOutline end))
+local _, _, _, _, classY = classToggle:GetPoint()
+assert(type(classY) == "number" and classY < -100, "class outline toggle must follow the outline style")
+classToggle:Click()
+Settle()
+assert(db.bars.barOutlineClassColor == true and health.MSUFSpec.border.classColor == true,
+    "the shared toggle did not repaint the unit preview")
+db.general.hpPowerTextSelectedKey = "gf_party"
+panel:RefreshIfStale()
+Settle()
+local partyPreview = assert(lanes.health.scene:Frames()[1], "party outline preview is missing")
+assert(partyPreview.MSUFSpec.border.classColor == true, "party did not inherit the class outline")
+db.gf_party.hlOverride = true
+classOutline.set(false)
+Settle()
+assert(db.gf_party.barOutlineClassColor == false and partyPreview.MSUFSpec.border.classColor == false,
+    "party override did not repaint its outline")
+assert(db.bars.barOutlineClassColor == true, "party override changed the shared setting")
+db.general.hpPowerTextSelectedKey = "shared"
+classOutline.set(false)
+panel:RefreshIfStale()
+Settle()
 local thickness = assert(Find(function(frame)
     local schema = frame._msuf2ControlSchema
     return schema and schema.key == "barOutlineThickness" and frame._msuf2Title ~= nil

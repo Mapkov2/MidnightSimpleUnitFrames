@@ -26,6 +26,12 @@ local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = Visuals.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 local GROUP_THREAT_EVENTS = UF.Metadata.GroupThreatEvents
 local GROUP_THREAT_EVENT = UF.Metadata.GroupThreatEvent
+local CLASS_COLOR_EVENT = "UNIT_NAME_UPDATE"
+local CLASS_COLOR_EVENTS = { CLASS_COLOR_EVENT }
+local CLASS_COLOR_THREAT_EVENTS = { CLASS_COLOR_EVENT, unpack(BORDER_THREAT_EVENTS) }
+local GROUP_CLASS_COLOR_THREAT_EVENTS = { CLASS_COLOR_EVENT, unpack(GROUP_THREAT_EVENTS) }
+local ClassColors = MSUF.UFBarTextCommon
+local ReadUnitIsPlayerCached = UF.ReadUnitIsPlayerCached
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local SetShown = Visuals.SetShown
 local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
@@ -102,10 +108,14 @@ function Borders.GetEvents(frame, spec)
   if not cfg then
     return EMPTY_EVENTS
   end
+  local classColor = frame._msufBorderRuntimeClassColor == true
   if cfg.aggro == true and IsAggroBorderUnit(frame) then
-    return spec.scope == "group" and GROUP_THREAT_EVENTS or BORDER_THREAT_EVENTS
+    if spec.scope == "group" then
+      return classColor and GROUP_CLASS_COLOR_THREAT_EVENTS or GROUP_THREAT_EVENTS
+    end
+    return classColor and CLASS_COLOR_THREAT_EVENTS or BORDER_THREAT_EVENTS
   end
-  return EMPTY_EVENTS
+  return classColor and CLASS_COLOR_EVENTS or EMPTY_EVENTS
 end
 
 function Borders.GetUnitlessEvents(frame, spec)
@@ -738,8 +748,28 @@ local function BossTargetColor(cfg)
   return 1, 0.82, 0, 1
 end
 
-local function NormalBorderColor(cfg)
-  return cfg and cfg.r or 0, cfg and cfg.g or 0, cfg and cfg.b or 0, cfg and cfg.a or 1
+local function ResolveOutlineClassColor(frame)
+  if frame._msufGFIsPreviewFrame == true then
+    return ClassColors.ClassColorForToken(frame._msufGFPreviewClass or frame._msufPortraitSampleClass)
+  end
+  local scene = frame._msufPreviewScene
+  if scene then
+    local sample = scene.sample
+    if sample and sample.player == true then return ClassColors.ClassColorForToken(sample.class) end
+    return
+  end
+  local unit = frame.MSUFUnitKey
+  if unit and (unit == "player" or ReadUnitIsPlayerCached(frame, unit) == true) then
+    return ClassColors.DispatchClassColor(frame, unit, false, true)
+  end
+end
+
+local function RefreshNormalBorderColor(frame, cfg)
+  local r, g, b
+  if frame._msufBorderRuntimeClassColor then r, g, b = ResolveOutlineClassColor(frame) end
+  frame._msufBorderNormalR = r or cfg and cfg.r or 0
+  frame._msufBorderNormalG = g or cfg and cfg.g or 0
+  frame._msufBorderNormalB = b or cfg and cfg.b or 0
 end
 
 local function HighlightPriorityOrder(cfg)
@@ -837,7 +867,8 @@ end
 local function ApplyNormalBorder(frame, cfg)
   if frame and frame._msufBorderRuntimeNormal == true then
     return ApplyResolvedBorder(frame, cfg, "normal", BORDER_LEVEL_NORMAL,
-      frame._msufBorderRuntimeNormalThickness, NormalBorderColor(cfg))
+      frame._msufBorderRuntimeNormalThickness,
+      frame._msufBorderNormalR, frame._msufBorderNormalG, frame._msufBorderNormalB, cfg and cfg.a or 1)
   end
   HideResolvedBorder(frame)
 end
@@ -930,6 +961,8 @@ function Borders.Apply(frame, spec)
     frame._msufBorderRuntimeLevelPurge = cfg and HighlightBorderLevel(cfg, "purge") or nil
     frame._msufBorderRuntimeLevelBossTarget = cfg and HighlightBorderLevel(cfg, "bossTarget") or nil
     frame._msufBorderRuntimeNormal = BorderNormalEnabled(cfg) or nil
+    frame._msufBorderRuntimeClassColor = frame._msufBorderRuntimeNormal and cfg.classColor == true or nil
+    RefreshNormalBorderColor(frame, cfg)
     frame._msufBorderRuntimeHighlight = BorderHighlightEnabled(frame, cfg) or nil
     frame._msufBorderVisualCfg = nil
     if BossIndicator then
@@ -1027,6 +1060,8 @@ function Borders.Disable(frame)
     frame._msufBorderRuntimeLevelPurge = nil
     frame._msufBorderRuntimeLevelBossTarget = nil
     frame._msufBorderRuntimeNormal = nil
+    frame._msufBorderRuntimeClassColor = nil
+    frame._msufBorderNormalR, frame._msufBorderNormalG, frame._msufBorderNormalB = nil, nil, nil
     frame._msufBorderRuntimeHighlight = nil
     frame._msufBorderVisualCfg = nil
     frame._msufBorderVisualSource = nil
@@ -1114,11 +1149,29 @@ function Borders.UpdateGroupThreat(frame, event, unit, threat)
   return ApplyNormalBorder(frame, cfg)
 end
 
-function Borders.SelectEventUpdate(frame, spec, event, update)
+function Borders.RefreshClassColor(frame)
+  RefreshNormalBorderColor(frame, frame._msufBorderRuntimeCfg)
+  -- A highlight keeps ownership until its ordinary update restores the outline.
+  if frame._msufBorderVisualSource == "normal" then
+    ApplyNormalBorder(frame, frame._msufBorderRuntimeCfg)
+  end
+end
+
+local function UpdateIdentityColor(frame, event)
+  RefreshNormalBorderColor(frame, frame._msufBorderRuntimeCfg)
+  return Borders.Update(frame, event)
+end
+
+function Borders.SelectUpdate(frame)
+  return frame._msufBorderRuntimeClassColor and UpdateIdentityColor or Borders.Update
+end
+
+function Borders.SelectEventUpdate(_, spec, event, update)
+  if event == CLASS_COLOR_EVENT then return Borders.RefreshClassColor end
   if spec and spec.scope == "group" and GROUP_THREAT_EVENT[event] == true then
     return Borders.UpdateGroupThreat
   end
-  return update
+  return update == UpdateIdentityColor and Borders.Update or update
 end
 
 Borders.NoDispatchUpdates = {

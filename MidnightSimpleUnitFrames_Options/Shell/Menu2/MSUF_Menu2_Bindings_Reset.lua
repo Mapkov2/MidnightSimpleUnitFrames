@@ -113,7 +113,7 @@ local BARS_SCOPE_KEYS = KSW [[
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger dispelBorderShowOn
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength powerGradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
-    barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
+    barOutlineClassColor barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
     frameBarShape slantedBarDirection aggroMode tempMaxHealthEnabled tempMaxHealthTexture tempMaxHealthOpacity tempMaxHealthBackgroundOpacity
     tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
 ]]
@@ -121,7 +121,8 @@ local BARS_SCOPE_KEYS = KSW [[
 -- Custom settings flag (hlOverride) gates travel with the flag.
 M.BarsScopeKeys = BARS_SCOPE_KEYS
 local BARS_TABLE_KEYS = KSW [[
-    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled
+    barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture barOutlineClassColor
+    smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled
     roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover roundedCornerStrength powerBarTexture
     powerBarBgTexture slantedBarsEnabled slantedBarDirection slantedUnitFrames slantedGroupFrames slantedPowerBars slantedMouseover

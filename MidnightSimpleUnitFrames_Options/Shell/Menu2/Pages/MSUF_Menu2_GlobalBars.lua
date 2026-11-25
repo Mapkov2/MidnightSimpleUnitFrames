@@ -140,6 +140,7 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["outline.thickness"] = "barOutlineThickness",
     ["outline.layer"] = "barOutlineLayer",
     ["outline.texture"] = "barOutlineTexture",
+    ["outline.class_color"] = "barOutlineClassColor",
     ["outline.color"] = "barOutlineColor",
     ["highlight.border_thickness"] = "highlightBorderThickness",
     ["highlight.border_mode.aggroOutlineMode"] = "aggroOutlineMode",
@@ -167,6 +168,7 @@ local Rows = { Schema = M.ControlSchema, keys = (function()
         ["outline.thickness"] = { "bars.barOutlineThickness" },
         ["outline.layer"] = { "bars.barOutlineLayer" },
         ["outline.texture"] = { "bars.barOutlineTexture" },
+        ["outline.class_color"] = { "bars.barOutlineClassColor" },
         ["power.smooth_fill"] = { "bars.smoothPowerBar" },
         ["power.chunked_fill"] = { "bars.chunkedPowerBar" },
     }

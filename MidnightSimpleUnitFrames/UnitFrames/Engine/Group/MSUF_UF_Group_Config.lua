@@ -1619,6 +1619,7 @@ local function CompileBorderSpec(kind, conf, general)
     g = Num(ScopedValue(conf, general, "barOutlineColorG", conf.borderG or general and general.barBorderG), 0),
     b = Num(ScopedValue(conf, general, "barOutlineColorB", conf.borderB or general and general.barBorderB), 0),
     a = Num(ScopedValue(conf, general, "barOutlineColorA", conf.borderA or general and general.barBorderA), 1),
+    classColor = ScopedValue(conf, bars, "barOutlineClassColor", false) == true,
     highlightThickness = Num(highlightThickness, borderThickness),
     aggro = aggroBorderEnabled == true,
     aggroMode = conf.aggroMode or general.aggroMode or "ALL",

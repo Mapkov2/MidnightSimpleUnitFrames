@@ -41,7 +41,7 @@ local max = Parts.max
 local min = Parts.min
 
 local function BuildOutlineSection(ctx, b)
-    local outline = Rows.Schema.Section(b:CollapsibleSection("bars_outline", "Frame Outline", 226, false), "bars")
+    local outline = Rows.Schema.Section(b:CollapsibleSection("bars_outline", "Frame Outline", 258, false), "bars")
     local options = Rows.Options(BarScopeGetBars, BarScopeSetBars, RequestOutlineRuntime, nil, true)
     local BorderStyles = MSUF.BorderStyles or MSUF.Require("MSUF_BorderStyles", FILE)
     local function OutlineTextureValues()
@@ -64,6 +64,9 @@ local function BuildOutlineSection(ctx, b)
             end,
             args = { "MSUF2_BAR_OUTLINE_TEXTURE", true }, after = RequestOutlineRuntime
         } --[[schema setter: J5.GlobalBars.OutlineTexture]] },
+        { "flowToggle", "barOutlineClassColor", false, { "Class Color Outline" },
+            path = "outline.class_color", reason = "MSUF2_BAR_OUTLINE_CLASS_COLOR",
+            tip = "Uses each player character's class color when available. All other units use the selected outline color." },
     }, options)
     local outlineSlider, outlineLayer, outlineTexture = controls.barOutlineThickness, controls.barOutlineLayer, controls.texture
     M.AttachOutlineOverview(outlineSlider, function() return "core.frame." .. CurrentBarsScope() end)
@@ -92,7 +95,8 @@ local function BuildOutlineSection(ctx, b)
     local scopeReason = turnOn and turnOn("Use custom settings for this scope", ScopedControls)
     -- Rounded and slanted frames draw the selected style along their shape.
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outlineLayer, outlineTexture }, on = ScopedControls, reason = scopeReason },
+        { controls = { outlineSlider, outlineLayer, outlineTexture, controls.barOutlineClassColor },
+            on = ScopedControls, reason = scopeReason },
     })
 end
 
