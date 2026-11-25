@@ -304,8 +304,8 @@ local function ApplyAll(masterActive)
     ForEachCastbar(function(frame)
         local wasActive = frame._msufRoundedCastbarActive
         if roundedRuntimeActive then ApplyFrame(frame) else ClearFrame(frame, true) end
-        if wasActive ~= frame._msufRoundedCastbarActive and frame._msufDetailIconLayoutKey then
-            Castbars.Visuals.ApplyDetailLayout(frame)
+        if wasActive ~= frame._msufRoundedCastbarActive then
+            Castbars.Visuals.RefreshIconLayout(frame)
         end
     end)
 end

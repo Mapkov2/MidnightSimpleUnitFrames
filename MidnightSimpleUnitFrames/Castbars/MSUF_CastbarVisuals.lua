@@ -626,6 +626,12 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     end
 end
 
+-- Rounded transitions can change the clearance beside an outside icon.
+function Visuals.RefreshIconLayout(frame)
+    local unit = frame._msufCastbarDetailLayoutUnit
+    if unit then ApplyIconLayout(frame, GeneralDB(), unit, PrefixForUnit(unit)) end
+end
+
 local function SetTextIfChanged(fontString, text)
     SetTextIfChangedFn(fontString, text or "")
 end
