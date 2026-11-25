@@ -8,6 +8,7 @@ local mw = MenuWorld.Open(root, flavor, { page = "gf_layout", beforeCore = funct
     local methods = world.widgets.Methods
     function methods:SetTexture(texture) self.texture, self.atlas = texture, nil end
     function methods:SetAtlas(atlas) self.atlas, self.texture = atlas, atlas and ("atlas:" .. atlas) end
+    function methods:SetUnit(unit) self.modelUnit = unit end
     world.env.CLASS_ICON_TCOORDS = {}
     for i, class in ipairs({ "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE",
         "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }) do
@@ -179,5 +180,22 @@ if mode == nil then
     box:Refresh("SETTINGS")
     assert(frame._msufPortraitRuntimeCfg.render == "CLASS" and portrait:GetTexture() ~= cast,
         "CLASS art did not restore after animation stopped")
+    conf.portraitRender = "3D"
+    mw.core.GF.InvalidateCompiledSpecs("party")
+    box:Refresh("SETTINGS")
+    local model = assert(frame.MSUFPortraitHolder.model3D, "3D preview model was not created")
+    assert(model:IsShown() and model.modelUnit == "player", "idle party sample lost its 3D model")
+    box._animationEnabled, box._animationElapsed = true, 0.4
+    box:Refresh("SETTINGS")
+    local castTexture = assert(group.sample.portrait.texture, "3D sample has no cast texture")
+    assert(group.sample.portrait.castSpellIcon and portrait:IsShown() and portrait:GetTexture() == castTexture
+        and not model:IsShown() and conf.portraitRender == "3D", "3D party sample hid its cast icon")
+    box._animationElapsed = 4.7
+    assert(box:RefreshAnimation() and portrait:GetTexture() == group.sample.portrait.texture,
+        "animated 3D cast sample stopped following its spell")
+    box._animationEnabled = nil
+    box:Refresh("SETTINGS")
+    assert(model:IsShown() and not portrait:IsShown() and frame.MSUFSpec.portrait.render == "3D",
+        "the 3D model did not return after the party cast sample")
 end
 print("preview_group_sample_contract_smoke: PASS " .. flavor .. " " .. (mode or "all"))
