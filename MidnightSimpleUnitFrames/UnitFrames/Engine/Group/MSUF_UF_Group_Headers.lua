@@ -112,13 +112,14 @@ end
 -- Unit consumers stay live when a raidN token acquires another occupant.
 local function DeferRosterNameUpdate(observer, _, unit)
   if not IsUnitToken(unit) then return end
-  local raid = GF.headers.raid
-  -- Small raids may be displayed by the party header.
-  if unit ~= "player" and not unit:match("^raid%d+$") and (raid or not unit:match("^party[1-4]$")) then return end
+  local party = GF.headers.party
+  -- One replay covers both headers when Party also sorts its subgroup by name list.
+  local raidOnly = GF.headers.raid and not (party and party._msufWatchPartyNames)
+  if unit ~= "player" and not unit:match("^raid%d+$") and (raidOnly or not unit:match("^party[1-4]$")) then return end
   observer:UnregisterEvent("UNIT_NAME_UPDATE")
   local reasons, kind = GF._pendingGroupRuntimeReasons, GF._pendingGroupRuntimeKind
-  if reasons and reasons.roster and (kind == false or (raid and (kind == "raid" or kind == "mythicraid"))) then return end
-  GF.DeferGroupRuntime("roster", raid and "raid" or nil)
+  if reasons and reasons.roster and (kind == false or (raidOnly and (kind == "raid" or kind == "mythicraid"))) then return end
+  GF.DeferGroupRuntime("roster", raidOnly and "raid" or nil)
 end
 
 local function FreezeRaidRoster(header)
@@ -831,34 +832,24 @@ local function NameListFromEntries(entries)
 end
 
 local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
-  if conf.playerFirstInRole ~= true and conf.sortClassPriority ~= true then
-    return nil
-  end
   local entries = {}
   if kind == "party" then
     local liveKind = LiveGroupKind()
     if GF.IsPartyGroupContext(liveKind, conf) then
       local expectedCompanions = ArenaPartyExpectedCompanionCount()
-      if IsRaidLikeKind(liveKind) then
+      if expectedCompanions == nil or IsRaidLikeKind(liveKind) then
         local count = PartyCompanionCount()
         if count == nil then return nil end
         expectedCompanions = ClampInt(count, 0, 0, 4)
+        -- A new party token can exist before the subgroup count catches up.
+        if expectedCompanions < 4 and Secrets.UnitExistsPlain("party" .. (expectedCompanions + 1)) then return nil end
       end
       if expectedCompanions == false then return nil end
-      local rosterComplete = true
-      if conf.showPlayer ~= false then
-        if AddNameListEntry(entries, "player", 0, conf) ~= true then
-          rosterComplete = false
-        end
+      -- nameList filters membership. Keep native sorting until every expected name is readable.
+      if conf.showPlayer ~= false and not AddNameListEntry(entries, "player", 0, conf) then return nil end
+      for i = 1, expectedCompanions do
+        if not AddNameListEntry(entries, "party" .. i, i, conf) then return nil end
       end
-      local companionLimit = expectedCompanions ~= nil and expectedCompanions or 4
-      for i = 1, companionLimit do
-        if AddNameListEntry(entries, "party" .. i, i, conf) ~= true then
-          rosterComplete = false
-        end
-      end
-      -- A partial name list would hide members while Arena or raid subgroup tokens settle.
-      if expectedCompanions ~= nil and rosterComplete ~= true then return nil end
     elseif liveKind == nil and conf.showSolo == true and conf.showPlayer ~= false then
       AddNameListEntry(entries, "player", 0, conf)
     end
@@ -1165,11 +1156,13 @@ local function BuildSortState(key, kind, conf, liveRoster)
   local mode = ResolveSortMode(key, conf)
   local smallRaidParty = key == "party" and SmallRaidParty(kind)
   local sortMethod, groupBy, groupingOrder, nameList = "INDEX", nil, nil, nil
+  local watchPartyNames
 
   if not liveRoster and NeedsNameList(mode, conf, smallRaidParty) then
     if key ~= "party" or smallRaidParty then
       nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true)
-    else
+    elseif conf.playerFirstInRole == true or conf.sortClassPriority == true then
+      watchPartyNames = true
       nameList = BuildPlayerFirstRoleNameList(key, kind, conf, mode)
     end
     if nameList then sortMethod = "NAMELIST" end
@@ -1187,6 +1180,7 @@ local function BuildSortState(key, kind, conf, liveRoster)
     groupBy = groupBy,
     groupingOrder = groupingOrder,
     nameList = nameList,
+    watchPartyNames = watchPartyNames,
     playerFirst = conf.playerFirstInRole == true,
   }
 end
@@ -1592,6 +1586,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     or RequiredHeaderColumns(kind, conf, layoutCount)
   local sortState = preservedGroupIndex and BuildPreservedSortState(conf, preservedGroupIndex, preservedSortSnapshot)
     or BuildSortState(key, kind, conf, liveRoster)
+  header._msufWatchPartyNames = sortState.watchPartyNames
   local groupFilter
   if sortState.sortMethod ~= "NAMELIST" and LiveGroupKind() ~= nil then
     if key ~= "party" then groupFilter = ResolveGroupFilter(conf) end

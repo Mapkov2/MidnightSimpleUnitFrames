@@ -8,8 +8,11 @@ local function World(zone, raid, partyMode)
     local env = world.env
     env.IsInInstance = function() return zone ~= "none", zone end
     env.GetInstanceInfo = function() return "Area", zone, zone == "raid" and 14 or 0 end
+    local subgroupCount = env.GetNumSubgroupMembers
+    env.GetNumSubgroupMembers = function() return world.reportedCompanions or subgroupCount() end
     local name = env.UnitName
     env.UnitName = function(unit)
+      if world.pendingName == unit then return nil end
       if world.rosterNames and world.rosterNames[unit] then return world.rosterNames[unit] end
       if raid and zone == "none" and unit == "raid11" and env.UnitExists(unit) then return "Arrival" end
       if unit == (partyMode == "solo" and "party1" or "party2") and env.UnitExists(unit) then return "Arrival" end
@@ -76,6 +79,120 @@ local function Ordered(h, header)
     if Visible(child) then seen[#seen + 1] = assert(child:GetAttribute("unit")) end
   end
   return table.concat(seen, ",")
+end
+
+local function LateDungeonPartyName(option)
+  local h = World("party", false)
+  local conf = h.GF.GetConf("party")
+  conf.sortMode, conf.playerFirstInRole, conf.sortClassPriority = "ROLE", false, false
+  conf[option] = true
+  h.GF.Rebuild("party")
+  h:RunDeferred()
+  local header = assert(h.GF.headers.party)
+  assert(header:GetAttribute("sortMethod") == "NAMELIST", "custom Party sort should start active")
+
+  h.pendingName = "party2"
+  h:SetRoster({ "player", "party1", "party2" })
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList") == nil, "third join published an incomplete Party nameList: " .. option)
+  h.pendingName = nil
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  local visibleOnFirstTurn = false
+  h:RunDeferred(nil, function(turn)
+    if turn ~= 1 then return end
+    local names = header:GetAttribute("nameList")
+    local frame = h.GF.FrameForUnit("party2")
+    visibleOnFirstTurn = names and names:find("Arrival", 1, true) and frame and Visible(frame)
+  end)
+  assert(visibleOnFirstTurn and Ordered(h, header) == "player,party1,party2",
+    "third member must be visible on the first layout after its name event: " .. option)
+
+  -- A readable name can still acquire its full identity after the first roster snapshot.
+  h.rosterNames = { party2 = "Arrival-Realm" }
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList"):find("Arrival-Realm", 1, true) and Visible(assert(h.GF.FrameForUnit("party2"))),
+    "a completed list retained the old Party identity")
+
+  h.reportedCompanions = 1
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList") == nil, "stale subgroup count filtered an existing Party token")
+  h:EnterCombat()
+  h.reportedCompanions = nil
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList") == nil, "late identity changed the frozen dungeon header")
+  h:LeaveCombat()
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList"):find("Arrival-Realm", 1, true), "regen lost custom Party sorting")
+
+  conf.enabled = false
+  h.GF.RefreshHeaderLayout("party")
+  assert(not h.GF.headers.party, "disabled Party header stayed active")
+  conf.enabled = true
+  h.pendingName = "party2"
+  h.GF.UpdateGroupVisibility()
+  assert(h.GF.headers.party == header and not header:GetAttribute("nameList"), "Party header was not restored")
+  h.pendingName = nil
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList"), "restoring Party visibility did not resume name updates")
+
+  conf[option] = false
+  h.GF.Rebuild("party")
+  h:RunDeferred()
+  local layouts, refresh = 0, h.GF.RefreshHeaderLayout
+  h.GF.RefreshHeaderLayout = function(...)
+    layouts = layouts + 1
+    return refresh(...)
+  end
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  h:RunDeferred()
+  assert(layouts == 0 and not header:GetAttribute("nameList"), "native Party sorting scheduled a layout for a name")
+  assert(#h.violations == 0, h.violations[1])
+end
+
+local function PartyNameBurst(option)
+  local h = World("party", false)
+  local gf, conf = h.GF, h.GF.GetConf("party")
+  conf.sortMode, conf[option] = "ROLE", true
+  h:SetRoster({ "player", "party1", "party2", "party3", "party4" })
+  gf.Rebuild("party")
+  h:RunDeferred()
+  local header = assert(gf.headers.party)
+  local initialNames = assert(header:GetAttribute("nameList"))
+  h:EnterCombat()
+  h:RunDeferred()
+  local deferrals, layouts = 0, 0
+  local defer, refresh = gf.DeferGroupRuntime, gf.RefreshHeaderLayout
+  gf.DeferGroupRuntime = function(...)
+    deferrals = deferrals + 1
+    return defer(...)
+  end
+  gf.RefreshHeaderLayout = function(...)
+    layouts = layouts + 1
+    return refresh(...)
+  end
+  h.rosterNames = { party2 = "Arrival-Realm" }
+  for i = 1, 20 do h:Event("UNIT_NAME_UPDATE", "party" .. ((i - 1) % 4 + 1)) end
+  for i = 1, 20 do h:Event("UNIT_NAME_UPDATE", "nameplate1") end
+  h:RunDeferred()
+  assert(deferrals == 1, option .. ": expected one frozen-roster request, got " .. deferrals)
+  assert(layouts == 0 and header:GetAttribute("nameList") == initialNames, "name burst rebuilt the header in combat")
+  gf.DeferGroupRuntime, gf.RefreshHeaderLayout = defer, refresh
+  h:LeaveCombat()
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList"):find("Arrival-Realm", 1, true), "regen missed the new Party identity")
+
+  h:EnterCombat()
+  h:LeaveCombat()
+  h.rosterNames.party2 = "Arrival-Home"
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList"):find("Arrival-Home", 1, true), "quiet combat did not restore name updates")
+  assert(#h.violations == 0, h.violations[1])
 end
 
 local function FrozenRoster(zone, raidAsParty)
@@ -379,6 +496,16 @@ local function PartyAlongsideRaid()
   RefreshParty()
 
   h:EnterCombat()
+  h.rosterNames = { party2 = "Subgroup-Realm" }
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  h:LeaveCombat()
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList"):find("Subgroup-Realm", 1, true),
+    "a subgroup-only name event must also refresh the Party header alongside Raid")
+  h.rosterNames = nil
+  RefreshParty()
+
+  h:EnterCombat()
   Roster(6, {5, 6})
   assert(gf.headers.party == header and not header:GetAttribute("showRaid"),
     "crossing the small-raid threshold in combat must retain party-token bindings")
@@ -477,6 +604,10 @@ local function NativeRaidFallbackAlongsideParty()
   assert(#h.violations == 0, h.violations[1])
 end
 
+LateDungeonPartyName("playerFirstInRole")
+LateDungeonPartyName("sortClassPriority")
+PartyNameBurst("playerFirstInRole")
+PartyNameBurst("sortClassPriority")
 ResizedSoloParty(false)
 ResizedSoloParty(true)
 PartyAlongsideRaid()
@@ -485,6 +616,22 @@ NativeRaidFallbackAlongsideParty()
 FrozenRoster("raid")
 FrozenRoster("party")
 FrozenRoster("raid", true)
+do
+  local h = World("none", false, "named")
+  h.pendingName = "party2"
+  h:SetRoster({ "player", "party1", "party2" })
+  h:Event("GROUP_ROSTER_UPDATE")
+  h:RunDeferred()
+  local header = assert(h.GF.headers.party)
+  assert(not header:GetAttribute("nameList"), "outdoor join must start on native sorting while its name is missing")
+  h:EnterCombat()
+  h.pendingName = nil
+  h:Event("UNIT_NAME_UPDATE", "party2")
+  h:LeaveCombat()
+  h:RunDeferred()
+  assert(header:GetAttribute("nameList"):find("Arrival", 1, true), "regen lost an outdoor name that arrived during combat")
+  assert(#h.violations == 0, h.violations[1])
+end
 OpenWorldInvite("existing")
 OpenWorldInvite("named")
 OpenWorldInvite("solo")

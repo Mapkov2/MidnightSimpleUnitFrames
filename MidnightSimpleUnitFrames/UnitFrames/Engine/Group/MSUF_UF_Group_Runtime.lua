@@ -197,15 +197,10 @@ local function MatchStateEventSupported()
   return client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
 end
 
---- Only a Party ROLE sort with Player-first emits MSUF's native nameList.
---- Keep its identity catch-up completely absent from PvE and from Arena
---- configurations that stay on SecureGroupHeader's ordinary roster path.
-local function ArenaPartyNameListActive()
-  if not ArenaPartyHeaderActive() then return false end
-  local conf = Conf("party")
-  if not (conf and conf.playerFirstInRole == true) then return false end
-  local mode = conf.sortMode
-  return mode == "ROLE" or (mode == nil and conf.sortByRole == true)
+-- The sort can still need names while the header temporarily uses native ordering.
+local function PartyNameListActive()
+  local header = GF.headers.party
+  return header and header._msufWatchPartyNames == true
 end
 
 local function PriorityNameRefreshActive()
@@ -293,19 +288,31 @@ local function HousingEventsWanted()
     or (mythic and mythic.hideInHousing == true) or false
 end
 
+local function SetNameEvents(enabled)
+  if runtimeEventState.nameEvents == enabled then return end
+  runtimeEventState.nameEvents = enabled
+  if enabled then
+    eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
+  else
+    eventFrame:UnregisterEvent("UNIT_NAME_UPDATE")
+  end
+end
+
 local function SetRuntimeEventsEnabled(enabled, regenOnly)
   if not eventFrame then return end
   enabled, regenOnly = enabled == true, regenOnly == true
   local active = enabled and not regenOnly
   local matchEvents = active and ArenaPartyHeaderActive() and MatchStateEventSupported() or false
-  local nameEvents = active and (PriorityNameRefreshActive() or ArenaPartyNameListActive()) or false
+  local nameEvents = active and (PriorityNameRefreshActive() or (PartyNameListActive() and not InCombat())) or false
   local client = MSUF.Client
   local sceneEvents = active and client and client.SupportsEvent and SceneEventsWanted() or false
   local housingEvents = active and client and client.SupportsEvent and HousingEventsWanted() or false
   local state = runtimeEventState
   if state.enabled == enabled and state.regenOnly == regenOnly
-    and state.matchEvents == matchEvents and state.nameEvents == nameEvents
-    and sceneEventsOn == sceneEvents and housingEventsOn == housingEvents then return end
+    and state.matchEvents == matchEvents and sceneEventsOn == sceneEvents and housingEventsOn == housingEvents then
+    SetNameEvents(nameEvents)
+    return
+  end
   -- Disabled frames may have missed a combat transition.
   if active and (not state.enabled or state.regenOnly) then
     SyncCombatState(InCombat() == true)
@@ -313,13 +320,15 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
     bars.SetGroupRezzOutOfCombat(false)
   end
   state.enabled, state.regenOnly = enabled, regenOnly
-  state.matchEvents, state.nameEvents = matchEvents, nameEvents
+  state.matchEvents = matchEvents
   sceneEventsOn, housingEventsOn = sceneEvents, housingEvents
   if eventFrame.UnregisterAllEvents then
     eventFrame:UnregisterAllEvents()
+    state.nameEvents = false
   elseif eventFrame.UnregisterEvent then
     for i = 1, #RUNTIME_EVENTS do eventFrame:UnregisterEvent(RUNTIME_EVENTS[i]) end
   end
+  SetNameEvents(nameEvents)
   if regenOnly then
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     return
@@ -332,9 +341,6 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
   -- round/team swaps. Never subscribe in PvE or on clients that lack the event.
   if matchEvents then
     eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED")
-  end
-  if nameEvents then
-    eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
   end
   if sceneEvents then
     if client.SupportsEvent("CLIENT_SCENE_OPENED") then eventFrame:RegisterEvent("CLIENT_SCENE_OPENED") end
@@ -667,6 +673,7 @@ function GF.UpdateGroupVisibility()
   if InCombat() then return GF.DeferGroupRuntime("visibility") end
   local did, success = SetupWantedHeaders()
   if success == false then GF.DeferGroupRuntime("visibility") end
+  SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
   return did, success
 end
 
@@ -1076,13 +1083,17 @@ local function PrepareOpenWorldCombatRoster(key, kind)
   header = SetupLiveHeader(key, kind, true)
   if header then GF.ShowHeaders(key) end
   GF.DeferGroupRuntime("layout", kind)
+  return true
 end
 
 -- Sample the actual location at the combat edge. A zone event can arrive
 -- after an invitation or pull on either side of an instance boundary.
 local function StartGroupRosterCombat()
   if not IsOpenWorldRosterLocation() then return GF.SetInstanceRosterFrozen(true) end
-  PrepareOpenWorldCombatRoster("party", "party")
+  if not PrepareOpenWorldCombatRoster("party", "party") and PartyNameListActive() then
+    -- A retained header can still be waiting for a name when the outdoor pull starts.
+    GF.DeferGroupRuntime("layout", "party")
+  end
   if GF.headers.raid then PrepareOpenWorldCombatRoster("raid", GF.headers.raid._msufGFKind) end
   GF.SetOpenWorldCombatRoster(true)
   -- MSUF defers protected geometry. Blizzard can still bind new outdoor slots.
@@ -1106,6 +1117,8 @@ local function RuntimeOnEvent(self, event, unit)
       SetupWantedHeaders()
     end
     StartGroupRosterCombat()
+    -- Frozen headers already have a one-shot name observer. Priority pins keep their own interest.
+    if runtimeEventState.nameEvents and not PriorityNameRefreshActive() then SetNameEvents(false) end
     return
   end
   if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
@@ -1150,7 +1163,11 @@ local function RuntimeOnEvent(self, event, unit)
     -- once unless the broad flush already rebuilt the active Priority header.
     if GF._pendingPriorityRefresh and not GF._pendingGroupRuntime then GF.RefreshPriorityFrames("deferred-priority") end
     GF.ForEachFrame(RefreshAggroStateFrame, false, event)
-    if refreshEvents then SetRuntimeEventsEnabled(AnyGroupFrameEnabled()) end
+    if refreshEvents then
+      SetRuntimeEventsEnabled(AnyGroupFrameEnabled())
+    elseif PartyNameListActive() then
+      SetNameEvents(true)
+    end
     if bars.groupRezzOutOfCombat then bars.ResumeGroupRezzColors() end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
@@ -1179,19 +1196,12 @@ local function RuntimeOnEvent(self, event, unit)
     end
     return
   elseif event == "UNIT_NAME_UPDATE" then
-    local partyNameListUnit = ArenaPartyNameListActive()
-      and (unit == "player" or unit:match("^party[1-4]$") ~= nil)
-    local priorityUnit = false
-    if PriorityNameRefreshActive() then
-      priorityUnit = GF.IsPriorityGroupUnit(unit) == true
+    local inCombat = InCombat()
+    if not inCombat and PartyNameListActive() and (unit == "player" or unit:match("^party[1-4]$")) then
+      ScheduleHeaderLayoutSettle()
     end
-    if partyNameListUnit ~= true and priorityUnit ~= true then return end
-    if InCombat() then
-      if partyNameListUnit == true then GF.DeferGroupRuntime("roster", "party") end
-      if priorityUnit == true then GF.RefreshPriorityFrames("unit-name") end
-    else
-      if partyNameListUnit == true then ScheduleHeaderLayoutSettle() end
-      if priorityUnit == true then SchedulePriorityNameSettle() end
+    if PriorityNameRefreshActive() and GF.IsPriorityGroupUnit(unit) == true then
+      if inCombat then GF.RefreshPriorityFrames("unit-name") else SchedulePriorityNameSettle() end
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" then
