@@ -305,14 +305,7 @@ function PortraitBuild.Controls(ctx, s)
                 convert = function(value) return value == "RIGHT" and "RIGHT" or "LEFT" end,
                 before = function(value) M._msuf2LastGroupPortraitSide = value end, after = RefreshPortraitControls
             } --[[schema setter: J5.GroupPortrait.Position]] },
-        { "dropdown", "portraitRender", "2D", { "Render", renderValues, 220 }, { 16, -116, min(220, cardW - 32) },
-            afterSet = function(value)
-                RefreshPortraitControls()
-                if value == "3D" then
-                    Shared.Show3DPortraitWarning(Val(kind, "portraitModelInstanceCombat", false) ~= true)
-                end
-            end,
-        },
+        { "dropdown", "portraitRender", "2D", { "Render", renderValues, 220 }, { 16, -116, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
         { "toggle", "portraitClickable", false, { "Clickable portrait", 16, -174, cardW - 32 },
             flagsAfter = { _msuf2SearchText = "Clickable portrait group frame target right click menu click casting mouseover" } },
         -- Party members are never identity-restricted, so their models may stay
@@ -320,6 +313,11 @@ function PortraitBuild.Controls(ctx, s)
         { "toggle", "portraitModelInstanceCombat", false, { "Keep 3D in instanced combat", 16, -210, cardW - 32 },
             flagsAfter = { _msuf2SearchText = "3D portrait model instanced combat dungeon raid mythic keep 2D fallback" } },
     }, options, controls)
+    controls.portraitRender:SetOnOptionSelected(function(value)
+        if value == "3D" then
+            Shared.Show3DPortraitWarning(Val(kind, "portraitModelInstanceCombat", false) ~= true)
+        end
+    end)
     Schema.Build(ctx, borderCard, {
         { "dropdown", "portraitShape", "SQUARE", { "Shape", shapeValues, 220 }, { 16, -58, min(220, cardW - 32) }, afterSet = RefreshPortraitControls },
     }, options, controls)

@@ -911,8 +911,8 @@ local function DropdownRow(index)
     end)
     row:SetScript("OnLeave", function(self) HideDropdownItemTooltip(self) end)
     row:SetScript("OnClick", function(self)
-        if self._msuf2DropdownDisabled or CloseIfCombatBlocked() then return end
         local owner = self._msuf2Owner
+        if not dropdownOwner or owner ~= dropdownOwner or self._msuf2DropdownDisabled or CloseIfCombatBlocked() then return end
         local value = self._msuf2Value
         if owner then
             if owner._msuf2DropdownListSelect then
@@ -924,6 +924,9 @@ local function DropdownRow(index)
         end
         HideDropdownItemTooltip(self)
         CloseDropdown()
+        if owner and owner._msuf2OnOptionSelected then
+            owner._msuf2OnOptionSelected(value)
+        end
     end)
     row:EnableMouseWheel(true)
     row:SetScript("OnMouseWheel", ForwardDropdownWheel)
@@ -1129,6 +1132,10 @@ function W.Dropdown(section, label, values, width)
     end
     function btn:SetOnValueChanged(fn)
         self._msuf2OnValueChanged = fn
+    end
+    -- Row activation includes picking the current value.
+    function btn:SetOnOptionSelected(fn)
+        self._msuf2OnOptionSelected = fn
     end
     btn:EnableMouseWheel(false)
     btn:SetScript("OnClick", function(self)

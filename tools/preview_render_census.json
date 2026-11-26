@@ -886,7 +886,7 @@
           800
         ]
       ],
-      "source_sha256": "002a88e9d9e9eca6e1ad15565c990e8aa847d2d14606252c280cb6c57a156ce4",
+      "source_sha256": "3b1127aaf297c40b669dc479a528eaeed204e6855e1b0879336e642bf91fe4fb",
       "adapter_exclusions": [
         {
           "name": "AddDropdownBarPreviewLane",
