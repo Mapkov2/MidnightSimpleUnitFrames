@@ -270,7 +270,7 @@ function PortraitSection.Factories(p)
         else
             row.write = { call = kind == "slider" and SetNumber or SetPortraitValue,
                 boolean = kind == "toggle", args = { row.reason, kind == "slider" and { preview = true } or nil },
-                after = row.afterSet and function() row.afterSet() end } --[[schema setter: UnitFrameVisuals.PortraitRows]]
+                after = row.afterSet } --[[schema setter: UnitFrameVisuals.PortraitRows]]
             if kind ~= "slider" and kind ~= "toggle" then row.write.fallback = fallback end
         end
         row.meta = p.Meta("portrait." .. tostring(key), tostring(unit) .. "." .. tostring(key))
@@ -314,7 +314,14 @@ function PortraitSection.Controls(p)
         } --[[schema setter: J5.UnitPortrait.Position]],
         scope = unit, meta = Meta("portrait.position", tostring(unit) .. ".portraitMode"),
     })
-    c.render = Drop(cards.main, "portraitRender", "2D", "Render", PORTRAIT_RENDER, -116, "MSUF2_PORTRAIT_RENDER", { afterSet = Refresh })
+    c.render = Drop(cards.main, "portraitRender", "2D", "Render", PORTRAIT_RENDER, -116, "MSUF2_PORTRAIT_RENDER", {
+        afterSet = function(value)
+            Refresh()
+            if value == "3D" then
+                UnitSectionShared.Show3DPortraitWarning(unit ~= "player" and unit ~= "pet")
+            end
+        end,
+    })
     c.clickable = Toggle(cards.main, "portraitClickable", false, "Clickable portrait", -174, "MSUF2_PORTRAIT_CLICKABLE",
         { tab = "general", search = "Clickable portrait unit frame target right click menu click casting mouseover" })
     c.shape = Drop(cards.border, "portraitShape", "SQUARE", "Shape", PORTRAIT_SHAPES, -58, "MSUF2_PORTRAIT_SHAPE", { afterSet = Refresh })

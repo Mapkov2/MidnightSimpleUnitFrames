@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "5FA28FBE1B6FEF0EA17C4227C460F3DDF52C29827DDEFA1F8B0B692B7FA8A329"
+Search.StaticIndexSourceSha256 = "21D8A56E94376F348D5ECE1555674A54DDF267B52404D3E1F62C869DEF24694C"
 Search.StaticIndexRecordCount = 4287
 Search.StaticIndexContextBlob = [==[auras3_buffs
 Border Alpha (%)

@@ -375,7 +375,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "030b273d4b8a93d0ba7a144cb8277806c9a3241e9d00eadfc5dd0ab462d15f6a"
+          "source_sha256": "d38b8d3fba1391be612f89877f3ed7d497c9c091f2cc081414795c30f61643ac"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",

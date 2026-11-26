@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
 L["3D portrait"] = "3D 초상화"
+L["3D portraits can severely reduce performance."] = "3D 초상화는 성능을 크게 떨어뜨릴 수 있습니다."
+L["During instanced combat, 3D portraits can render unreliably. MSUF automatically uses 2D portraits there."] = "인스턴스 전투 중에는 3D 초상화가 제대로 표시되지 않을 수 있습니다. 이때 MSUF는 자동으로 2D 초상화를 사용합니다."
 L["Keep 3D in instanced combat"] = "인스턴스 전투 중에도 3D 유지"
 L["WoW Classic shows 3D portraits in every fight."] = "WoW 클래식은 모든 전투에서 3D 초상화를 표시합니다."
 L["Choose the 3D portrait render to change this."] = "변경하려면 렌더링을 3D 초상화로 선택하세요."

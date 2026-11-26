@@ -768,6 +768,15 @@ function Shared.DispelSymbolStyles()
         "MSUF_GLYPHS", "MSUF Glyphs",
         "MSUF_MINIMAL", "MSUF Minimal")
 end
+function Shared.Show3DPortraitWarning(fallsBackInInstanceCombat)
+    local text = M.Tr("3D portraits can severely reduce performance.")
+    if MSUF.Client.IsRetail and fallsBackInInstanceCombat then
+        text = text .. "\n\n" .. M.Tr("During instanced combat, 3D portraits can render unreliably. MSUF automatically uses 2D portraits there.")
+    end
+    M.ShowPrompt("MSUF2_PORTRAIT_3D_WARNING", {
+        text = text, accept = M.Tr("Okay"), single = true, showAlert = true,
+    })
+end
 -- The portrait placement choices the Unit and Group pages offer; each caller gets its own lists.
 function Shared.PortraitPlacementValues()
     local VT = M.ValueTextList

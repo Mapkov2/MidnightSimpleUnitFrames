@@ -1847,6 +1847,21 @@
       ]
     },
     {
+      "test": "tools/tests/portrait_render_warning_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
       "test": "tools/tests/menu_named_page_interfaces.lua",
       "phase": "menu",
       "clients": [

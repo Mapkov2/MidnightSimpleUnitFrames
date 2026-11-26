@@ -12,6 +12,8 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("frFR")) or (MSUF.L or {})
 L["3D portrait"] = "Portrait 3D"
+L["3D portraits can severely reduce performance."] = "Les portraits 3D peuvent fortement dégrader les performances."
+L["During instanced combat, 3D portraits can render unreliably. MSUF automatically uses 2D portraits there."] = "En combat dans une instance, les portraits 3D peuvent mal s'afficher. MSUF utilise alors automatiquement des portraits 2D."
 L["Keep 3D in instanced combat"] = "Garder la 3D en combat en instance"
 L["WoW Classic shows 3D portraits in every fight."] = "WoW Classic affiche les portraits 3D dans tous les combats."
 L["Choose the 3D portrait render to change this."] = "Choisissez le rendu Portrait 3D pour modifier ceci."
