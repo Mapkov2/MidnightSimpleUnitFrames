@@ -308,9 +308,12 @@ Check(not player._msufFadeDriver.active and player._msufFadeDriver.scripts.OnUpd
 Cast("Reduced", "Recipient")
 g.reduceMotion = true
 C.Config.Compile("style")
+Check(player._msufFadeDriver.active, "reducing menu motion cancelled the active castbar fade")
+g.reducedMotion = true
+C.Config.Compile("style")
 world:Advance(.1)
-Check(player:GetAlpha() == 1 and not player._msufFadeDriver.active, "reduced motion did not settle")
-g.reduceMotion = false
+Check(player:GetAlpha() == 1 and not player._msufFadeDriver.active, "saved castbar motion override did not settle")
+g.reduceMotion, g.reducedMotion = false, false
 C.Config.Compile("style")
 local target = C.Frames.Get("target") or C.Driver.CreateCastBar("MSUF_TargetCastBar", "target")
 local unitFrame = env.CreateFrame("Frame")

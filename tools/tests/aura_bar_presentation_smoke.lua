@@ -332,9 +332,11 @@ local function AssertDefensiveAppearanceAnimation()
         return assert(auras.ResolveUnitFrameConfig("player").lanes.custom4)
     end
     local disabled, enabled, reduced = Lane(false, false), Lane(true, false), Lane(true, true)
-    assert(enabled.animateAppearance == true and not disabled.animateAppearance and not reduced.animateAppearance)
+    assert(enabled.animateAppearance == true and not disabled.animateAppearance and reduced.animateAppearance == true,
+        "menu motion must leave the live aura setting in control")
     assert(enabled._msufA3StructuralSignature ~= disabled._msufA3StructuralSignature
-        and disabled._msufA3StructuralSignature == reduced._msufA3StructuralSignature, "native owner should rebuild on motion change")
+        and enabled._msufA3StructuralSignature == reduced._msufA3StructuralSignature,
+        "native owner should only rebuild on an aura motion change")
 
     local function Binding(lane)
         local button = auras.MockAuraPainter.NewNativeSample(host, { name = "Defensive", duration = 8, remaining = 5 })
@@ -362,7 +364,7 @@ local function AssertDefensiveAppearanceAnimation()
         auras.Runtime.ButtonVisuals.PrepareAuraButton(button, lane, 1)
         return groups, binding
     end
-    assert(Binding(disabled) == 0 and Binding(reduced) == 0)
+    assert(Binding(disabled) == 0 and Binding(reduced) == 1)
     db.auras3.shared.animateNewIcons, db.general.reduceMotion = true, false
     auras.InvalidateUnitRuntimeConfig("player")
     local regular = assert(auras.ResolveUnitFrameConfig("player").lanes.buff)

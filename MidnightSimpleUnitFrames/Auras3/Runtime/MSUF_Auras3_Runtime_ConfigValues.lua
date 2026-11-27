@@ -592,8 +592,6 @@ end
 ConfigValues.EffectiveBigDefensiveLaneFilters = EffectiveLaneFilters
 
 function A3.ShouldAnimateAuraIcons(override)
-    local general = MSUF_DB and MSUF_DB.general
-    if general and (general.reduceMotion == true or general.reducedMotion == true) then return false end
     if type(override) == "boolean" then return override end
     local auras = MSUF_DB and MSUF_DB.auras3
     return auras and auras.shared and auras.shared.animateNewIcons == true

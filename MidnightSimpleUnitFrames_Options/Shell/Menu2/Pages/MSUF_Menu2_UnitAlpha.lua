@@ -172,7 +172,6 @@ local function BuildAlpha(ctx, builder, unit)
                     end } --[[schema setter: UnitAlpha.1]] },
         }, Schema.UnitOptions(), controls)
     end
-    M.AddTooltip(controls.fadeInOnShow, "Fade in when shown", "Disabled while Reduce menu motion is enabled.", { hook = true })
     UP.SetControlEnabled(controls.oocFadeAlpha, ReadBool(unit, "oocFadeEnabled", Schema.Default(unit, "oocFadeEnabled")))
 
     -- Tab switch: show either the base opacity cards or the OOC fade card.

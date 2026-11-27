@@ -81,8 +81,7 @@ local function BuildBehaviorSection(PageState, secBuilder)
         if syncLastTick then syncLastTick() end
     end
     local behaviorControls = BuildCastControlSpecs(behavior, {
-        Flow("castbarFadeEnabled", false, "Fade castbars in and out", leftX, -180, 340, "MSUF2_CASTBAR_FADE", ApplyAndRefresh,
-            "Disabled while Reduce menu motion is enabled."),
+        Flow("castbarFadeEnabled", false, "Fade castbars in and out", leftX, -180, 340, "MSUF2_CASTBAR_FADE", ApplyAndRefresh),
         Flow("castbarInterruptShake", true, "Shake on interrupt", leftX, -42, 260, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh,
             "Jolts a castbar sideways when the cast it shows is interrupted, so kicks are easy to notice. Applies to every castbar."),
         Slider("castbarShakeStrength", 8, "Shake strength", 0, 30, 1, leftX, -72, "MSUF2_CASTBAR_SHAKE_STRENGTH",

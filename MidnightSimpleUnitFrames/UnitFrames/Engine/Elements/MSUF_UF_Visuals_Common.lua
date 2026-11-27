@@ -311,7 +311,7 @@ do
 
   function Motion.UpdateSettings()
     local general = GeneralDB()
-    reduced = general ~= nil and (general.reduceMotion == true or general.reducedMotion == true)
+    reduced = general ~= nil and general.reducedMotion == true
     if reduced then
       for index = #active, 1, -1 do Finish(active[index]) end
     end

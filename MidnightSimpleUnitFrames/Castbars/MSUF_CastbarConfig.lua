@@ -95,7 +95,7 @@ function Config.Compile(kind, current)
     Config.DB.general = source and source.general and general or nil
     Config.playerSpellRank = general.castbarPlayerShowSpellRank == true
     Config.playerTargetName = general.castbarPlayerShowTargetName == true
-    Config.fadeEnabled = general.castbarFadeEnabled == true and general.reduceMotion ~= true and general.reducedMotion ~= true
+    Config.fadeEnabled = general.castbarFadeEnabled == true and general.reducedMotion ~= true
     for index = 1, #KINDS do
         local kind = KINDS[index]
         local record = Config.records[kind]

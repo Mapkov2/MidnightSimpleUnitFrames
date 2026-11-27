@@ -100,9 +100,12 @@ frame:Show()
 Advance(.04)
 g.reduceMotion = true
 Motion.UpdateSettings()
-Near(frame:GetAlpha(), .35, "reduced motion did not restore the composed alpha")
-Check(not IsActive(frame), "reduced motion kept the animation running")
-g.reduceMotion = false
+Check(IsActive(frame), "reducing menu motion cancelled live unit-frame appearance")
+g.reducedMotion = true
+Motion.UpdateSettings()
+Near(frame:GetAlpha(), .35, "saved motion override did not restore the composed alpha")
+Check(not IsActive(frame), "saved motion override kept the animation running")
+g.reduceMotion, g.reducedMotion = false, false
 Motion.UpdateSettings()
 -- Both restricted range choices stay native. The animation never reads GetAlpha.
 frame:Hide()

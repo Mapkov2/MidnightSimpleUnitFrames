@@ -427,7 +427,6 @@ local function BuildGFTransparencySection(ctx, b)
             domain = "visual", beforeBind = function(widget) AttachGroupFocus(widget, "bars") end, scope = "group" },
     }, ROW_OPTIONS)
 
-    M.AddTooltip(opacityControls.fadeInOnShow, "Fade in when shown", "Disabled while Reduce menu motion is enabled.", { hook = true })
 
     -- Out of Combat tab: whole-member-frame fade; min-composed with range and
     -- offline fades at runtime (strongest fade wins). Slider greys while off.
