@@ -2,6 +2,14 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/retail_health_background_mask_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/aura_externals_appearance_smoke.lua",
       "phase": "runtime"
     },

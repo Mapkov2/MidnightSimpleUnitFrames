@@ -13,6 +13,9 @@ local UnitHealthPercent = C.UnitHealthPercent or UnitHealthPercent
 local WHITE = C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C.SCALE_100
 local REVERSE_TO_100 = CurveConstants and CurveConstants.ReverseTo100
+local client = MSUF.Client
+local RETAIL_INVERSE_HEALTH_BACKGROUND = client and client.IsRetail == true
+  and client.IsForever ~= true and REVERSE_TO_100 ~= nil
 local CreateLossTrail = C.CreateLossTrail
 local SnapBarInterpolation = C.SnapBarInterpolation
 local SetBarSmoothing = C.SetBarSmoothing
@@ -265,7 +268,10 @@ local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
   -- A full reversed StatusBar reports its leading edge on the far side, so a
   -- clip mask anchored there covers the whole bar and the missing-health color
   -- shows at 100%. The inverse value bar has no edge to misread.
+  -- On Retail the moving texture-edge mask can show the world through
+  -- an opaque background. Use the native inverse bar on that client.
   local wanted = frame._msufHealthBackgroundFillMissing == true and percentPlan
+    and not RETAIL_INVERSE_HEALTH_BACKGROUND
     and not (h and h.chunked == true)
     and not reverse
   local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
@@ -1191,7 +1197,8 @@ function Health.PaintSample(frame, unit, hp, hpMax, animate)
   UpdateAbsoluteValues(frame, unit, hp, hpMax, true, animateValue)
   if animate ~= true and bar._msufChunkedLoss then bar:SetValue(hp) end
   if frame._msufHealthBackgroundNeedsValue == true then
-    SetHealthBackgroundValue(frame, unit, hp * 100 / hpMax, false, false)
+    local animateBackground = RETAIL_INVERSE_HEALTH_BACKGROUND and animateValue and bar._msufChunkedLoss ~= true
+    SetHealthBackgroundValue(frame, unit, hp * 100 / hpMax, false, animateBackground)
   end
   local health = frame.MSUFSpec and frame.MSUFSpec.health
   if frame._msufHealthRuntimeGradient == true and health then
