@@ -9,6 +9,7 @@ local RequestUFReanchorAfterCombat = shared.RequestUFReanchorAfterCombat
 local tonumber = shared.tonumber
 local math_floor, math_max = shared.math_floor, shared.math_max
 local math_min = math.min
+local NotSecret = MSUF.Secrets.NotSecret
 local CP_ResolveTextLayerLevel = shared.CP_ResolveTextLayerLevel
 local CP_NormalizeShape = shared.CP_NormalizeShape
 local CP_ShapeTextures = shared.CP_ShapeTextures
@@ -132,6 +133,7 @@ builders.LAYOUT = function(E)
         local widthMode = b.classPowerWidthMode or "player"
         local cdmName = CPConst.CDM_FRAMES[widthMode]
         local widthPixels
+        pass.cdmWidthMeasured = false
         if pass.shapeMode and widthMode == "auto_pips" then
             local slot = math_max(1, math_floor(h / pixel + 0.5))
             widthPixels = slot * maxPower + (maxPower - 1) * pass.gapPixels
@@ -147,15 +149,18 @@ builders.LAYOUT = function(E)
                     local cdmFrame = GetEffectiveCooldownFrame(cdmName) or _G[cdmName]
                     local measured = GetCooldownAnchorScaledWidth(cdmFrame, CP.container)
                     -- Keep the previous eligibility cutoff for rounded CDM widths.
-                    if measured and measured >= 29.5 then userW = measured end
+                    if measured and measured >= 29.5 then
+                        userW = measured
+                        pass.cdmWidthMeasured = true
+                    end
                 end
             elseif widthMode == "custom" then
                 local custom = tonumber(b.classPowerWidth)
                 if custom and custom >= 30 then userW = custom end
             end
             if not userW then
-                userW = (playerFrame.GetWidth and playerFrame:GetWidth()) or 0
-                if userW < 29.5 then
+                userW = playerFrame.GetWidth and playerFrame:GetWidth()
+                if not NotSecret(userW) or type(userW) ~= "number" or userW < 29.5 then
                     userW = (playerFrame.MSUFSpec and tonumber(playerFrame.MSUFSpec.width)) or 275
                 end
                 if widthMode ~= "player" then userW = userW - 4 end
@@ -264,7 +269,7 @@ builders.LAYOUT = function(E)
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
         CP._layoutDirty = positionDeferred and true or nil
-        if not inLockdown and layoutCache and cdmName then
+        if not inLockdown and layoutCache and pass.cdmWidthMeasured then
             layoutCache["width:" .. cdmName] = userW
         end
     end
