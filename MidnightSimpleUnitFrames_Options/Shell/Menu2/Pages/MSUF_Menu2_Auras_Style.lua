@@ -853,6 +853,37 @@ function AurasPage.BuildBlizzardVisibility(ctx, b, baseId)
     M.TrackRefresh(ctx, RefreshBlizzardAuraFrameBadge)
 end
 
+function AurasPage.BindAuraAnimation(ctx, section, x, y, width, path, refresh, override)
+    if MSUF.Client.Family ~= "Mainline" then return end
+    local sharedKey = "auras3.shared.animateNewIcons"
+    local contract = not override and { settingKey = sharedKey, setting = sharedKey } or nil
+    local control = BindSwitch(ctx, section, "Animate new icons", x, y, width,
+        function()
+            if override then return override.read() end
+            return Model.ReadSharedBool("animateNewIcons", false)
+        end,
+        function(value)
+            if override then
+                override.write(value == true)
+            else
+                Model.WriteSharedBool("animateNewIcons", value == true)
+                RequestAuraRuntime("shared", "AURAS3_NEW_ICON_ANIMATION")
+                FlushApplyService()
+                refresh()
+            end
+        end,
+        AuraControlMeta(ctx, path, nil, contract))
+    if not override then AddTooltip(control, "Animate new icons", "Global Aura Appearance") end
+    return control
+end
+
+function AurasPage.BuildAnimationStyle(ctx, b, id, path, refresh, override)
+    if MSUF.Client.Family ~= "Mainline" then return end
+    local section = AurasPage.Section(b, id, "Motion", 84, false)
+    local width = section._msuf2Width or b.width or 720
+    return AurasPage.BindAuraAnimation(ctx, section, 24, -44, width - 48, path, refresh, override)
+end
+
 local function BuildUnitStyle(ctx, b, scope, options)
     local StyleState = CreateUnitStyleState(ctx, b, scope, options)
     local embeddedUnitPreview, appearanceGlobalsOnly, previewContainer, unit, lane, baseId, RefreshStylePreview, ReadScopeIconShape, WriteScopeIconShape,
@@ -880,6 +911,17 @@ local function BuildUnitStyle(ctx, b, scope, options)
 
     AurasPage.BuildIconSkinSection(StyleState)
     BuildUnitStyleIconStyle(StyleState)
+    local motionScope = appearanceGlobalsOnly and "style.appearance." .. (previewContainer or lane)
+        or "style.lane." .. lane
+    local animation = AurasPage.BuildAnimationStyle(ctx, b, baseId .. "_animation",
+        motionScope .. ".animate-new-icons", RefreshStylePreview)
+    if animation and appearanceGlobalsOnly then
+        local kind = previewContainer or lane
+        M.DeclareExactViewContract(animation, "auraStyleContainer", { [kind] = true }, function()
+            M.auraAppearanceContainer = kind
+            return true
+        end)
+    end
     local iconStyleGates = AurasPage.WrapIconSkinGates(StyleState)
 
     if appearanceGlobalsOnly then

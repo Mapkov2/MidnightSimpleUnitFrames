@@ -32,6 +32,10 @@ local function Run(oracle)
             "SetAuraGroupCandidateFilters", "SetAuraGroupSortMethod", "AddAuraGroup", "AddAuraSlot",
             "SetAuraSlotFilterString", "SetAuraSlotCandidateFilters", "SetAuraSlotSortMethod", "AddItemEnchantment",
             "SetFlowLayoutAnchorPoint", "SetFlowLayoutGrowthDirection", "SetFlowLayoutMaximumLineSize" }) do M[name] = Noop end
+        function M:AddAuraGroup(_, filter, options)
+            self.nativeFilter = filter
+            self.nativeCandidates = options.candidateFilters
+        end
         function M:SetEnabled(enabled) self.nativeEnabled = enabled end
         function M:GetUnit() return self.nativeUnit end
         function M:SetUnit(unit) self.nativeUnit = unit end
@@ -132,6 +136,23 @@ local function Run(oracle)
         Drain()
         Snap("regrow")
     end
+    -- Blizzard always permits HELPFUL exact-ID filtering on the player,
+    -- even when the ordinary assist result is false. An addon shadow gate
+    -- would leave this native owner disabled before UNIT_AURA can update it.
+    flip.player = true
+    local auras = h.core.MSUF_Auras3
+    h.env.UnitClass = function() return "Rogue", "ROGUE", 4 end
+    auras.EnsureDB().customContainers.perUnit.player.items[4].enabled = true
+    auras.BumpRuntimeConfig()
+    local player = h.env.CreateFrame("Frame", nil, h.env.UIParent)
+    player.MSUFUnitKey = "player"
+    assert(auras.EnableFrame(player), tostring(auras.nativeAuraRuntimeError))
+    Drain()
+    local owner = assert(player.Auras.CustomAuras4, "Player defensives did not attach")
+    assert(owner.nativeFilter == "HELPFUL" and owner.nativeCandidates.includeSpellIDs[5277],
+        "Evasion needs the native helpful exact-ID filter")
+    assert(owner.nativeEnabled and owner.alpha > 0,
+        "Player defensives were disabled by the assist result")
     return trail, writes
 end
 

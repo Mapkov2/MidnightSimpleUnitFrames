@@ -163,6 +163,7 @@ local function BuildCustomLayoutTool(C)
             { "Max", "max", 0, 40, 8 }, { "Size", "size", 8, 128, 24 },
             { "Per row", "perRow", 1, 20, 4 }, { "Gap", "spacing", 0, 24, 2 }, { "Layer (0-30)", "layer", 0, 30, 9 },
         }
+        if MSUF.Client.IsRetail then values[6] = { "Icon height (percent)", "iconHeightPercent", 25, 200, 100 } end
         local perRowControl
         for i = 1, #values do
             local spec = values[i]
@@ -195,7 +196,9 @@ local function BuildCustomLayoutTool(C)
             local growth = tostring(item.placed.growth or "LEFTDOWN"):upper()
             W.SetControlEnabled(perRowControl, growth ~= "UP" and growth ~= "DOWN")
         end)
-        W.Text(section, "Position is controlled by the colored aura handle in Preview.", 24 + col4 + gap4, -154, col4 * 3 + gap4 * 2, T.colors.muted)
+        local firstTextColumn = MSUF.Client.IsRetail and 2 or 1
+        W.Text(section, "Position is controlled by the colored aura handle in Preview.", 24 + firstTextColumn * (col4 + gap4),
+            -154, (4 - firstTextColumn) * col4 + (3 - firstTextColumn) * gap4, T.colors.muted)
         return true
     end
 end
@@ -576,6 +579,19 @@ local function BuildCustomAppearanceTool(C)
         -- Target, binds visual controls to this UnitFrame-owned record.
         local harmfulContainer = C.isTargetDots or tostring(C.styleItem.auraType or "BUFF"):upper() == "DEBUFF"
         local frameBasics = BuildCustomStyleBasics(C, harmfulContainer)
+        AurasPage.BuildAnimationStyle(C.ctx, C.b, CustomStyleSectionId(C.index, "animation"),
+            "custom-container.appearance.animate-new-icons", nil, {
+                read = function()
+                    local placed = C.item.placed
+                    if placed.animateNewIcons ~= nil then return placed.animateNewIcons == true end
+                    return (C.isPlayerDefensives and placed.animateAppearance == true)
+                        or Model.ReadSharedBool("animateNewIcons", false)
+                end,
+                write = function(value)
+                    C.item.placed.animateNewIcons = value
+                    C.Apply("AURAS3_CUSTOM_AURA_ANIMATION", true)
+                end,
+            })
         BuildCustomAppearancePandemic(C)
         local stack = BuildCustomStyleStack(C)
         local cooldown = BuildCustomStyleCooldown(C)

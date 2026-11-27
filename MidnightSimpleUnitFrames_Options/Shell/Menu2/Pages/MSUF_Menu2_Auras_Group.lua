@@ -633,6 +633,8 @@ local function BuildGroupStyle(ctx, b, scope, options)
     local G = { ctx = ctx, b = b, scope = scope, lane = lane, baseId = baseId,
         RefreshStylePreview = RefreshStylePreview, BodyWidth = BodyWidth }
     local frameBasics = BuildGroupStyleBasics(G)
+    AurasPage.BuildAnimationStyle(ctx, b, baseId .. "_animation",
+        "group-style.lane." .. lane .. ".animate-new-icons", RefreshStylePreview)
     local cooldown = BuildGroupStyleCooldown(G)
     local durationBar, refreshDurationBarSummary = BuildGroupStyleDurationBar(G)
     local stack = BuildGroupStyleStack(G)

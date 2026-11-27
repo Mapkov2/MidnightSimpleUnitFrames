@@ -381,6 +381,14 @@ local function SetPreviewClass(frame, class, sample)
   return classPinned
 end
 
+local function PaintSampleAuras(frame, kind, index, scene, sample, animation)
+  if not GF.PreviewFrameAuras then return end
+  GF.PreviewFrameAuras(frame, kind, index, nil, nil, scene, sample)
+  if animation and GF.AnimateUnitFrameAuras then
+    GF.AnimateUnitFrameAuras(frame, animation.elapsed)
+  end
+end
+
 local function ApplyPreviewData(frame, slot, kind, scene)
   if InCombat() then return false end
   if not frame then return false end
@@ -527,7 +535,7 @@ local function ApplyPreviewData(frame, slot, kind, scene)
     frame.combatStateIndicatorIcon:Show()
   end
   if GF.PreviewSpellIndicators then GF.PreviewSpellIndicators(frame, kind, nil, nil, scene, sample) end
-  if GF.PreviewFrameAuras then GF.PreviewFrameAuras(frame, kind, index, nil, nil, scene, sample) end
+  PaintSampleAuras(frame, kind, index, scene, sample, animState)
   frame:Show()
   return true
 end

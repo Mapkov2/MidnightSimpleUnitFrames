@@ -46,6 +46,7 @@ end
 -- Per-control storage contracts. Selector aliases route search; these narrow
 -- fields describe each writer independently of the container currently selected.
 local CUSTOM_SETTING_FIELDS = {
+    ["appearance.animate-new-icons"] = "placed.animateNewIcons",
     ["appearance.cooldown-anchor"] = "placed.cooldownAnchor",
     ["appearance.cooldown-swipe"] = "placed.showCooldownSwipe",
     ["appearance.cooldown-text"] = "placed.showCooldown",
@@ -103,6 +104,7 @@ local CUSTOM_SETTING_FIELDS = {
     ["filters.raidincombat"] = "filters.raidInCombat",
     ["layout.anchor"] = "placed.anchor",
     ["layout.growth"] = "placed.growth",
+    ["layout.iconheightpercent"] = "placed.iconHeightPercent",
     ["layout.layer"] = "layer",
     ["layout.max"] = "placed.max",
     ["layout.perrow"] = "placed.perRow",

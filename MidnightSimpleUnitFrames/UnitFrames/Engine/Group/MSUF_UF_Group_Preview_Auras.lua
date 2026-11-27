@@ -71,6 +71,7 @@ end
 
 local function HideFrameAuraPreview(visual)
   if not visual then return end
+  AuraPainter.ClearPreviewReflow(visual)
   visual:Hide()
   AuraPainter.HideAuraBarSample(visual)
   if visual._texture then visual._texture:Hide() end
@@ -121,7 +122,7 @@ local function PlaceFrameAuraPreview(visual, lane, host, anchor, x, y, alpha)
   if visual.SetAlpha then visual:SetAlpha(alpha) end
 end
 
-local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host, reminderPlaced, scene, sample)
+local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot, sampleIndex, host, reminderPlaced, scene, sample, animateReflow)
   local A3 = Auras
   local size = tonumber(lane.size) or 18
   if not (size >= 1) then size = 1 end
@@ -131,13 +132,21 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     if not VALID_POINTS[initialAnchor] then initialAnchor = "TOPLEFT" end
   end
   local x, y = FrameAuraPreviewOffset(lane, slot)
+  local px, py = 0, 0
   if kind == "unit" and (lane.padding or 0) > 0 then
-    local px, py = Auras.PaddingInset(initialAnchor, lane.padding)
-    x, y = x + px, y + py
+    px, py = Auras.PaddingInset(initialAnchor, lane.padding)
   end
+  x, y = x + px, y + py
 
   PlaceFrameAuraPreview(visual, lane, host, initialAnchor, x, y, 1)
   if lane.auraBarFill then return PaintFrameAuraBar(visual, lane, descriptor, slot + 1, scene) end
+  if animateReflow then
+    local compactX, compactY = FrameAuraPreviewOffset(lane, max(0, slot - 1))
+    AuraPainter.ConfigurePreviewReflow(visual, host, initialAnchor, slot == 0, x, y, compactX + px, compactY + py,
+      lane.targetDots and 18 or nil, lane.animateAppearance)
+  else
+    AuraPainter.ClearPreviewReflow(visual)
+  end
   AuraPainter.HideAuraBarSample(visual)
 
   local texture = visual._texture
@@ -234,11 +243,13 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
       end
     end
   end
-  if frame._msufPreviewScene then
+  if animateReflow or frame._msufPreviewScene then
     visual._sceneStaticTimer = sampleIndex == 1 and "12" or "8"
     visual._sceneAuraLane, visual._sceneAuraKind, visual._sceneAuraIndex = lane,
       (descriptor.key == "debuff" or lane.targetDots or (lane.nativeFilter and lane.nativeFilter:find("HARMFUL", 1, true))) and "debuff" or "buff", slot + 1
     visual._scenePandemicStyled = nil
+  else
+    visual._sceneAuraLane = nil
   end
   visual:Show()
   return true
@@ -381,10 +392,14 @@ local function PaintFrameAuraLanes(frame, kind, lanes, descriptors, previewIndex
       local item = customIndex and Auras.MenuModel.CustomContainerStyleItem(frame._msufSceneUnit, tonumber(customIndex), false)
       local reminderPlaced = item and item.placed
       local sampleCount = min(entries and #entries > 0 and #entries or sampleLimit or PREVIEW_AURA_SAMPLE_LIMIT, maxCount)
+      local animateReflow = sampleCount > 0 and lane.anchorTarget ~= "portrait" and not lane.auraBarFill
+        and not (lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY")
+        and not (reminderPlaced and reminderPlaced.reminderEnabled == true)
       for sampleIndex = 1, sampleCount do
         used = used + 1
         ApplyFrameAuraPreview(frame, kind, EnsureAuraPreview(frame, used, "_msufGFFrameAuraPreviews"),
-          lane, descriptor, sampleIndex - 1, sampleIndex + previewIndex + laneIndex, host, reminderPlaced, scene, sample)
+          lane, descriptor, sampleIndex - 1, sampleIndex + previewIndex + laneIndex,
+          host, reminderPlaced, scene, sample, animateReflow)
       end
     elseif not (combined and descriptor.key == "buff") then
       host:Hide()
@@ -524,12 +539,16 @@ end
 
 function GF.AnimateUnitFrameAuras(frame, elapsed)
   local visuals = frame._msufGFFrameAuraPreviews
-  for i = 1, #(visuals or {}) do
+  if not visuals then return end
+  local reducedMotion = AuraPainter.PreviewReflowReducedMotion(elapsed)
+  for i = 1, #visuals do
     local visual = visuals[i]
     local lane = visual._sceneAuraLane
+    local sampleElapsed, sampleDuration, expired = AuraPainter.UpdatePreviewReflow(visual, elapsed, reducedMotion)
     if lane and visual:IsShown() then
-      local state = elapsed ~= nil and AuraPainter.AuraState(visual, visual._sceneAuraKind, visual._sceneAuraIndex, lane, elapsed,
-        lane.targetDots and 18 or nil, lane.targetDots, lane.targetDots and 0.30 or nil)
+      local state = elapsed ~= nil and AuraPainter.AuraState(visual, visual._sceneAuraKind, visual._sceneAuraIndex, lane,
+        sampleElapsed or elapsed, sampleDuration or (lane.targetDots and 18), sampleDuration ~= nil or lane.targetDots,
+        lane.targetDots and 0.30 or nil)
       if lane.auraBarFill then
         AuraPainter.UpdateAuraBarSample(visual, lane, state or AuraPainter.AuraState(visual, visual._sceneAuraKind, visual._sceneAuraIndex, lane))
       end
@@ -537,8 +556,10 @@ function GF.AnimateUnitFrameAuras(frame, elapsed)
         AuraPainter.Swipe(visual._swipe, visual, visual:GetWidth(), visual:GetHeight(), state and state.remainingFrac or 0.42,
           lane.cooldownSwipeReverse == true)
       end
-      if visual._timer and lane.showCooldownText then visual._timer:SetText(state and state.text or visual._sceneStaticTimer or "8") end
-      if visual._stack and lane.showStacks then visual._stack:SetText(state and state.stacks or "2") end
+      if visual._timer and lane.showCooldownText then
+        visual._timer:SetText(not expired and (state and state.text or visual._sceneStaticTimer or "8") or "")
+      end
+      if visual._stack and lane.showStacks then visual._stack:SetText(not expired and (state and state.stacks or "2") or "") end
       if Auras.ApplyPandemicVisual and (lane.targetDots or visual._msufA3PandemicRegion) then
         local inWindow = lane.pandemicEnabled == true and visual._sceneAuraIndex == 1
           and (not state or state.pandemicActive ~= false)

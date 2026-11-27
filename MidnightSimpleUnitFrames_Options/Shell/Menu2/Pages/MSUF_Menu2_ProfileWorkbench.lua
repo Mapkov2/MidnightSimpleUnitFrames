@@ -266,17 +266,5 @@ function UI.Colors(ctx, builder)
     PAGE = "opt_colors"
     Editor(ctx, builder, math.max(520, builder.width or ctx.width or 640), Accessibility)
 end
-function UI.Aura(ctx, builder, unit, lane)
-    PAGE = "uf_" .. unit
-    for _, row in ipairs(W.Visibility(unit, lane)) do
-        if row.unit == unit and row.lane == lane then
-            local section = builder:CollapsibleSection("workbench_visibility", "Why is this hidden?", 100, false)
-            Text(section, "Known configuration only. Protected combat information is not inspected.", -18, builder.width)
-            Text(section, M.Tr(row.reason), -50, builder.width)
-            if row.detail then Text(section, row.detail, -76, builder.width) end
-            break
-        end
-    end
-end
 -- Direct old page links remain useful.
 M.ALIASES.profile_tools = "profiles"

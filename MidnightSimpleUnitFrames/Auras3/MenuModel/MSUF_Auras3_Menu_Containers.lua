@@ -338,6 +338,7 @@ function Factories.Containers(A3, Model, Schema, Common, Storage)
     --- Visibility, positioning, filters, whitelists and tracked spells stay owned
     --- by the destination. This is a cold-path Copy To operation.
     Model.CustomContainerStylePlacedKeys = Model.CustomContainerStylePlacedKeys or WithPandemicStyleKeys({
+        animateNewIcons = true,
         iconZoom = true,
         showTooltip = true,
         alpha = true,

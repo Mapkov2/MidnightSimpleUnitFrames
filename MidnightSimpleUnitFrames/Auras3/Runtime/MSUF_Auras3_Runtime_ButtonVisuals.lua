@@ -766,6 +766,34 @@ function PrepareStage.BindPandemicAndTooltip(button, lane)
     end
 end
 
+function PrepareStage.BindAppearanceAnimation(button, lane, barOnly)
+    if not (lane.animateAppearance and not barOnly and not lane.auraBarFill and not lane.hiddenVisual
+        and button.AddAuraShownAnimation and button.CreateAnimationGroup) then return end
+    local group = button:CreateAnimationGroup()
+    if not lane.portraitOverlay and not lane.spellIndicatorSlot then
+        local x = lane.verticalGrowth and 0 or 6 * lane.xSign
+        local y = lane.verticalGrowth and 6 * lane.ySign or 0
+        local start = group:CreateAnimation("Translation")
+        start:SetOffset(x, y)
+        start:SetDuration(.001)
+        start:SetOrder(1)
+        local slide = group:CreateAnimation("Translation")
+        slide:SetOffset(-x, -y)
+        slide:SetDuration(.18)
+        slide:SetOrder(2)
+        slide:SetSmoothing("OUT")
+    end
+    local fade = group:CreateAnimation("Alpha")
+    fade:SetFromAlpha(0)
+    fade:SetToAlpha(1)
+    fade:SetDuration(.18)
+    fade:SetOrder(2)
+    fade:SetSmoothing("OUT")
+    -- Configure the whole group before native adoption. Blizzard owns playback
+    -- and the button's restricted anchors never enter the animation inputs.
+    button:AddAuraShownAnimation(group)
+end
+
 local function PrepareAuraButton(button, lane, index)
     lane._msufA3NativeVisualInputs = lane._msufA3NativeVisualInputs or A3.GetNativeVisualInputs()
     PixelLayoutRegion(button)
@@ -788,6 +816,7 @@ local function PrepareAuraButton(button, lane, index)
     PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, auraBorderBound)
     PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, iconShape)
     PrepareStage.BindPandemicAndTooltip(button, lane)
+    PrepareStage.BindAppearanceAnimation(button, lane, barOnly)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
 end
 

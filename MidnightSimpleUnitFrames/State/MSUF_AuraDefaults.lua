@@ -122,6 +122,7 @@ local function MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer()
             type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
             x = 0, y = 0, size = 24, barWidth = 54,
             max = 8, perRow = 4, spacing = 2, stylePadding = stylePadding,
+            animateAppearance = false,
             showCooldown = true, showCooldownSwipe = true, showStacks = true,
         },
         layer = 9,

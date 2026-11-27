@@ -241,6 +241,7 @@ M._customContainerSearchSuffixes = {
     "filters.cancelable", "filters.notCancelable", "filters.externalDefensive",
     "filters.bigDefensive", "filters.crowdControl", "placed.anchor", "placed.growth",
     "placed.x", "placed.y", "placed.max", "placed.size", "placed.perRow", "placed.spacing",
+    "placed.iconHeightPercent",
     "placed.showStacks", "placed.showCooldown", "placed.showCooldownSwipe",
     "placed.reminderEnabled", "placed.reminderAlpha", "placed.reminderDesaturate",
     "placed.reminderClickCast", "placed.reminderOnlyCastable",

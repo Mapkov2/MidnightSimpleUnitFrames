@@ -195,6 +195,8 @@ local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elaps
     local icons = group and group._icons
     if not icons then return end
     group._msufA3PreviewAnimated = elapsed ~= nil or MSUF.PreviewAnimation.enabled == true
+    local clock = elapsed or (MSUF.PreviewAnimation.enabled and MSUF.PreviewAnimation.Elapsed() or nil)
+    local reducedMotion = AuraPainter.PreviewReflowReducedMotion(clock)
     local barLane = group._msufA3AnimationBarLane
     for i = 1, shownIcons do
         local icon = icons[i]
@@ -208,12 +210,14 @@ local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elaps
                 local auraState = AuraState(icon, auraKind, slot, settings, elapsed)
                 AuraPainter.UpdateAuraBarSample(icon, lane, auraState or AuraState(icon, auraKind, slot, settings))
             else
-                local auraState = AuraState(icon, kind, i, textCfg, elapsed)
+                local sampleElapsed, sampleDuration, expired = AuraPainter.UpdatePreviewReflow(icon, clock, reducedMotion)
+                local auraState = AuraState(icon, kind, i, textCfg, sampleElapsed or elapsed, sampleDuration, sampleDuration ~= nil)
                 if icon.Count then
-                    icon.Count:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "")
+                    icon.Count:SetText(not expired and textCfg.showStackCount ~= false
+                        and (auraState and auraState.stacks or (i == 1 and "3" or "")) or "")
                 end
                 if icon.CooldownText then
-                    icon.CooldownText:SetText(textCfg.showCooldownText ~= false
+                    icon.CooldownText:SetText(not expired and textCfg.showCooldownText ~= false
                         and (auraState and auraState.text or (i == 1 and "1m" or "32")) or "")
                 end
                 LayoutPreviewSwipe(icon, textCfg, auraState and auraState.remainingFrac)
@@ -542,10 +546,14 @@ local function ResolveLaneState(unit, kind, spec, cfg, metrics, textCfg, entries
     lane.padding = Clamp(metrics and metrics.padding, 0, 0, 16)
     lane.iconStyle = iconStyle
     lane.iconShape = iconShape
+    lane.animateReflow = shownIcons > 0 and not lane.auraBar and not barOnly and not cfg.fixedPreview
+    lane.animateAppearance = metrics and metrics.animateAppearance == true
+    lane.reflowDuration = appearanceKind == "targetDots" and 18 or nil
     return lane
 end
 
 local function PaintEditAuraBar(icon, lane, kind, texture, index)
+    AuraPainter.ClearPreviewReflow(icon)
     if icon.Icon then icon.Icon:Hide() end
     if icon.Shade then icon.Shade:Hide() end
     if icon.Swipe then icon.Swipe:Hide() end
@@ -607,7 +615,16 @@ local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg
         icon:ClearAllPoints()
         local col, row = IconGridCoord(i, perRow, vertical)
         local body = group.Body or group
-        icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX + padX, row * stepY * growthY + padY)
+        local x, y = col * step * growthX + padX, row * stepY * growthY + padY
+        icon:SetPoint(initialAnchor, body, initialAnchor, x, y)
+        if lane.animateReflow then
+            local previousCol, previousRow = IconGridCoord(math_max(1, i - 1), perRow, vertical)
+            AuraPainter.ConfigurePreviewReflow(icon, body, initialAnchor, i == 1, x, y,
+                previousCol * step * growthX + padX, previousRow * stepY * growthY + padY, lane.reflowDuration,
+                lane.animateAppearance)
+        else
+            AuraPainter.ClearPreviewReflow(icon)
+        end
         if lane.auraBar then
             PaintEditAuraBar(icon, lane.auraBar, kind, cfg.texture or spec.texture, i)
         else
@@ -713,6 +730,8 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
         .. "\030" .. CustomPreviewEntriesSignature(entries) .. "\030" .. tostring(chrome)
         .. "\030" .. tostring(lane.padding) .. "\030" .. tostring(lane.iconH)
         .. "\030" .. tostring(lane.auraBar and lane.auraBar.auraBarFill)
+        .. "\030" .. tostring(lane.animateReflow)
+        .. "\030" .. tostring(lane.animateAppearance)
         .. "\030" .. tostring(iconStyle and iconStyle.signature)
     if lane.auraBar then
         local appearance = lane.auraBar.auraBarAppearance

@@ -232,6 +232,7 @@ SlotLayoutSignature = function(slot)
     local effectColor = frame and frame.color or {}
     local reminderColor = slot.reminderColor or {}
     return tostring(slot.visual) .. "\030" .. tostring(slot.hiddenVisual)
+        .. "\030" .. tostring(slot.animateAppearance)
         .. "\030" .. tostring(slot.anchor) .. "\030" .. tostring(slot.x) .. "\030" .. tostring(slot.y)
         .. "\030" .. tostring(slot.size) .. "\030" .. tostring(slot.width) .. "\030" .. tostring(slot.height)
         .. "\030" .. tostring(slot.iconZoom) .. "\030" .. tostring(slot.iconShape)
@@ -398,6 +399,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         identityCandidateMode = IdentityCandidateMode(nativeFilter, candidateFilters),
         visual = visual,
         hiddenVisual = hiddenVisual == true,
+        animateAppearance = A3.ShouldAnimateAuraIcons() and true or nil,
         -- Buff Reminder. The placeholder is an MSUF-owned frame one level
         -- BELOW the native AuraSlot and is never toggled by aura state: the
         -- secret AuraButton simply covers it while the aura is up. Blizzard

@@ -34,9 +34,8 @@ local TRACKING_FIELDS = {
     "initialAnchor", "layer", "strata", "weaponEnchants",
 }
 local LAYOUT_FIELDS = { "anchor", "x", "y", "alpha" }
--- Current compilers leave smoothing absent. Preserve their historical bytes;
--- an explicit optional value must still distinguish immutable timer binding.
-local OPTIONAL_BUTTON_FIELDS = { "durationBarSmooth", "auraBarFill" }
+-- Preserve the historical bytes when optional native visuals are unused.
+local OPTIONAL_BUTTON_FIELDS = { "durationBarSmooth", "auraBarFill", "animateAppearance" }
 local SIGNATURE_SCHEMA = {
     Fields = { Button = BUTTON_FIELDS, Tracking = TRACKING_FIELDS, Layout = LAYOUT_FIELDS, Optional = OPTIONAL_BUTTON_FIELDS },
     EncodedBy = {

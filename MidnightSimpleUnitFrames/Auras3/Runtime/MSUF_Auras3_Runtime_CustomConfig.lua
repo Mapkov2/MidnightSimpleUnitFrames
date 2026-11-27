@@ -864,6 +864,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         candidateFilters, candidateFilterSignature,
         filters.maxDuration, filters.hidePermanent == true)
     local size = ClampNumber(layoutPlaced.size, 24, 1, 128)
+    local iconHeight = math_max(1, Round(size * ClampNumber(layoutPlaced.iconHeightPercent, 100, 25, 200) / 100))
     local spacing = ClampNumber(layoutPlaced.spacing, 2, 0, 64)
     local perRow = ClampNumber(layoutPlaced.perRow, 4, 1, 40)
     local maxCount = ClampNumber(layoutPlaced.max, 8, 0, 40)
@@ -875,6 +876,8 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local iconShape, requestedIconShape = Shape.Resolve(
         iconShapeSource, frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
     lanePadding = Round(ClampNumber(lanePadding, 0, 0, 16))
+    local animateAppearance = layoutPlaced.animateNewIcons
+    if animateAppearance == nil and playerDefensives and placed.animateAppearance == true then animateAppearance = true end
     local pandemicVisualEnabled = targetDots == true and placed.pandemicEnabled == true
     local pandemicFrameEffect
     if targetDots == true and type(styleFrame) == "table" and styleFrame.onlyInPandemicWindow == true then
@@ -892,23 +895,26 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
             or (playerDefensives and "HELPFUL" or NativeFilter(helpful and "HELPFUL" or "HARMFUL", filters)),
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
-        -- Exact spell-ID filters are valid only for the current unit polarity.
-        -- Compile this once; the live identity route never reads settings.
-        identityCandidateMode = helpful and "assist" or "hostile",
+        -- Blizzard allows helpful exact-ID filters on the player regardless of
+        -- the assist result. Keep that row on the native filter alone.
+        identityCandidateMode = not playerDefensives and (helpful and "assist" or "hostile") or nil,
         -- Keep user intent separate from expanded native candidate membership.
         sourceSpellIDs = sourceSpellIDs,
         max = Round(maxCount),
         size = size,
+        buttonWidth = size, buttonHeight = iconHeight,
+        stepX = size + spacing, stepY = iconHeight + spacing,
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
         padding = lanePadding,
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
+        height = math_max(1, rows * iconHeight + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(ClampNumber(layoutPlaced.x, 0, -4096, 4096)),
         y = Round(ClampNumber(layoutPlaced.y, 0, -4096, 4096)),
         anchor = ReadAnchor(layoutPlaced, nil, "anchor", "TOPRIGHT"),
         layer = Round(ClampNumber(entry.layer, 9, 0, 30)),
         strata = NormalizeFrameStrata(entry.strata, "AUTO"),
         alpha = Clamp01(placed.alpha, 1),
+        animateAppearanceOverride = animateAppearance,
         showCooldownText = placed.showCooldown ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,

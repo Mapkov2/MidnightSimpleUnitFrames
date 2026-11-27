@@ -1,13 +1,14 @@
 --- Auras3 mock icon painting shared by the menu and on-screen previews.
 --- Callers own pools, geometry, fonts, samples and lifecycle. These painters
 --- only update their supplied regions; they create no frames and register no
---- events, unit watch, secure attributes or click handling. The one table pair
---- they keep is the sample-state scratch on the icon that asked for it.
+--- events, unit watch, secure attributes or click handling. Sample state stays
+--- on the icon that asked for it.
 local _, MSUF = ...
 local A3 = assert(MSUF.MSUF_Auras3)
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/MockAuraPainter")
 -- Preview sample builders (UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua loads first).
 local Animation = assert(MSUF.PreviewAnimation, "Mock aura painter requires PreviewAnimation")
+local GetGeneralDB = MSUF.Require("MSUF_GetGeneralDB", "Auras3/MockAuraPainter")
 local BuildPreviewAnimationAuraState = Animation.BuildAuraState
 local GetPreviewAnimationAuraState = Animation.AuraState
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -16,6 +17,78 @@ local type, tonumber, tostring = type, tonumber, tostring
 local floor, max, min = math.floor, math.max, math.min
 local Painter = { AURA_BAR_FILL_ALPHA = 0.42 }
 A3.MockAuraPainter = Painter
+
+local REFLOW_EXPIRES_AT, REFLOW_SECONDS, REFLOW_HOLD_SECONDS = 2.6, 0.18, 3.4
+
+function Painter.PreviewReflowReducedMotion(elapsed)
+    if elapsed == nil then return false end
+    local general = GetGeneralDB()
+    return general and (general.reduceMotion == true or general.reducedMotion == true)
+end
+
+function Painter.ConfigurePreviewReflow(icon, host, anchor, first, x, y, compactX, compactY, duration, animate)
+    local flow = icon._msufPreviewAuraReflow or {}
+    icon._msufPreviewAuraReflow = flow
+    flow.host, flow.anchor, flow.first = host, anchor, first
+    flow.x, flow.y, flow.compactX, flow.compactY = x, y, compactX, compactY
+    flow.duration = duration or REFLOW_EXPIRES_AT
+    flow.longSample = duration ~= nil
+    flow.animate = animate == true
+    flow.currentX, flow.currentY, flow.hidden = x, y, false
+    if flow.alpha and flow.alpha ~= 1 then icon:SetAlpha(1) end
+    flow.alpha = 1
+end
+
+function Painter.ClearPreviewReflow(icon)
+    local flow = icon._msufPreviewAuraReflow
+    if flow then
+        if flow.alpha ~= 1 then icon:SetAlpha(1) end
+        flow.host, flow.alpha = nil, 1
+    end
+end
+
+--- Uses the caller's preview clock and public sample positions only.
+--- The first sample expires while the others keep their original artwork.
+function Painter.UpdatePreviewReflow(icon, elapsed, reducedMotion)
+    local flow = icon._msufPreviewAuraReflow
+    if not (flow and flow.host) then return end
+    local expiresAt = flow.duration
+    local cycle = expiresAt + REFLOW_HOLD_SECONDS
+    local phase = elapsed and elapsed % cycle or 0
+    local expired = phase >= expiresAt
+    local motionTime = phase - expiresAt
+    local motion = flow.animate and not reducedMotion
+    local exiting = flow.first and expired and motion and motionTime < REFLOW_SECONDS
+    local hidden = flow.first and expired and not exiting
+    if flow.first then
+        local alpha = exiting and 1 - motionTime / REFLOW_SECONDS or 1
+        if motion and elapsed and elapsed >= cycle and phase < REFLOW_SECONDS then alpha = phase / REFLOW_SECONDS end
+        if flow.alpha ~= alpha then
+            icon:SetAlpha(alpha)
+            flow.alpha = alpha
+        end
+    end
+    if flow.hidden ~= hidden then
+        flow.hidden = hidden
+        icon:SetShown(not hidden)
+    end
+    local progress = expired and 1 or 0
+    if motion then
+        progress = max(0, min(1, (phase - expiresAt) / REFLOW_SECONDS, (cycle - phase) / REFLOW_SECONDS))
+        progress = progress * progress * (3 - 2 * progress)
+    end
+    local x = flow.x + (flow.compactX - flow.x) * progress
+    local y = flow.y + (flow.compactY - flow.y) * progress
+    if flow.currentX ~= x or flow.currentY ~= y then
+        flow.currentX, flow.currentY = x, y
+        icon:ClearAllPoints()
+        icon:SetPoint(flow.anchor, flow.host, flow.anchor, x, y)
+    end
+    if elapsed then
+        if flow.first then return phase, expiresAt, expired end
+        if flow.longSample then return phase, cycle + REFLOW_SECONDS end
+    end
+end
 
 --- Regions stay private to the caller's icon. Reusing their constructors
 --- preserves creation order, draw layers and the supplied initial anchors.
@@ -684,4 +757,24 @@ function Workbench:Fit(scale)
     self.canvas:SetScale(scale)
     self.canvas:ClearAllPoints()
     self.canvas:SetPoint("CENTER", self.parent, "CENTER", -self.offsetX * scale, -self.offsetY * scale)
+end
+
+function Workbench:PreviewEntrance(enabled)
+    if self.motionEnabled == enabled then return end
+    self.motionEnabled = enabled
+    local button = self.buttons[1]
+    if not button or not button.CreateAnimationGroup then return end
+    if not enabled then
+        if self.entrance then self.entrance:Stop() end
+        return
+    end
+    if not self.entrance then
+        self.entrance = button:CreateAnimationGroup()
+        local fade = self.entrance:CreateAnimation("Alpha")
+        fade:SetFromAlpha(0)
+        fade:SetToAlpha(1)
+        fade:SetDuration(REFLOW_SECONDS)
+        fade:SetSmoothing("OUT")
+    end
+    self.entrance:Play()
 end

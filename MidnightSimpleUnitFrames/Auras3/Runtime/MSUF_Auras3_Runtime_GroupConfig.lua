@@ -294,6 +294,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local metrics = MSUF.AuraConfig.LanePreviewFields(lane)
     if lane.auraBarFill then metrics.auraBar = lane end
     metrics.requestedIconShape = lane.requestedIconShape
+    metrics.animateAppearance = lane.animateAppearance == true
     metrics.layer = lane.layer
         -- Edit Mode is a preview renderer for this already-compiled runtime
         -- lane. Hand it the finalized Style values instead of making it

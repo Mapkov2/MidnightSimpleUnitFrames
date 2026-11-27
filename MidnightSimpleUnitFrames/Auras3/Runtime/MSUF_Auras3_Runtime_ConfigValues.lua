@@ -591,6 +591,14 @@ local function EffectiveLaneFilters(lane)
 end
 ConfigValues.EffectiveBigDefensiveLaneFilters = EffectiveLaneFilters
 
+function A3.ShouldAnimateAuraIcons(override)
+    local general = MSUF_DB and MSUF_DB.general
+    if general and (general.reduceMotion == true or general.reducedMotion == true) then return false end
+    if type(override) == "boolean" then return override end
+    local auras = MSUF_DB and MSUF_DB.auras3
+    return auras and auras.shared and auras.shared.animateNewIcons == true
+end
+
 local function FinalizeLane(lane, appearanceKind, sharedSignatures)
     if lane then
         ConfigureCuratedBigDefensiveLane(lane)
@@ -603,6 +611,7 @@ local function FinalizeLane(lane, appearanceKind, sharedSignatures)
         local general = MSUF_DB and MSUF_DB.general
         lane.auraTooltipAnchor = (general and general.unitTooltipAnchor == "CURSOR")
             and "ANCHOR_CURSOR" or "ANCHOR_BOTTOMRIGHT"
+        lane.animateAppearance = A3.ShouldAnimateAuraIcons(lane.animateAppearanceOverride) and true or nil
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
         lane._msufA3StructuralSignature, lane._msufA3LayoutSignature = LaneShapeSignatures(lane, sharedSignatures)
     end

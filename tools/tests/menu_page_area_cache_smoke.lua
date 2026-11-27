@@ -6,7 +6,7 @@ local mw = Open(root, flavor, { page = "home", clientScriptBindings = true })
 local M, key = mw.M, "uf_" .. unit
 local FRAME_BUDGET = 4500 -- Entire unit page, all aura subviews and three texture subviews.
 local hasBars = flavor == "Mainline" or flavor == "Forever"
-local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit, true)
+local Expected = assert(loadfile(root .. "/tools/tests/menu_page_area_height_baseline.lua"))()(flavor, unit, false)
 -- The selected-tab style increases the workspace header from 24 to 26 px.
 local AURA_TAB_HEIGHT_DELTA = 2
 local function Settle() mw:RunTimers() M.Theme.StopAllMenuAnimations() end
@@ -48,16 +48,13 @@ local function Walk()
                     OpenSections(entry)
                     local height = entry.sections.auras._msuf2CollapsibleEntry.outer:GetHeight()
                     local expectedHeight = Expected(lane, tool.value, slot) + AURA_TAB_HEIGHT_DELTA
+                    if hasBars and (tool.value == "style" or tool.value == "appearance") then
+                        expectedHeight = expectedHeight + 124
+                    end
                     assert(height == expectedHeight, string.format(
                         "%s %s:%s slot %d: outer height %d differs from reviewed contextual baseline (%d)",
                         unit, lane, tool.value, slot, height, expectedHeight))
-                    local diagnostic = entry.sections.workbench_visibility
-                    local hasDiagnostic = unit == "player" and lane == "custom4"
-                        or unit ~= "player" and (lane == "buff" or lane == "debuff")
-                    assert((diagnostic ~= nil) == hasDiagnostic, "visibility diagnostic leaked into another aura lane")
-                    if diagnostic then
-                        assert(diagnostic._msuf2CollapsibleEntry.outer:GetHeight() == 132, "visibility card height changed")
-                    end
+                    assert(not entry.sections.workbench_visibility, "removed aura visibility card was built")
                     shared = shared or entry.sections.frame_basics
                     assert(shared == entry.sections.frame_basics, "selection rebuilt unchanged Basics section")
                     if entry.pageAreas then

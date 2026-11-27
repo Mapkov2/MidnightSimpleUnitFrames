@@ -456,6 +456,7 @@ local function ReadGroupConfig(unit, kind)
             growth = placed.growth or "LEFTDOWN",
             rowWrap = "DOWN",
             show = item and item.enabled == true or false,
+            fixedPreview = (item and item.portraitIcon == true) or placed.reminderEnabled == true,
             -- The dots container keeps its own placeholder (Garrote) instead of
             -- the generic debuff icon; tracked entries override it anyway.
             texture = spec.preset and spec.texture

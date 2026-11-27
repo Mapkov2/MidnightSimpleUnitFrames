@@ -129,6 +129,11 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     W.ControlCard(section, "Cooldown Text", nil, rightX - 14, -38, rightW + 28, 430)
     W.ControlCard(section, "Stack Count", nil, leftX - 14, -376, leftW + 28, 296)
     W.ControlCard(section, "Duration Bar", nil, rightX - 14, -484, rightW + 28, 312)
+    local auraPage = M.AurasParts and M.AurasParts.AurasPage
+    if auraPage then
+        auraPage.BindAuraAnimation(ctx, section, leftX, -278, leftW, "spell.style.animate-new-icons",
+            function() RefreshPreviewOnly(CurrentScope()) end)
+    end
 
     local function Style(kind)
         local si = SpellIndicators(kind or CurrentScope())
@@ -200,7 +205,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
             { rightX + halfRight + 12, -674, halfRight, "LEFT" } },
     }, styleRows, styleControls)
     local swipeDirection = styleControls.cooldownSwipeReverse
-    W.Text(section, M.Format("Shape, border and shadow: %s. All controls here remain Group-scope aware.", M.NavPath("auras3_buffs")),
+    W.Text(section, M.Format("%s → %s", M.NavPath("auras3_buffs"), Tr("Icon Skin")),
         leftX, -814, innerW, T.colors.muted)
 
 

@@ -1267,7 +1267,7 @@ end
 local LEGACY_AURA_RULE_TYPES = {
     enabled = "boolean", showPlayer = "boolean", showTarget = "boolean", showFocus = "boolean",
     showPet = "boolean", showBoss = "boolean", showArena = "boolean", showBuffs = "boolean", showDebuffs = "boolean",
-    showWeaponEnchants = "boolean", hidePermanent = "boolean", blacklist = "table", ignoreCats = "table", filters = "table",
+    showWeaponEnchants = "boolean", animateNewIcons = "boolean", hidePermanent = "boolean", blacklist = "table", ignoreCats = "table", filters = "table",
     filterToken = "string", blacklistCats = "table", blacklistSpells = "table", autoBlacklistBuffs = "boolean",
     blizzardTypes = "table", blizzardDispelMode = "string", trackedOnlyOwn = "boolean",
     overrideBlacklist = "boolean", overrideFilters = "boolean", overrideIgnore = "boolean",

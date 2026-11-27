@@ -300,6 +300,9 @@ function MiscSection.MenuBehavior(s)
         function()
             MSUF.UF.Appearance.UpdateSettings()
             M.RequestGeneralDomains("MSUF2_REDUCE_MOTION_CASTBARS", { castbar = true, preview = true, applyAll = false })
+            if MSUF.Client.Family == "Mainline" then
+                M.ApplyService.RequestAuras("shared", "MSUF2_REDUCE_MOTION_AURAS")
+            end
         end)
     BindMiscToggle(menuBehavior, "Mute MSUF menu sounds", "muteMenuSounds", false,
         "MSUF2_MUTE_MENU_SOUNDS", 14, -238, 280, MENU_WRITE_OPTS)

@@ -222,7 +222,6 @@ local function BuildUnitAuraWorkspace(ctx, builder, unit)
         BuildUnitWorkspaceFooter(ctx, top, unit, currentTab, normalLane, footerY, sectionW)
 
         BuildUnitWorkspaceTool(ctx, auraBuilder, unit, currentTab, currentTool, normalLane)
-        M.ProfileWorkbenchUI.Aura(ctx, auraBuilder, unit, currentTab)
         finishLayout()
     end
     -- Keep the area layout and its searchable accordion available immediately.

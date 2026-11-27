@@ -7780,6 +7780,7 @@ L["Fade castbars in and out"] = "Dissolvenza in entrata e in uscita delle barre 
 L["Latency zone color"] = "Colore della zona di latenza"
 L["Rank 4"] = "Grado 4"
 L["Disabled while Reduce menu motion is enabled."] = "Disattivato quando la riduzione delle animazioni del menu è attiva."
+L["Animate new icons"] = "Anima le nuove icone"
 L["Show timer in brackets"] = "Mostra il timer tra parentesi"
 L["Fade in when shown"] = "Dissolvenza in entrata alla visualizzazione"
 L["Edit positions"] = "Modifica posizioni"

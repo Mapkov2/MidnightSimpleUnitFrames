@@ -40,9 +40,12 @@ local layerHandleLabels = {
     [layerHandleId] = "Layer Status Text",
     [layerHandleId .. ".open_settings"] = "Open Layer Status Text settings",
 }
-local function Catalog(entry)
+local function Catalog(entry, scope, lane, tool)
     local rows, navigationRows = {}, 0
-    local layerRows = {}
+    local layerRows, animationRows = {}, {}
+    local groupMotion = "menu2.gf_auras.auras.group-style.lane." .. lane .. ".animate-new-icons"
+    local spellMotion = "menu2.gf_auras.auras.spell.style.animate-new-icons"
+    local motionSection = "menu2.gf_auras.section.aura_style_group_" .. scope .. "_" .. lane .. "_animation.expanded"
     for _, widget in ipairs(entry.searchWidgets) do
         local record, meta = widget._msuf2RuntimeControlRecord, widget._msuf2SearchMeta
         if record and meta then
@@ -74,6 +77,14 @@ local function Catalog(entry)
                     "layer handle identity changed: " .. record.controlId)
                 assert(not layerRows[record.controlId], "duplicate layer handle control: " .. record.controlId)
                 layerRows[record.controlId] = true
+            elseif record.controlId == groupMotion or record.controlId == spellMotion then
+                assert(record.settingKey == "auras3.shared.animateNewIcons" and widget._msuf2CommandAction,
+                    "animation control lost its shared setting: " .. record.controlId)
+                assert(not animationRows[record.controlId], "duplicate animation control: " .. record.controlId)
+                animationRows[record.controlId] = true
+            elseif record.controlId == motionSection then
+                assert(not animationRows[motionSection], "duplicate animation section")
+                animationRows[motionSection] = true
             else rows[#rows + 1] = row end
         end
     end
@@ -83,6 +94,10 @@ local function Catalog(entry)
     for id in pairs(layerHandleLabels) do
         assert((layerRows[id] == true) == (flavor == "Forever"), "unexpected layer handle availability: " .. id)
     end
+    local motionSupported = flavor == "Mainline" or flavor == "Forever"
+    assert((animationRows[spellMotion] == true) == motionSupported, "unexpected Spell Icon motion switch")
+    assert((animationRows[groupMotion] == true) == (motionSupported and tool == "style"), "unexpected aura motion switch")
+    assert(animationRows[motionSection] == animationRows[groupMotion], "animation section and switch are in different views")
     table.sort(rows)
     local hash = 0
     for _, row in ipairs(rows) do
@@ -119,7 +134,7 @@ local function Walk()
                 local entry = assert(M.cache.gf_auras)
                 OpenSections(entry)
                 local id = scope.value .. ":" .. lane .. ":" .. tool
-                local count, hash, catalog = Catalog(entry)
+                local count, hash, catalog = Catalog(entry, scope.value, lane, tool)
                 local dump = os.getenv("MSUF_M3_CATALOG_DUMP")
                 if dump then
                     local file = assert(io.open(dump .. "/" .. scope.value .. "-" .. lane .. "-" .. tool .. ".txt", "wb"))
@@ -131,6 +146,9 @@ local function Walk()
                     local old = assert(expected[id], "missing baseline " .. id)
                     for i, value in ipairs(snapshots[id]) do
                         local target = old[i] + (i <= 2 and AURA_TAB_HEIGHT_DELTA or 0)
+                        if i <= 2 and tool == "style" and (flavor == "Mainline" or flavor == "Forever") then
+                            target = target + 124
+                        end
                         assert(value == target, id .. " baseline field " .. i .. ": " .. value .. " ~= " .. target)
                     end
                     first = first or entry

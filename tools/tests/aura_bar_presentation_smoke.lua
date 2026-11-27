@@ -2,7 +2,7 @@
 local root, flavor = assert(arg[1]):gsub("\\", "/"):gsub("/$", ""), assert(arg[2])
 local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local cursorX, cursorY, mouseHeld = 300, 400, false
-local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = function(world)
+local mw = MenuWorld.Open(root, flavor, { page = "home", keepFlush = true, beforeCore = function(world)
     local methods = world.widgets.Methods
     world.env.GetCursorPosition = function() return cursorX, cursorY end
     world.env.IsMouseButtonDown = function(button) return button == "LeftButton" and mouseHeld end
@@ -37,6 +37,11 @@ local mw = MenuWorld.Open(root, flavor, { page = "home", beforeCore = function(w
     function methods:SetAuraGroupLayout(key, layout) self.auraSmokeGroups[key].layout = layout end
     function methods:SetOrientation(value) self.orientation = value end
     function methods:SetReverseFill(value) self.reverseFill = value end
+    local setIconTexture = methods.SetTexture
+    function methods:SetTexture(texture, ...)
+        self.auraBarSmokeArtwork = texture
+        if setIconTexture then return setIconTexture(self, texture, ...) end
+    end
     local setTexture = methods.SetStatusBarTexture
     function methods:SetStatusBarTexture(texture, ...)
         self.auraBarSmokeTexture = texture
@@ -163,6 +168,101 @@ editState.active = true
 core.ExportPublic("MSUF_UnitPreviewActive", true)
 db.auras3.shared.showInEditMode = true
 
+local function AssertReflow(icons, tick)
+    local first, survivor = assert(icons[1]), assert(icons[2])
+    local _, _, _, firstX, firstY = first:GetPoint(1)
+    local _, _, _, oldX, oldY = survivor:GetPoint(1)
+    local axis = firstX ~= oldX and 4 or 5
+    local function Position(icon) return select(axis, icon:GetPoint(1)) end
+    local firstPos, oldPos = axis == 4 and firstX or firstY, axis == 4 and oldX or oldY
+    local texture = survivor.Icon or survivor._texture
+    local artwork = assert(texture.auraBarSmokeArtwork)
+    assert(first:IsShown() and survivor:IsShown() and firstPos ~= oldPos)
+    tick(2.69)
+    local current = Position(survivor)
+    assert(first:IsShown() and first:GetAlpha() > 0 and first:GetAlpha() < 1 and survivor:IsShown()
+        and current > math.min(firstPos, oldPos) and current < math.max(firstPos, oldPos),
+        "surviving aura did not slide toward the expired aura's slot")
+    tick(3)
+    assert(not first:IsShown() and Position(survivor) == firstPos and texture.auraBarSmokeArtwork == artwork,
+        "surviving aura did not retain its artwork in the compact slot")
+    tick(6.09)
+    assert(first:IsShown() and first:GetAlpha() > 0 and first:GetAlpha() < 1, "returning icon skipped the entrance")
+    tick(6.19)
+    assert(first:IsShown() and first:GetAlpha() == 1 and Position(survivor) == oldPos,
+        "preview cycle did not restore its original opacity and positions")
+    tick(3)
+    tick()
+    assert(first:IsShown() and Position(survivor) == oldPos, "stopping the preview left the sample compacted")
+    db.general.reduceMotion = true
+    tick(2.74)
+    assert(not first:IsShown() and Position(survivor) == firstPos, "reduced motion should compact without sliding")
+    tick(6)
+    assert(first:IsShown() and Position(survivor) == oldPos, "reduced motion broke the preview cycle")
+    db.general.reduceMotion = nil
+    tick()
+end
+
+do
+    local defensive = model.CustomContainer("player", 4, true)
+    defensive.enabled, defensive.portraitIcon = true, false
+    defensive.placed.anchor, defensive.placed.growth = "TOPLEFT", "RIGHTDOWN"
+    defensive.placed.size, defensive.placed.spacing = 21, 1
+    defensive.placed.iconHeightPercent = 143
+    defensive.placed.max, defensive.placed.perRow = 3, 3
+    defensive.placed.animateAppearance = true
+    defensive.spellIDs = "871, 5277"
+    db.auras3.showPlayer = true
+    local player = db.auras3.perUnit.player
+    player.overrideLayout = true
+    player.layoutShared.showBuffs, player.layoutShared.maxBuffs = true, 2
+    player.layoutShared.buffGrowthX, player.layoutShared.buffGrowthY = "RIGHT", "DOWN"
+    player.layoutShared.buffShowAuraBars = false
+    db.auras3.shared.animateNewIcons = true
+    auras.BumpRuntimeConfig()
+    local defensiveLane = auras.ResolveUnitFrameConfig("player").lanes.custom4
+    assert(defensiveLane.animateAppearance)
+    assert(defensiveLane.buttonWidth == 21 and defensiveLane.buttonHeight == 30 and defensiveLane.height == 30)
+    assert(defensiveLane.stepX == 22 and defensiveLane.stepY == 31)
+    defensive.placed.animateNewIcons = false
+    auras.BumpRuntimeConfig()
+    local override = auras.ResolveUnitFrameConfig("player").lanes
+    assert(not override.custom4.animateAppearance and override.buff.animateAppearance,
+        "a Custom Aura opt-out did not override the shared animation setting")
+    defensive.placed.animateNewIcons = nil
+    auras.BumpRuntimeConfig()
+
+    local playerFrame = env.CreateFrame("Frame", nil, env.UIParent)
+    playerFrame:SetSize(150, 30)
+    playerFrame:SetPoint("CENTER")
+    playerFrame:Show()
+    auras._runtimeFrames.player = playerFrame
+    auras.RefreshEditPreview("player")
+    local edit = assert(auras.EditMode.groups.player.custom4)
+    local surface = menu.PreviewHelpers.NewRuntimeUnitSurface(host, "player", {})
+    local preview = assert(surface:Refresh())
+    local menuIcons, menuBuffs = {}, {}
+    for _, icon in ipairs(preview._msufGFFrameAuraPreviews) do
+        if icon._sceneAuraLane and icon._sceneAuraLane.appearanceKind == "playerDefensives" then
+            menuIcons[#menuIcons + 1] = icon
+        elseif icon._sceneAuraLane and icon._sceneAuraLane.appearanceKind == "buff" then
+            menuBuffs[#menuBuffs + 1] = icon
+        end
+    end
+    for _, row in ipairs({ edit._icons, menuIcons }) do
+        assert(row[1]:GetWidth() == 21 and row[1]:GetHeight() == 30, "defensive preview crops the rectangular icon")
+    end
+
+    local function TickEdit(elapsed)
+        if elapsed then assert(auras.RefreshEditPreviewAnimation("player", elapsed))
+        else auras.RefreshEditPreview("player") end
+    end
+    AssertReflow(edit._icons, TickEdit)
+    AssertReflow(auras.EditMode.groups.player.buff._icons, TickEdit)
+    AssertReflow(menuIcons, function(elapsed) surface.root:SetClock(elapsed) end)
+    AssertReflow(menuBuffs, function(elapsed) surface.root:SetClock(elapsed) end)
+end
+
 for _, direction in ipairs(fill) do
     model.WriteLaneAuraBarFill("target", "buff", direction[1])
     model.WriteLaneAuraBarStyle("target", "buff", Appearance(direction[4]))
@@ -221,6 +321,67 @@ local function AssertNativeColorBinding(lane, expectedCount, mode, outline)
     assert(edge == expectedEdge[1], "automatic outline missed the selected border")
     AssertColor({ bright.None:GetRGBA() }, 0.28, 0.72, 0.49, 1)
 end
+
+local function AssertDefensiveAppearanceAnimation()
+    local defensive = db.auras3.customContainers.perUnit.player.items[4]
+    defensive.enabled, defensive.portraitIcon, defensive.placed.growth = true, false, "RIGHTDOWN"
+    local function Lane(enabled, reduced)
+        defensive.placed.animateNewIcons = enabled
+        db.general.reduceMotion = reduced
+        auras.InvalidateUnitRuntimeConfig("player")
+        return assert(auras.ResolveUnitFrameConfig("player").lanes.custom4)
+    end
+    local disabled, enabled, reduced = Lane(false, false), Lane(true, false), Lane(true, true)
+    assert(enabled.animateAppearance == true and not disabled.animateAppearance and not reduced.animateAppearance)
+    assert(enabled._msufA3StructuralSignature ~= disabled._msufA3StructuralSignature
+        and disabled._msufA3StructuralSignature == reduced._msufA3StructuralSignature, "native owner should rebuild on motion change")
+
+    local function Binding(lane)
+        local button = auras.MockAuraPainter.NewNativeSample(host, { name = "Defensive", duration = 8, remaining = 5 })
+        local groups, binding = 0
+        function button:SetCancelAuraButtons() end
+        function button:SetMouseMotionEnabled() end
+        function button:SetMouseClickEnabled() end
+        function button:CreateAnimationGroup()
+            groups = groups + 1
+            local group = {}
+            function group:CreateAnimation(kind)
+                local animation = { kind = kind }
+                function animation:SetOffset(x, y) self.x, self.y = x, y end
+                function animation:SetOrder(order) self.order = order end
+                function animation:SetDuration(seconds) self.seconds = seconds end
+                function animation:SetSmoothing(smoothing) self.smoothing = smoothing end
+                function animation:SetFromAlpha(alpha) self.fromAlpha = alpha end
+                function animation:SetToAlpha(alpha) self.toAlpha = alpha end
+                self[#self + 1] = animation
+                return animation
+            end
+            return group
+        end
+        function button:AddAuraShownAnimation(group) binding = group end
+        auras.Runtime.ButtonVisuals.PrepareAuraButton(button, lane, 1)
+        return groups, binding
+    end
+    assert(Binding(disabled) == 0 and Binding(reduced) == 0)
+    db.auras3.shared.animateNewIcons, db.general.reduceMotion = true, false
+    auras.InvalidateUnitRuntimeConfig("player")
+    local regular = assert(auras.ResolveUnitFrameConfig("player").lanes.buff)
+    assert(regular.animateAppearance and Binding(regular) == 1, "shared native animation did not reach ordinary Buff icons")
+    local barOnly = {}
+    for key, value in pairs(regular) do barOnly[key] = value end
+    barOnly.showDurationBar, barOnly.durationBarDisplay = true, "BAR_ONLY"
+    assert(Binding(barOnly) == 0, "icon animation reached a native duration bar with no icon")
+    db.auras3.shared.animateNewIcons = nil
+    auras.InvalidateUnitRuntimeConfig("player")
+    local groups, binding = Binding(enabled)
+    assert(groups == 1 and #binding == 3 and binding[1].kind == "Translation" and binding[1].order == 1)
+    assert(binding[1].x == 6 and binding[1].y == 0 and binding[2].x == -6 and binding[2].y == 0)
+    assert(binding[2].order == 2 and binding[3].kind == "Alpha" and binding[3].order == 2
+        and binding[3].fromAlpha == 0 and binding[3].toAlpha == 1 and binding[3].seconds == binding[2].seconds)
+    Lane(false, false)
+end
+
+AssertDefensiveAppearanceAnimation()
 
 local function AssertAuraBarColors(mode, outline, expectedCount)
     local style = Appearance("LEFT")
@@ -491,16 +652,17 @@ tail.groupAccessGate = true
 assert(not core.AuraConfig.CombinedAuraBarLanes(partyConfig.lanes), "joined AuraGroups with different visibility policies")
 tail.groupAccessGate = nil
 
-local function AuraBarCommand(page, prefix, suffix, prepareKind, prepareValue)
+local function AuraBarCommand(page, prefix, suffix, prepareKind, prepareValue, customSetter)
     local id = prefix .. suffix
     local _, found, exact = menu.Search._CoreAPI.OpenSearchTarget(page, "Aura bars", nil, nil, nil, {
-        controlId = id, sectionId = page == "uf_target" and "auras" or "group_auras",
+        controlId = id, sectionId = page == "gf_auras" and "group_auras" or "auras",
         prepareKind = prepareKind, prepareValue = prepareValue,
     })
     local record = menu.RuntimeControlCatalog.Get(id)
     assert(found and exact and record, "missing aura bar control: " .. id)
     local widget = record.widget
-    assert(widget._msuf2ControlSchema.write, "aura bar write policy missing: " .. id)
+    local schema = widget._msuf2ControlSchema
+    assert(schema.write or (customSetter and schema.customSetReason), "aura write policy missing: " .. id)
     return assert(widget._msuf2CommandAction)
 end
 
@@ -511,6 +673,28 @@ end
 local function GroupControl(path)
     return AuraBarCommand("gf_auras", "menu2.gf_auras.auras.group-workspace.lane.buff.", path, "groupAuraWorkspace", "party_buff_bars")
 end
+
+local unitMotion = AuraBarCommand("uf_target", "menu2.uf_target.auras.style.lane.buff.",
+    "animate-new-icons", "unitAuraWorkspace", "buff_style", true)
+unitMotion.set(true)
+assert(auras.ResolveUnitFrameConfig("target").lanes.buff.animateAppearance == true,
+    "Unit Buff Style did not enable shared motion")
+local groupMotion = AuraBarCommand("gf_auras", "menu2.gf_auras.auras.group-style.lane.buff.",
+    "animate-new-icons", "groupAuraWorkspace", "party_buff_style", true)
+assert(groupMotion.get() == true, "Group Buff Style did not inherit shared motion")
+groupMotion.set(false)
+assert(groupMotion.get() == false, "Group Buff Style did not save shared motion")
+assert(not auras.ShouldAnimateAuraIcons(), "shared motion still reads as enabled")
+assert(auras.ResolveUnitFrameConfig("target").lanes.buff.animateAppearance ~= true,
+    "Group Buff Style did not disable shared motion")
+local defensiveMotion = AuraBarCommand("uf_player", "menu2.uf_player.auras.custom-container.appearance.",
+    "animate-new-icons", "unitAuraWorkspace", "custom4_style", true)
+defensiveMotion.set(true)
+assert(defensiveMotion.get(), "Player Defensives Style did not save the motion override")
+menu.ApplyService.Flush()
+assert(auras.ResolveUnitFrameConfig("player").lanes.custom4.animateAppearance,
+    "Player Defensives lane did not adopt the motion override")
+assert(not auras.ShouldAnimateAuraIcons(), "Player Defensives Style also wrote the shared setting")
 
 local showUnitBars = UnitControl("layout.show-as-bars")
 showUnitBars.set(false)
@@ -534,4 +718,26 @@ assert(savedBuff.showAuraBars and savedBuff.auraBarFill == "LEFT")
 assert(savedBuff.auraBarStyle.fillColorMode == "CUSTOM")
 assert(savedBuff.auraBarStyle.fillColor[1] == 0.25 and savedBuff.auraBarStyle.fillColor[2] == 0.45 and savedBuff.auraBarStyle.fillColor[3] == 0.75)
 
-print("aura_bar_presentation_smoke " .. flavor .. ": fill, growth, colors, joined native groups and both preview layouts")
+savedBuff.showAuraBars, savedBuff.showDurationBar = false, false
+db.auras3.shared.animateNewIcons = true
+groupFrames.InvalidateCompiledSpecs("party")
+auras.BumpRuntimeConfig()
+group:Hide()
+group:Show(1, { immediate = true })
+local partyIcons = group:Frames()[1]._msufGFFrameAuraPreviews
+AssertReflow(partyIcons, function(elapsed) preview:SetClock(elapsed) end)
+db.auras3.shared.animateNewIcons = false
+groupFrames.InvalidateCompiledSpecs("party")
+auras.BumpRuntimeConfig()
+group:Hide()
+group:Show(1, { immediate = true })
+partyIcons = group:Frames()[1]._msufGFFrameAuraPreviews
+preview:SetClock(2.69)
+assert(not partyIcons[1]:IsShown(), "turning motion off left the group preview fading")
+
+local copiedStyle = model.CaptureUnitStyle("player")
+assert(copiedStyle.custom[4].placed.animateNewIcons == true, "Copy Aura Style omitted the motion override")
+model.ApplyUnitStyleSnapshot("focus", copiedStyle)
+assert(model.CustomContainer("focus", 4, true).placed.animateNewIcons == true, "Copy Aura Style lost the motion override")
+
+print("aura_bar_presentation_smoke " .. flavor .. ": fill, growth, colors, joined native groups and preview reflow")

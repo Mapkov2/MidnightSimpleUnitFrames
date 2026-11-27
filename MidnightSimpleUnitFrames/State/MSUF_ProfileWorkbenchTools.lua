@@ -128,7 +128,7 @@ function W.Visibility(selectedUnit, selectedLane)
                 local title = lane.kind == "buff" and "Buffs" or lane.kind == "debuff" and "Debuffs" or tostring(lane.kind)
                 rows[#rows + 1] = { unit = unit, label = MSUF.Translate(titles[unit]) .. " / " .. MSUF.Translate(title),
                     lane = key, page = "uf_" .. unit,
-                    target = { pageKey = "uf_" .. unit, sectionId = "workbench_visibility",
+                    target = { pageKey = "uf_" .. unit, sectionId = "auras",
                         prepareKind = "unitAuraWorkspace", prepareValue = key .. "_layout" },
                     reason = config.enabled == false and "Aura configuration disabled"
                         or lane.enabled and "Enabled by configuration" or "Disabled by configuration",

@@ -7776,6 +7776,7 @@ L["Fade castbars in and out"] = "Apparition et disparition progressives des barr
 L["Latency zone color"] = "Couleur de la zone de latence"
 L["Rank 4"] = "Rang 4"
 L["Disabled while Reduce menu motion is enabled."] = "Désactivé lorsque la réduction des animations du menu est activée."
+L["Animate new icons"] = "Animer les nouvelles icônes"
 L["Show timer in brackets"] = "Afficher le chronomètre entre parenthèses"
 L["Fade in when shown"] = "Apparition progressive à l’affichage"
 L["Edit positions"] = "Modifier les positions"

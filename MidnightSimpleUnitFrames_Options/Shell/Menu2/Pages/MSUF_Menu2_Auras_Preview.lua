@@ -358,6 +358,10 @@ local function WorkbenchRefresh(P)
         if P.zoomPan then scale = P.zoomPan.Clamp(scale) end
         P.box._mockAutoScale, P.box._mockScale = fit, scale
         workbench:Fit(scale)
+        if opts.focused and A3.ShouldAnimateAuraIcons then
+            workbench:PreviewEntrance(count > 0 and not workbench.lane.auraBarFill
+                and A3.ShouldAnimateAuraIcons() == true)
+        end
         local label = ScopeLabel(selected)
         T.SetTranslatedText(P.titleLabel, M.Format("%s Sample Preview", Tr(label)))
         if P.meta then
