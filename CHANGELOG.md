@@ -1,5 +1,12 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.5-beta4 - 2026-11-27
+
+### Castbars
+
+- Centered spell names keep their configured position when the cast timer is on either side. The timer still limits the available name width in Auto fit and Manual width modes.
+- Player and Target castbars preserve these settings when you copy a profile or rebuild it from an export.
+
 ## 7.0.5-beta3 - 2026-11-27
 
 ### Unit frames and resources

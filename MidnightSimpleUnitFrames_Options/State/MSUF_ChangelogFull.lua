@@ -8,43 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9308434E62350FD828FC88B355403D139749D0749A4B7E154CDA199C6F10D372",
-    currentVersion = "7.0.5-beta3",
+    sourceSha256 = "A0E63A5150C96A922D05FD1E2638DBF66C168727D6F9530040B85B0523916CD1",
+    currentVersion = "7.0.5-beta4",
     historyFromVersion = "6.02",
-    previousVersion = "7.0.4",
-    rangeLabel = "7.0.4 -> 7.0.5-beta3",
+    previousVersion = "7.0.5-beta3",
+    rangeLabel = "7.0.5-beta3 -> 7.0.5-beta4",
     entries = {
         {
-            version = "7.0.5-beta3",
+            version = "7.0.5-beta4",
             date = "2026-11-27",
             sections = {
                 {
-                    title = "Unit frames and resources",
+                    title = "Castbars",
                     bullets = {
-                        "Fixed the missing-health background on Retail unit, party and raid frames. It now stays opaque at full opacity, including while health animates.",
-                        "Class resource pips now use physical pixel spacing and realign after UI scale changes. Combo points clear stale charged colors when resource data becomes restricted and restore the correct colors when it becomes readable.",
-                        "Fixed inline Target of Target positioning when using direct text layouts. The name anchor selector now updates those layouts too.",
-                        "Group frames use their configured NPC name colors, and long names leave room for visible health text.",
-                        "Fixed Blizzard Raid Manager visibility when opened from a shortcut or gamepad in automatic mode.",
-                        "The 3D portrait performance warning now appears whenever 3D is selected from the render dropdown.",
-                    },
-                },
-                {
-                    title = "Castbars and combat timer",
-                    bullets = {
-                        "Fixed player castbar placement and width when attached to the Utility cooldown row. Options and Edit Mode show the same anchor, and the castbar keeps the row's width when space is tight.",
-                        "Cast timers show >30 while more than 30 seconds remain on supported timer displays.",
-                        "The combat timer can anchor to the top-right of the chat window. Its timer format can also display brackets.",
-                    },
-                },
-                {
-                    title = "Auras and options",
-                    bullets = {
-                        "Aura previews now fade expired icons and slide the remaining icons into place. Aura Style exposes the shared new-icon animation option, and custom auras can override it. Reduce menu motion affects the preview, while Aura Style controls animation in the game.",
-                        "Fixed custom aura icon dimensions in previews and kept the Resources color preview clear of aura icons.",
-                        "Fixed clipped tab labels at different menu zoom levels and fixed the Icon Skins preview so captions and icons stay within their section.",
-                        "The menu can inherit the global font and refreshes when that font changes.",
-                        "Reduce menu motion leaves in-game unit-frame and castbar fades under their own settings.",
+                        "Centered spell names keep their configured position when the cast timer is on either side. The timer still limits the available name width in Auto fit and Manual width modes.",
+                        "Player and Target castbars preserve these settings when you copy a profile or rebuild it from an export.",
                     },
                 },
             },
