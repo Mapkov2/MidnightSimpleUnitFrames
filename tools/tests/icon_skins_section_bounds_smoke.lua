@@ -113,6 +113,11 @@ local function CheckStrip()
     return body, rows
 end
 
+local homeHeight = M.scrollChild:GetHeight()
+local hidden = assert(M.BuildPageEntry("icon_skins", true))
+assert(hidden.hiddenBuild and hidden.sections.icon_skins_strip, "hidden search build must construct the icon strip")
+assert(M.scrollChild:GetHeight() == homeHeight, "hidden search build must preserve the current page's height")
+
 for _, width in ipairs({ 1000, 1500, 720 }) do
     M.GetContentMetrics = function() return width, 700 end
     M.InvalidatePage("icon_skins")
@@ -157,12 +162,13 @@ for _, width in ipairs({ 1000, 1500, 720 }) do
         Settle()
         local resized, rows = CheckStrip()
         assert(resized == strip and rows > stripRows, "retained icon strip must reflow at narrower width")
+        MenuWorld.FireVisibilityScripts(M.cache.icon_skins.wrapper)
         assert(M.SelectPage("home"))
         M.GetContentMetrics = function() return width, 700 end
         assert(M.SelectPage("icon_skins"))
-        Settle()
         local restored, restoredRows = CheckStrip()
-        assert(restored == strip and restoredRows == stripRows, "retained strip must restore its column count")
+        assert(restored == strip and restoredRows == stripRows, "retained strip must reflow as soon as it is shown")
+        Settle()
 
         local entry = strip._msuf2CollapsibleEntry
         entry.SetOpenImmediate(false)

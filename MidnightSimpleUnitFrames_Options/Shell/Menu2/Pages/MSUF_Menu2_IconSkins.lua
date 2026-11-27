@@ -408,6 +408,7 @@ local function BuildStrip(P, b)
     end
 
     ctx:AddResizeCallback(LayoutStrip)
+    ctx.wrapper:HookScript("OnShow", LayoutStrip)
     section._msuf2CollapsibleEntry._msuf2RefreshState = LayoutStrip
     function P.RefreshStrip()
         for i = 1, #P.samples do
