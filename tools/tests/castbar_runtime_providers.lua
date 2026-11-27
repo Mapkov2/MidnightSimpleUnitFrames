@@ -138,27 +138,27 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         end
     end
     local castVM, castNative = Budget(world, flavor .. " CAST repeat", function() Fire("UNIT_SPELLCAST_START") end,
-        legacy and 2172 or 2186, 0, legacy and 2 or 4)
+        legacy and 2152 or 2186, 0, legacy and 2 or 4)
     local function DistinctCast()
         if not legacy then id = id + 1; cast.castBarID = id end
         cast.startMS, cast.endMS = cast.startMS + 1, cast.endMS + 1
         Fire("UNIT_SPELLCAST_START")
     end
     local distinctCastVM = Budget(world, flavor .. " CAST distinct", DistinctCast,
-        legacy and 2220 or 2193, legacy and .556640625 or 0, legacy and 2 or 5, legacy and 20 or 0)
+        legacy and 2200 or 2193, legacy and .556640625 or 0, legacy and 2 or 5, legacy and 20 or 0)
     world.casting.player = nil
     local channel = world:StartChannel("player", "Provider channel", 600, id)
     Fire("UNIT_SPELLCAST_CHANNEL_START")
     assert(frame._msufCountsDown == true, "normal channel did not drain")
     local channelVM, channelNative = Budget(world, flavor .. " CHANNEL repeat", function() Fire("UNIT_SPELLCAST_CHANNEL_START") end,
-        legacy and 2222 or 2660, 0, legacy and 2 or 4)
+        legacy and 2214 or 2660, 0, legacy and 2 or 4)
     local function DistinctChannel()
         if not legacy then id = id + 1; channel.castBarID = id end
         channel.startMS, channel.endMS = channel.startMS + 1, channel.endMS + 1
         Fire("UNIT_SPELLCAST_CHANNEL_START")
     end
     local distinctChannelVM = Budget(world, flavor .. " CHANNEL distinct", DistinctChannel,
-        legacy and 2224 or 2666, legacy and 0 or .21484375, legacy and 2 or 4, legacy and 0 or 10)
+        legacy and 2216 or 2666, legacy and 0 or .21484375, legacy and 2 or 4, legacy and 0 or 10)
     assert(castNative == (legacy and 2 or 4) and channelNative == (legacy and 2 or 4), "native budget changed")
     -- Frozen before/after ceilings are filled from the real baseline measurement.
     if not measure then

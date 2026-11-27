@@ -41,6 +41,7 @@ local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
 local SetCastTimeTextShared = MSUF.Require("MSUF_SetCastTimeText", FILE)
 local CASTBAR_REMAINING_TIME_LIMIT = MSUF.MSUF_Util.CastbarRemainingTimeLimit
+local CASTBAR_LONG_REMAINING_TEXT = MSUF.MSUF_Util.CastbarLongRemainingText
 local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", FILE)
 local GetCastbarBackgroundColor = MSUF.Require("MSUF_GetCastbarBackgroundColor", FILE)
 local PlayerCastbarCast = Player.PlayerCastbar_Cast
@@ -132,7 +133,7 @@ local function SetCastTimeTextIfChanged(frame, remaining, total)
             and (not total or total <= 0 or total > CASTBAR_REMAINING_TIME_LIMIT))
     then
         -- All capped values share one cache key. 30.0 still needs its own paint.
-        remainingDecimal = -1
+        remainingDecimal = CASTBAR_LONG_REMAINING_TEXT
     end
     if remainingDecimal == frame._msufLastTimeDecimal
         and totalDecimal == frame._msufLastTimeTotalDecimal
@@ -144,7 +145,12 @@ local function SetCastTimeTextIfChanged(frame, remaining, total)
     frame._msufLastTimeDecimal = remainingDecimal
     frame._msufLastTimeTotalDecimal = totalDecimal
     frame._msufLastTimeFormat = format
-    SetCastTimeText(frame, remaining, total)
+    if remainingDecimal == CASTBAR_LONG_REMAINING_TEXT and format == "CURRENT" then
+        SetTextIfChanged(frame.timeText, CASTBAR_LONG_REMAINING_TEXT)
+        if frame._msufTimeTextFollower then SyncTimeTextFollower(frame) end
+    else
+        SetCastTimeText(frame, remaining, total)
+    end
 end
 
 local function SetPlayerCastbarEventsRegistered(frame, enabled)
