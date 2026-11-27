@@ -36,7 +36,7 @@ local function Measure(world, label, fire, budget, legacy)
         if key == "SetTimerDuration" then timers = delta end
         if key == "UnitDuration" then objects = delta end
     end
-    local expected = legacy and { SetValue = 2, SetText = 1 } or { UnitDuration = 1, SetTimerDuration = 1, SetText = 2 }
+    local expected = legacy and { SetValue = 2 } or { UnitDuration = 1, SetTimerDuration = 1, SetText = 2 }
     for key, value in pairs(world.counts) do
         assert(value - (counts[key] or 0) == (expected[key] or 0), label .. " native count changed: " .. key .. "=" .. (value - (counts[key] or 0)))
     end
@@ -54,7 +54,7 @@ local function Measure(world, label, fire, budget, legacy)
         label, instructions, minimum, natives, objects, timers))
     if not measure then assert(instructions <= budget, label .. " VM budget exceeded: " .. instructions) end
     assert(minimum <= .001, label .. " allocated")
-    assert(natives == (legacy and 3 or 4) and objects == (legacy and 0 or 1) and timers == (legacy and 0 or 1),
+    assert(natives == (legacy and 2 or 4) and objects == (legacy and 0 or 1) and timers == (legacy and 0 or 1),
         label .. " native budget changed")
 end
 for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
