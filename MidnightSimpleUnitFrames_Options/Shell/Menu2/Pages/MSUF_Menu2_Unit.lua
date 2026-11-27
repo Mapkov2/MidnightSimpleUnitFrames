@@ -1257,10 +1257,33 @@ function UnitPage.ReadText(unit, key, default)
     if g[key] ~= nil then return g[key] end
     return default
 end
+local DIRECT_NAME_POINTS = {
+    TOPLEFT = "TOPLEFT", TOP = "TOP", TOPRIGHT = "TOPRIGHT",
+    FRAMELEFT = "LEFT", FRAMECENTER = "CENTER", FRAMERIGHT = "RIGHT",
+}
+local NAME_ANCHORS_FROM_DIRECT = {}
+for anchor, point in pairs(DIRECT_NAME_POINTS) do NAME_ANCHORS_FROM_DIRECT[point] = anchor end
+
+function UnitPage.ReadNameAnchor(unit)
+    local conf = GetConf(unit)
+    if conf.directTextLayout == true then
+        local point = type(conf.directNamePoint) == "string" and conf.directNamePoint:upper() or "CENTER"
+        local anchor = NAME_ANCHORS_FROM_DIRECT[point]
+        if anchor then return anchor end
+    end
+    return UnitPage.ReadText(unit, "nameTextAnchor", "TOPLEFT")
+end
+
 function UnitPage.SetText(unit, key, value, reason)
     local conf = GetConf(unit)
-    if conf[key] == value then return end
+    local directPoint = key == "nameTextAnchor" and conf.directTextLayout == true and DIRECT_NAME_POINTS[value]
+    local directChanged = directPoint and (conf.directNamePoint ~= directPoint or conf.directNameRelativePoint ~= directPoint)
+    if conf[key] == value and not directChanged then return end
     conf[key] = value
+    if directChanged then
+        conf.directNamePoint = directPoint
+        conf.directNameRelativePoint = directPoint
+    end
     conf.hpPowerTextOverride = nil
     M.RequestUnitDomains(unit, reason or "MSUF2_TEXT", { text = true, preview = true })
 end

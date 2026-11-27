@@ -718,14 +718,30 @@ local SetNameTextCached, TruncateName = BuildTextName(
   ApplyNameTextColor, RefreshNameCenterClipFit, RegionShown, SetTextCached, Text, floor, issecretvalue, string_byte, string_sub, tonumber
 )
 
+local function HideInline(frame)
+  SetShownCached(frame.totInlineSep, false)
+  SetShownCached(frame.totInlineText, false)
+  SetShownCached(frame._msufInlineDotsFS, false)
+  if AnchorInlineToName then AnchorInlineToName(frame, false) end
+  frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
+end
+
+local function SetInlineName(frame, name)
+  SetTextCached(frame.totInlineText, name)
+  if frame._msufDirectInlineRight then
+    SetTextCached(frame._msufInlineRightGlyph, name)
+  end
+  if AnchorInlineToName then AnchorInlineToName(frame) end
+  SetShownCached(frame.totInlineSep, true)
+  SetShownCached(frame.totInlineText, true)
+end
+
 function Text.UpdateInline(frame, event, unit)
   local rt = frame and frame._msufTextRuntime
   local inline = rt and rt.inlineToT
   if not inline then
     if frame and (frame.totInlineSep or frame.totInlineText) then
-      SetShownCached(frame.totInlineSep, false)
-      SetShownCached(frame.totInlineText, false)
-      SetShownCached(frame._msufInlineDotsFS, false)
+      HideInline(frame)
     end
     return
   end
@@ -739,10 +755,7 @@ function Text.UpdateInline(frame, event, unit)
   end
 
   if UnitMissing(inlineUnit) then
-    SetShownCached(frame.totInlineSep, false)
-    SetShownCached(frame.totInlineText, false)
-    SetShownCached(frame._msufInlineDotsFS, false)
-    frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
+    HideInline(frame)
     return
   end
 
@@ -761,12 +774,7 @@ function Text.UpdateInline(frame, event, unit)
     name = Text.FormatName(frame.totInlineText, name, inline.nameFormat,
       inline.nameFormatMax, inline.nameFormatDots, inline.nameShortenSide)
   end
-  SetTextCached(frame.totInlineText, name)
-  if AnchorInlineToName then
-    AnchorInlineToName(frame)
-  end
-  SetShownCached(frame.totInlineSep, true)
-  SetShownCached(frame.totInlineText, true)
+  SetInlineName(frame, name)
   ApplyInlineTextColor(frame, inlineUnit, inline)
 end
 
@@ -776,10 +784,7 @@ function Text.PaintSampleInline(frame, name)
   local inline = rt and rt.inlineToT
   if not (inline and frame.totInlineSep and frame.totInlineText) then return end
   if type(name) ~= "string" or name == "" then
-    SetShownCached(frame.totInlineSep, false)
-    SetShownCached(frame.totInlineText, false)
-    SetShownCached(frame._msufInlineDotsFS, false)
-    frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
+    HideInline(frame)
     return
   end
   SetTextCached(frame.totInlineSep, inline.separator)
@@ -788,10 +793,7 @@ function Text.PaintSampleInline(frame, name)
     name = Text.FormatName(frame.totInlineText, name, inline.nameFormat,
       inline.nameFormatMax, inline.nameFormatDots, inline.nameShortenSide)
   end
-  SetTextCached(frame.totInlineText, name)
-  if AnchorInlineToName then AnchorInlineToName(frame) end
-  SetShownCached(frame.totInlineSep, true)
-  SetShownCached(frame.totInlineText, true)
+  SetInlineName(frame, name)
   local color = frame.MSUFSpec and frame.MSUFSpec.textColor
   Text.SetInlineTextColor(frame, color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 1)
 end
@@ -1870,7 +1872,7 @@ UpdateHealthTextValues = function(frame, event, unit, hp, hpMax)
     CancelDirtyTextFrame(frame, TEXT_DIRTY_HEALTH, true)
   end
   local rt = frame and frame._msufTextRuntime
-  if rt and rt.healthColorByClass == true and event ~= "UNIT_HEALTH" then
+  if rt and rt.healthColorByClass == true and event ~= "UNIT_HEALTH" and event ~= "MSUF_DEPENDENT_TARGET_POLL" then
     UpdateHealthTextColor(frame, rt, unit or frame.MSUFUnitKey)
     if event == "UNIT_NAME_UPDATE" then return end
   end
@@ -1906,6 +1908,12 @@ function HealthText.SelectUpdate(frame)
     return rt.healthValueSlotCount and rt.healthValueSlotCount > 0 and UpdateHealthTextAll or UpdateAbsorbRuntime
   end
   return UpdateHealthTextValues
+end
+
+-- Dependent fallback data has no absorb or identity event payload.
+function HealthText.SelectVitalsUpdate(frame)
+  local rt = frame._msufTextRuntime
+  if rt and (rt.healthValueSlotCount or 0) > 0 then return UpdateHealthTextValues end
 end
 
 local function UpdateGroupHealthPercentDecimal(frame, event, unit, hp, hpMax)

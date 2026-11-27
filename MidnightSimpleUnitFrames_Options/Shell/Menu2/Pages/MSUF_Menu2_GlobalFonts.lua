@@ -1141,7 +1141,7 @@ local function BuildFonts(ctx)
         "text_style.opacity")
     local baseline = BuildFontBaseline(ctx, text)
     local nameColor, npcColor, healthColor, powerColor = BuildFontTextColors(ctx, b)
-    local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor }
+    local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, npcColor }
     if healthColor then scopedFontControls[#scopedFontControls + 1] = healthColor end
     if powerColor then scopedFontControls[#scopedFontControls + 1] = powerColor end
     if M.AddControlTooltip then
@@ -1167,23 +1167,19 @@ local function BuildFonts(ctx)
     local fontScopeReason = W.TurnOnReason and W.TurnOnReason("Use custom settings for this scope", CurrentFontScopeCanEdit)
     if fontScopeReason and W.SetControlsDisabledReason then
         W.SetControlsDisabledReason(scopedFontControls, fontScopeReason)
-        W.SetControlDisabledReason(npcColor, fontScopeReason)
         local shadowReason = W.TurnOnReason("Text shadow", function() return FontScopeGet("textBackdrop", true) == true end)
         W.SetControlsDisabledReason({ shadowOpacity, shadowDistance }, function(control)
             return fontScopeReason(control) or (FontRenderingMode() ~= "SLUG" and shadowReason(control)) or nil
         end)
     end
     RefreshScopedFontControls = RefreshScopedFontControls(function()
-        local scopeKey = CurrentFontScope()
         local canEdit = CurrentFontScopeCanEdit()
-        local gfScope = IsGFScope(scopeKey)
         SetControlsEnabled(scopedFontControls, canEdit)
         local slug = FontRenderingMode() == "SLUG"
         SetControlEnabled(shadow, canEdit and not slug)
         local shadowEnabled = canEdit and not slug and FontScopeGet("textBackdrop", true) == true
         SetControlEnabled(shadowOpacity, shadowEnabled)
         SetControlEnabled(shadowDistance, shadowEnabled)
-        SetControlEnabled(npcColor, canEdit and not gfScope)
     end)
     M.TrackRefresh(ctx, RefreshScopedFontControls)
     local function BuildNameShorteningControls(...)

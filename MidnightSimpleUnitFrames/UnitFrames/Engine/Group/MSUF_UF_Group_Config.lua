@@ -329,15 +329,20 @@ local function ResolveNameTextOptions(kind, conf)
   local general = GeneralDB()
   if conf.fontOverride == true then
     local mode = conf.nameColorMode or "DEFAULT"
-    if mode == "CLASS" then
-      text.nameClassColor = true
-    elseif mode == "CUSTOM" then
+    if mode == "CUSTOM" then
       text.nameColor = {
         r = Num(conf.nameColorR, 1),
         g = Num(conf.nameColorG, 1),
         b = Num(conf.nameColorB, 1),
         a = 1,
       }
+    else
+      text.nameClassColor = mode == "CLASS"
+      text.nameNpcColor, text.nameNpcClassColor = conf.npcNameRed, conf.nameNpcClassColor
+      if general then
+        if text.nameNpcColor == nil then text.nameNpcColor = general.npcNameRed end
+        if text.nameNpcClassColor == nil then text.nameNpcClassColor = general.nameNpcClassColor end
+      end
     end
   elseif general and general.nameColorMode == "CUSTOM" then
     -- Shared Fonts scope custom name color. Mirrored here so one shared choice
@@ -1488,6 +1493,8 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     end
   end
   local healthLeft, healthCenter, healthRight = TextSlots(conf)
+  local nameRightInset = Num(conf.nameRightInset, 0)
+  local rightHealthMode = conf.hpTextReverse == true and healthLeft or healthRight
   local hpX = Num(conf.hpOffsetX, 0)
   local hpY = Num(conf.hpOffsetY, 0) + baselineOffset
   local powerX = Num(conf.powerOffsetX, 0)
@@ -1508,6 +1515,7 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     nameX = conf.nameBarEnabled == true and 0 or Num(conf.nameOffsetX, 0),
     nameY = conf.nameBarEnabled == true and (-math.max(0, NameBarHeight(kind, conf) - Num(conf.nameFontSize,
         12)) / 2 + baselineOffset) or Num(conf.nameOffsetY, 0) + baselineOffset,
+    nameRightInset = nameRightInset > 0 and rightHealthMode ~= "NONE" and nameRightInset or nil,
     nameLayer = Layer(conf.nameTextLayer, 5),
     nameFormat = format,
     nameShorten = nameTextOptions.nameShorten == true and format == nil,

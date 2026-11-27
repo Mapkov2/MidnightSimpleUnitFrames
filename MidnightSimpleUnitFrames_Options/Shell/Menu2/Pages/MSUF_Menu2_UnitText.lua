@@ -373,7 +373,7 @@ function TextSection.BuildHeaderBadges(state, unit)
                 { text = M.Format("Power %s", BadgeNumber(ReadNumber(unit, "powerTextLayer", 2))), kind = powerOn and "info" or "muted" },
             })
         else
-            local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "TOPLEFT")))
+            local anchor = BadgeValue(OptionText(TEXT_ANCHORS, UP.ReadNameAnchor(unit)))
             if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then anchor = M.Format("%s + Group", anchor) end
             W.SetCollapsibleBadges(sec, {
                 { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
@@ -456,7 +456,8 @@ function TextSection.BuildNameTab(state, ctx, unit)
     local namePosition = TextCard(ctx, unit, nameTab, "namePosition", "text.name.position", "Position", "Move the name directly in Preview.",
         leftX, -136, cardW, 134)
     local nameAnchor = Control(ctx, namePosition, { "dropdown", "nameAnchor", nil, { "Anchor", TEXT_ANCHORS, 210 }, { 16, -78, cardW - 32, "LEFT" },
-        get = function() return ReadText(unit, "nameTextAnchor", "TOPLEFT") end,
+        get = function() return UP.ReadNameAnchor(unit) end,
+        companionWrites = { unit .. ".directNamePoint", unit .. ".directNameRelativePoint" },
         write = { call = SetText, fallback = "TOPLEFT", args = { "MSUF2_NAME_ANCHOR" },
             after = function() FocusPreviewText("name", nil, true) RefreshTextHeader() end }, --[[schema setter: UnitText.5]]
         meta = FixedSettingMeta("text.name.anchor", "nameTextAnchor"), scope = unit,

@@ -2,6 +2,17 @@
   "version": 1,
   "runs": [
     {
+      "test": "tools/tests/unit_inline_target_position_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
       "test": "tools/tests/retail_health_background_mask_smoke.lua",
       "phase": "runtime",
       "clients": [

@@ -193,7 +193,7 @@ local function BarTextPowerAnchor(frame, power)
   return BarTextHealthAnchor(frame)
 end
 
-local function LayoutBarAnchoredName(frame, text)
+local function LayoutBarAnchoredName(frame, spec, text)
   local fs = frame and frame.nameText
   if not fs then
     return
@@ -206,6 +206,9 @@ local function LayoutBarAnchoredName(frame, text)
     or (anchor == "TOPRIGHT" or anchor == "RIGHT") and "RIGHT"
     or "LEFT"
   local rightX = justify == "LEFT" and -3 or (-3 + x)
+  if justify == "LEFT" and text.nameRightInset and text.nameRightInset > 0 then
+    rightX = rightX - math.min(text.nameRightInset, max(0, (spec and spec.width or 0) - 18 - x))
+  end
   local verticalPoint = (anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT") and "TOP" or "CENTER"
   LayoutTextSpan(fs, health, 3 + x, rightX, y, justify, verticalPoint)
   SetTextLayer(fs, tonumber(text and text.nameLayer) or 5)
@@ -296,12 +299,26 @@ local function LayoutDots(dots, fs, side)
   dots._msufShown = true
 end
 
--- The separator follows the rendered end of a left-justified name. A
--- self-sized name ends at its own right edge; a bar-anchored name spans the bar,
--- so the invisible auto-width twin (_msufNameAnchorText, EnsureNameAnchorProxy)
-local function AnchorInlineToName(frame)
+-- The separator follows the glyph edge when the name region is wider than
+-- its text. The invisible auto-width name twin supplies that edge.
+local function AnchorInlineToName(frame, visible)
   local name = frame and frame.nameText
   local sep = frame and frame.totInlineSep
+  if frame and frame._msufDirectInlineRight == true then
+    local suffix = frame.totInlineText
+    local point, relPoint, x, y, relativeTo
+    if visible == false then
+      point, relPoint, x, y, relativeTo = suffix._msufPoint, suffix._msufRelPoint, suffix._msufX, suffix._msufY, suffix._msufRelativeTo
+    else
+      point, relPoint, x, y, relativeTo = "RIGHT", "LEFT", 0, 0, sep
+    end
+    LayoutText(name, point, relPoint, x, y, "RIGHT", relativeTo)
+    if frame._msufNameAnchorTextActive == true then
+      LayoutText(frame._msufNameAnchorText, point, relPoint, x, y, "RIGHT", relativeTo)
+    end
+    return
+  end
+  if visible == false then return end
   if not (frame and frame._msufInlineAnchorDynamic == true and name and sep) then
     return
   end
@@ -657,7 +674,7 @@ function Text.RefreshNameCenterClipFit(frame)
   end
 end
 
-local function ApplyInlineNameClip(frame, spec, text)
+local function ApplyInlineNameClip(frame, spec, text, alignRight)
   local fs = frame and frame.totInlineText
   local inline = text and text.inlineToT
   if not fs then
@@ -683,9 +700,10 @@ local function ApplyInlineNameClip(frame, spec, text)
       fs:SetWidth(width)
       fs._msufInlineNameWidth = width
     end
-    if fs._msufJustifyH ~= "LEFT" then
-      fs:SetJustifyH("LEFT")
-      fs._msufJustifyH = "LEFT"
+    local justify = alignRight and "RIGHT" or "LEFT"
+    if fs._msufJustifyH ~= justify then
+      fs:SetJustifyH(justify)
+      fs._msufJustifyH = justify
     end
     HideDots(frame._msufInlineDotsFS)
     return
@@ -704,7 +722,7 @@ local function ApplyInlineNameClip(frame, spec, text)
   end
 
   local clipSide = inline.nameShortenSide == "LEFT" and "LEFT" or "RIGHT"
-  local justify = clipSide == "LEFT" and "RIGHT" or "LEFT"
+  local justify = (alignRight or clipSide == "LEFT") and "RIGHT" or "LEFT"
   if fs._msufJustifyH ~= justify then
     fs:SetJustifyH(justify)
     fs._msufJustifyH = justify
@@ -805,18 +823,16 @@ local function EnsureNameAnchorProxy(frame, spec)
     end
   end
 
-  -- The inline target-of-target name hangs off the glyph end of a
-  -- left-justified, unshortened bar-anchored name (AnchorInlineToName; the
-  -- justify rule is LayoutBarAnchoredName's).
   local inline = text.inlineToT
+  local hasInline = spec and spec.key == "target" and type(inline) == "table" and inline.enabled == true
   local nameAnchor = text.nameAnchor
-  local inlineGlyphEdge = spec and spec.key == "target" and type(inline) == "table" and inline.enabled == true
+  local inlineGlyphEdge = hasInline
     and text.nameShorten ~= true and nameAnchor ~= "TOP" and nameAnchor ~= "CENTER"
     and nameAnchor ~= "TOPRIGHT" and nameAnchor ~= "RIGHT"
-  local active = (frame._msufNameRelativeStatus == true or inlineGlyphEdge)
-    and spec and spec.showName ~= false
-    and text.directLayout ~= true
+  local directGlyphEdge = hasInline and text.directLayout == true and (text.directNameWidth or 0) > 0
+  local regularGlyphEdge = text.directLayout ~= true and (frame._msufNameRelativeStatus == true or inlineGlyphEdge)
     and ((text.anchorToBars == true and not clipped) or clipTarget ~= nil)
+  local active = spec and spec.showName ~= false and (directGlyphEdge or regularGlyphEdge)
   local proxy = frame._msufNameAnchorText
 
   if not active then
@@ -850,7 +866,9 @@ local function EnsureNameAnchorProxy(frame, spec)
     proxy._msufNameAnchorAlpha = 0
   end
 
-  if clipTarget then
+  if directGlyphEdge then
+    LayoutDirectText(proxy, text, "directName", "CENTER", "CENTER", 0, 0, "CENTER")
+  elseif clipTarget then
     local justify = clipPoint == "TOPRIGHT" and "RIGHT" or clipPoint == "TOP" and "CENTER" or "LEFT"
     LayoutText(proxy, clipPoint, clipPoint, 0, 0, justify, clipTarget)
   else
@@ -969,7 +987,7 @@ local SIG_POWER_KEYS = {
   "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName",
 }
 local SIG_TEXT_KEYS = {
-  "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer",
+  "anchorToBars", "nameAnchorToFrame", "nameLegacyTruncation", "nameAnchor", "nameX", "nameY", "nameLayer", "nameRightInset",
   "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx", "nameFormat",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY", "directNameWidth",
@@ -1101,7 +1119,7 @@ local function RefreshAppliedTextColors(frame, spec, text)
 end
 
 local FONT_EPOCH_TEXT_FIELDS = {
-  "nameText", "_msufNameAnchorText", "raidGroupNameText", "totInlineSep", "totInlineText",
+  "nameText", "_msufNameAnchorText", "raidGroupNameText", "totInlineSep", "totInlineText", "_msufInlineRightGlyph",
   "hpTextLeft", "hpTextCenter", "hpTextRight",
   "powerTextLeft", "powerTextCenter", "powerTextRight",
   "levelText", "bossNumberText", "classificationIndicatorText", "statusIndicatorText", "statusIndicatorOverlayText", "statusAFKTimerText",
@@ -1274,6 +1292,19 @@ end
 
 
 
+local function LayoutRightInline(frame, spec, text)
+  local glyph, created = EnsureFontString(frame, "_msufInlineRightGlyph", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
+  if created then
+    glyph:SetWidth(0)
+    glyph:SetAlpha(0)
+  end
+  SetFont(glyph, spec, spec.nameFontSize, "name")
+  LayoutDirectText(frame.totInlineText, text, "directName", "RIGHT", "RIGHT", 0, 0, "RIGHT")
+  LayoutDirectText(glyph, text, "directName", "RIGHT", "RIGHT", 0, 0, "RIGHT")
+  LayoutText(frame.totInlineSep, "RIGHT", "LEFT", -4, 0, "RIGHT", glyph)
+  SetShownCached(glyph, true)
+end
+
 local function PositionConfiguredText(frame, spec, text, inlineEnabled,
   hpLeftX, hpLeftY, hpRightX, hpRightY, hpLeftDirect, hpRightDirect)
   local power = spec and spec.power or {}
@@ -1292,7 +1323,7 @@ local function PositionConfiguredText(frame, spec, text, inlineEnabled,
   if directText then
     LayoutDirectText(frame.nameText, text, "directName", "CENTER", "CENTER", 0, 0, "CENTER")
   elseif barAnchoredText then
-    LayoutBarAnchoredName(frame, text)
+    LayoutBarAnchoredName(frame, spec, text)
   else
     LayoutName(frame.nameText, spec, text)
   end
@@ -1314,16 +1345,23 @@ local function PositionConfiguredText(frame, spec, text, inlineEnabled,
   if frame._msufNameAnchorTextActive == true then
     InvalidateCachedText(frame._msufNameAnchorText)
   end
+  local rightInline = inlineEnabled and directText and frame.nameText and frame.nameText._msufJustifyH == "RIGHT"
+  frame._msufDirectInlineRight = rightInline and true or nil
+  if not rightInline then SetShownCached(frame._msufInlineRightGlyph, false) end
   if inlineEnabled then
-    frame._msufInlineAnchorDynamic = frame.nameText and frame.nameText._msufJustifyH == "LEFT" and text.nameShorten ~= true and true or nil
-    if frame._msufInlineAnchorDynamic then
-      AnchorInlineToName(frame)
-    elseif AnchorInlineToNameClip(frame) then
+    if rightInline then
+      frame._msufInlineAnchorDynamic = nil
+      LayoutRightInline(frame, spec, text)
     else
-      LayoutText(frame.totInlineSep, "LEFT", "RIGHT", 4, 0, "LEFT", frame._msufNameInlineAnchor or frame.nameText)
+      frame._msufInlineAnchorDynamic = directText or (frame.nameText and frame.nameText._msufJustifyH == "LEFT" and text.nameShorten ~= true) or nil
+      if frame._msufInlineAnchorDynamic then
+        AnchorInlineToName(frame)
+      elseif not AnchorInlineToNameClip(frame) then
+        LayoutText(frame.totInlineSep, "LEFT", "RIGHT", 4, 0, "LEFT", frame._msufNameInlineAnchor or frame.nameText)
+      end
+      LayoutText(frame.totInlineText, "LEFT", "RIGHT", 4, 0, "LEFT", frame.totInlineSep)
     end
-    LayoutText(frame.totInlineText, "LEFT", "RIGHT", 4, 0, "LEFT", frame.totInlineSep)
-    ApplyInlineNameClip(frame, spec, text)
+    ApplyInlineNameClip(frame, spec, text, rightInline)
     SetTextLayer(frame.totInlineSep, text.nameLayer)
     SetTextLayer(frame.totInlineText, text.nameLayer)
     frame.totInlineSep:SetTextColor(0.72, 0.76, 0.84, 1)

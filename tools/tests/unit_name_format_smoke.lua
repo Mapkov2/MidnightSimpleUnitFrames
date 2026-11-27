@@ -229,6 +229,25 @@ conf.nameFormat = "FULL"
 GF.RefreshCompiledSpecDomains("raid", GF.DIRTY_FONT)
 GF.RefreshVisuals("raid", GF.DIRTY_FONT)
 assert(live.nameText:GetText() == currentName, "full format retained legacy truncation")
+conf.nameAnchor, conf.nameOffsetX, conf.nameRightInset = "TOPLEFT", 3, 36
+conf.showHPText, conf.textRight = true, "PERCENT"
+GF.RefreshCompiledSpecDomains("raid", GF.DIRTY_FONT)
+GF.RefreshVisuals("raid", GF.DIRTY_FONT)
+assert(live.nameText._msufRightX == -39, "group name did not reserve the configured right margin")
+for _, name in ipairs({ "Captain Garrick", "Crenna Earth-Daughter", "Austin Huxworth" }) do
+    currentName = name
+    h:Event("UNIT_NAME_UPDATE", live.MSUFUnitKey)
+    h:RunTimers()
+    assert(live.nameText:GetText() == name, "width fit shortened the saved full name")
+end
+conf.showHPText = false
+GF.RefreshCompiledSpecDomains("raid", GF.DIRTY_FONT)
+GF.RefreshVisuals("raid", GF.DIRTY_FONT)
+assert(live.nameText._msufRightX == -3, "hidden HP text still reserved name space")
+conf.nameRightInset, conf.textRight = nil, "NONE"
+currentName = "Ancient Forest Guardian"
+h:Event("UNIT_NAME_UPDATE", live.MSUFUnitKey)
+h:RunTimers()
 conf.fontOverride = false
 local general = h.env.MSUF_DB.general
 general.nameFormat, general.shortenNames = "CUT", false
@@ -263,13 +282,17 @@ local groupSection = groupEntry.sections.fonts_name_shortening
 local groupDisclosure = groupSection._msuf2CollapsibleEntry
 if groupDisclosure._msuf2EnsureContent then groupDisclosure._msuf2EnsureContent() end
 groupDisclosure.SetOpenImmediate(true)
+local colorDisclosure = groupEntry.sections.fonts_name_power_colors._msuf2CollapsibleEntry
+if colorDisclosure._msuf2EnsureContent then colorDisclosure._msuf2EnsureContent() end
+colorDisclosure.SetOpenImmediate(true)
 gm.Refresh()
-local groupFormat, groupLength
+local groupFormat, groupLength, groupNpcColor
 for _, widget in ipairs(groupEntry.searchWidgets) do
     local record = widget._msuf2RuntimeControlRecord
     local id = record and record.controlId or ""
     if id:match("name.shortening.format$") then groupFormat = widget end
     if id:match("name.shortening.max.length$") then groupLength = widget end
+    if id:match("colors.npc.name$") then groupNpcColor = widget end
 end
 assert(groupConf.nameMaxChars == 0, "opening the old group profile wrote its length")
 assert(groupLength._msuf2DesiredEnabled == false and groupLength._msuf2DisabledReason(groupLength),
@@ -278,4 +301,21 @@ groupFormat._msuf2OnValueChanged("CUT")
 assert(groupConf.nameFormat == "CUT" and groupConf.nameMaxChars == 6,
     "zero legacy group limit was not seeded from the effective displayed limit")
 assert(groupLength._msuf2DesiredEnabled == true, "group limit did not activate on native format pick")
+local function GroupText()
+    groupMenu.core.GF.InvalidateCompiledSpecs("party")
+    return groupMenu.core.GF.CompileSpec("party").text
+end
+assert(groupNpcColor and groupNpcColor._msuf2DesiredEnabled == true, "party NPC name color is disabled")
+groupDB.general.npcNameRed = true
+assert(GroupText().nameNpcColor, "party did not inherit shared NPC name color")
+groupNpcColor._msuf2OnValueChanged("CLASS")
+local classStyle = GroupText()
+assert(classStyle.nameNpcClassColor and not classStyle.nameNpcColor, "party NPC class color did not override reaction")
+groupNpcColor._msuf2OnValueChanged("DEFAULT")
+local defaultStyle = GroupText()
+assert(not defaultStyle.nameNpcClassColor and not defaultStyle.nameNpcColor, "explicit party default did not suppress shared color")
+groupConf.nameColorMode, groupConf.npcNameRed, groupConf.nameNpcClassColor = "CUSTOM", true, true
+local customStyle = GroupText()
+assert(customStyle.nameColor and not customStyle.nameNpcColor and not customStyle.nameNpcClassColor,
+    "custom party name color did not replace NPC color")
 print("unit_name_format_smoke: PASS " .. flavor .. " (UTF-8, secrets, cache, scopes, legacy, menu/history)")
