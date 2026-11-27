@@ -33,9 +33,9 @@
   },
   "generatorVersion": "menu-schema-coverage/4",
   "issueCount": 0,
-  "projectionSha256": "76f29aaead1f98baa68ed7a1b361200016fc56db7ff2ce873a0c100fbef5bfba",
+  "projectionSha256": "e0be3a2b10793dde6c280e20ce0139a3b5c3ae47c704a848d50f366e67adda32",
   "projectionVersion": 2,
-  "sourceSha256": "FAD4979A0539002E688ABDA09DDD00C58B6B43988AA617ED14B84EEF90A8B7ED",
+  "sourceSha256": "E2E7ABDA3C86B41490A064189C6FF7DEF7E2B1DFB982A123DD2831AA1DC00B35",
   "totals": {
     "declarations": 35301,
     "initialDeclarations": 23376,
