@@ -21,6 +21,14 @@
       ]
     },
     {
+      "test": "tools/tests/group_raid_manager_visibility_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/classpower_pip_layout_smoke.lua",
       "phase": "runtime",
       "clients": [

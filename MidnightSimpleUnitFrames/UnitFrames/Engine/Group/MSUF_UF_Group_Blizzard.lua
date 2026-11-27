@@ -309,7 +309,7 @@ local raidManagerMode = "AUTO"
 local raidManagerHooked = false
 local raidManagerMouseDefault
 local raidManagerPendingMouse
-local raidManagerGamepadLit = false
+local raidManagerExpandedBy
 
 --- "DEFAULT" is the pre-release spelling of AUTO and is mapped rather than dropped, so a
 --- profile written by an in-between build keeps working instead of silently resetting.
@@ -460,7 +460,7 @@ local function RaidManagerOnToggleClick()
   if raidManagerMode == "MOUSEOVER" and manager.collapsed and manager.SetAlpha then
     manager:SetAlpha(0)
   end
-  if raidManagerEffectiveMode == "HIDDEN" then
+  if raidManagerEffectiveMode == "HIDDEN" and manager.collapsed then
     ApplyRaidManagerMouse(manager, false)
   end
 end
@@ -478,13 +478,9 @@ local function EnsureRaidManagerHooks(manager)
   end
 end
 
---- Gamepad UI (WoW Forever 1.60.1.70009+, where Blizzard's manager has
---- CompactRaidFrameManager_InitializeGamepad): Blizzard's GAMEPAD_MENU_LEFT binding
---- expands the manager whenever it is shown, and every mode here keeps it shown at
---- alpha 0. The binding holds its own reference to CompactRaidFrameManager_Expand, so
---- a function hook would miss it; displayFrame shows exactly while the panel is
---- expanded. A panel the gamepad opened holds gamepad focus, so it is lit while open,
---- as in the stock UI, and closing it hands the alpha back to the mode.
+--- Blizzard's expansion shows displayFrame. Listen there for the Suite's Raid
+--- Manager shortcut and Blizzard's gamepad binding, which holds its own function
+--- reference. Closing the display gives visibility and mouse handling back to the mode.
 local function RaidManagerGamepadUIActive()
   local inputUtil = InputUtil
   return type(inputUtil) == "table" and type(inputUtil.IsGamepadUIEnabled) == "function"
@@ -493,26 +489,35 @@ end
 
 local function RaidManagerDisplayOnShow()
   local manager = CompactRaidFrameManager
-  if not manager or raidManagerEffectiveMode == "SHOW" or not RaidManagerGamepadUIActive() then return end
-  raidManagerGamepadLit = true
+  if not manager or raidManagerEffectiveMode == "SHOW" or manager.collapsed ~= false then return end
+  if RaidManagerGamepadUIActive() then
+    raidManagerExpandedBy = "gamepad"
+  elseif raidManagerMode ~= "HIDDEN" then
+    raidManagerExpandedBy = "shortcut"
+    ApplyRaidManagerMouse(manager, true)
+  else
+    return
+  end
   manager:SetAlpha(1)
 end
 
 local function RaidManagerDisplayOnHide()
   local manager = CompactRaidFrameManager
-  if not (manager and raidManagerGamepadLit) then return end
-  raidManagerGamepadLit = false
+  local expandedBy = raidManagerExpandedBy
+  if not (manager and expandedBy) then return end
+  raidManagerExpandedBy = nil
   if raidManagerEffectiveMode == "SHOW" then return end
   if raidManagerEffectiveMode == "MOUSEOVER" and MouseIsOverRaidManager(manager) then return end
   manager:SetAlpha(0)
+  if expandedBy == "shortcut" and raidManagerEffectiveMode == "HIDDEN" then ApplyRaidManagerMouse(manager, false) end
 end
 
-local raidManagerGamepadHooked = false
-local function EnsureRaidManagerGamepadHooks(manager)
-  if raidManagerGamepadHooked or type(CompactRaidFrameManager_InitializeGamepad) ~= "function" then return end
+local raidManagerDisplayHooked = false
+local function EnsureRaidManagerDisplayHooks(manager)
+  if raidManagerDisplayHooked then return end
   local display = manager.displayFrame
   if not (display and type(display.HookScript) == "function") or IsForbidden(display) then return end
-  raidManagerGamepadHooked = true
+  raidManagerDisplayHooked = true
   display:HookScript("OnShow", RaidManagerDisplayOnShow)
   display:HookScript("OnHide", RaidManagerDisplayOnHide)
 end
@@ -558,17 +563,18 @@ local function ApplyRaidManagerMode()
   if IS_CLASSIC_FAMILY then
     KeepRaidContainerOpaque(mode ~= "SHOW")
   elseif mode ~= "SHOW" then
-    EnsureRaidManagerGamepadHooks(manager)
+    EnsureRaidManagerDisplayHooks(manager)
   end
   -- An open gamepad panel stays lit until it closes (RaidManagerDisplayOnHide).
-  if raidManagerGamepadHooked and mode ~= "SHOW" and manager.collapsed == false and RaidManagerGamepadUIActive() then
-    raidManagerGamepadLit = true
+  if raidManagerDisplayHooked and mode ~= "SHOW" and manager.collapsed == false and RaidManagerGamepadUIActive() then
+    raidManagerExpandedBy = "gamepad"
   end
-  local gamepadLit = raidManagerGamepadLit and mode ~= "SHOW"
+  local gamepadLit = raidManagerExpandedBy == "gamepad" and mode ~= "SHOW"
+  local shortcutLit = raidManagerExpandedBy == "shortcut" and raidManagerMode == "AUTO"
 
   if mode == "HIDDEN" then
-    manager:SetAlpha(gamepadLit and 1 or 0)
-    ApplyRaidManagerMouse(manager, false)
+    manager:SetAlpha((gamepadLit or shortcutLit) and 1 or 0)
+    ApplyRaidManagerMouse(manager, shortcutLit)
     return
   end
   ApplyRaidManagerMouse(manager, true)
