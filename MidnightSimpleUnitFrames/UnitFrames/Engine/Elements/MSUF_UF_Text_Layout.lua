@@ -796,43 +796,47 @@ end
 
 local function EnsureNameAnchorProxy(frame, spec)
   if not frame then return false end
-  local text = spec and spec.text or {}
-  local shortenMax = text.nameShorten == true and tonumber(text.nameShortenMax) or 0
-  local clipped = text.nameLegacyTruncation ~= true and shortenMax and shortenMax > 0
+  local text = spec and spec.text or EMPTY_EVENTS
+  local active, directGlyphEdge, clipTarget, clipPoint
+  if spec and spec.showName ~= false then
+    local relativeStatus = frame._msufNameRelativeStatus == true
+    local inline = spec.key == "target" and text.inlineToT
+    local hasInline = inline and type(inline) == "table" and inline.enabled == true
+    if relativeStatus or hasInline then
+      local shortenMax = text.nameShorten == true and tonumber(text.nameShortenMax) or 0
+      local clipped = text.nameLegacyTruncation ~= true and shortenMax and shortenMax > 0
 
-  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
-  local clipTarget, clipPoint
-  if clipped and text.directLayout ~= true then
-    if text.nameShortenDots ~= true then
-      clipTarget = frame._msufNameInlineClip
-      if clipTarget then
-        if frame._msufNameCenterClip == true then
-          clipPoint = "TOP"
-        elseif frame._msufNameInlineClipSide == "LEFT" then
-          clipPoint = "TOPRIGHT"
+      -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
+      if clipped and text.directLayout ~= true then
+        if text.nameShortenDots ~= true then
+          clipTarget = frame._msufNameInlineClip
+          if clipTarget then
+            if frame._msufNameCenterClip == true then
+              clipPoint = "TOP"
+            elseif frame._msufNameInlineClipSide == "LEFT" then
+              clipPoint = "TOPRIGHT"
+            else
+              clipPoint = "TOPLEFT"
+            end
+          end
         else
-          clipPoint = "TOPLEFT"
+          clipTarget = frame.nameText
+          if clipTarget then
+            local justify = clipTarget._msufJustifyH
+            clipPoint = justify == "RIGHT" and "TOPRIGHT" or justify == "CENTER" and "TOP" or "TOPLEFT"
+          end
         end
       end
-    else
-      clipTarget = frame.nameText
-      if clipTarget then
-        local justify = clipTarget._msufJustifyH
-        clipPoint = justify == "RIGHT" and "TOPRIGHT" or justify == "CENTER" and "TOP" or "TOPLEFT"
-      end
+
+      local nameAnchor = text.nameAnchor
+      local inlineGlyphEdge = hasInline
+        and text.nameShorten ~= true and nameAnchor ~= "TOP" and nameAnchor ~= "CENTER"
+        and nameAnchor ~= "TOPRIGHT" and nameAnchor ~= "RIGHT"
+      directGlyphEdge = hasInline and text.directLayout == true and (text.directNameWidth or 0) > 0
+      active = directGlyphEdge or text.directLayout ~= true and (relativeStatus or inlineGlyphEdge)
+        and ((text.anchorToBars == true and not clipped) or clipTarget ~= nil)
     end
   end
-
-  local inline = text.inlineToT
-  local hasInline = spec and spec.key == "target" and type(inline) == "table" and inline.enabled == true
-  local nameAnchor = text.nameAnchor
-  local inlineGlyphEdge = hasInline
-    and text.nameShorten ~= true and nameAnchor ~= "TOP" and nameAnchor ~= "CENTER"
-    and nameAnchor ~= "TOPRIGHT" and nameAnchor ~= "RIGHT"
-  local directGlyphEdge = hasInline and text.directLayout == true and (text.directNameWidth or 0) > 0
-  local regularGlyphEdge = text.directLayout ~= true and (frame._msufNameRelativeStatus == true or inlineGlyphEdge)
-    and ((text.anchorToBars == true and not clipped) or clipTarget ~= nil)
-  local active = spec and spec.showName ~= false and (directGlyphEdge or regularGlyphEdge)
   local proxy = frame._msufNameAnchorText
 
   if not active then
@@ -1018,9 +1022,10 @@ local SIG_INLINE_KEYS = {
 local SIG_PARTS = {}
 
 local function SigAddKeys(parts, n, src, keys)
+  src = src or EMPTY_EVENTS
   for i = 1, #keys do
     n = n + 1
-    parts[n] = tostring(src and src[keys[i]])
+    parts[n] = tostring(src[keys[i]])
   end
   return n
 end
