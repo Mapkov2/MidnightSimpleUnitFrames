@@ -292,15 +292,21 @@ end
 
 local function CooldownWidthSourceFrame(kind)
     local containerKey, viewerKey = WidthSourceNames(kind)
+    if kind == "utility" then
+        -- The Suite's visible Utility row owns the footprint when available.
+        local utility = GetEffectiveCooldownFrame(viewerKey)
+        local width = CooldownWidthFrameWidth(utility)
+        if width then return utility, width end
+    end
     local container = containerKey and _G[containerKey] or nil
     local width = CooldownWidthFrameWidth(container)
     if width then return container, width end
 
-    local viewer = EffectiveCooldownViewer(viewerKey)
+    local rawViewer = viewerKey and _G[viewerKey] or nil
+    local viewer = kind == "essential" and EffectiveCooldownViewer(viewerKey) or rawViewer
     width = CooldownWidthFrameWidth(viewer)
     if width then return viewer, width end
 
-    local rawViewer = viewerKey and _G[viewerKey] or nil
     width = rawViewer ~= viewer and CooldownWidthFrameWidth(rawViewer) or nil
     if width then return rawViewer, width end
     return nil
@@ -338,6 +344,37 @@ local function ConfiguredWidthSource(g, unit)
     end
     return NormalizeWidthSourceKind(def and g and g[def.match])
 end
+
+local function UsesPlayerUtilityAnchor(g)
+    return MSUF.Client.Family == "Mainline" and g.castbarPlayerAnchorToUtility == true
+end
+
+function Anchors.GetPlayerUtilityAnchor(g)
+    if UsesPlayerUtilityAnchor(g) then
+        return CooldownWidthSourceFrame("utility")
+    end
+end
+
+local function ApplyPlayerCastbarPosition(bar, g)
+    if not bar then return false end
+    local x = Round(tonumber(g.castbarPlayerOffsetX) or 0)
+    local y = Round(tonumber(g.castbarPlayerOffsetY) or 5)
+    local utility = Anchors.GetPlayerUtilityAnchor(g)
+    if utility and utility ~= bar then
+        SetPointIfChanged(bar, "TOP", utility, "BOTTOM", x, y)
+    else
+        local player = not g.castbarPlayerDetached and GetUnitframe("player")
+        if player then
+            SetPointIfChanged(bar, "BOTTOM", player, "TOP", x, y)
+        elseif g.castbarPlayerDetached or UsesPlayerUtilityAnchor(g) or (bar._msufAnchor and bar._msufAnchor.point == "TOP") then
+            SetPointIfChanged(bar, "CENTER", UIParent, "CENTER", x, y)
+        else
+            return false
+        end
+    end
+    return true
+end
+Anchors.ApplyPlayerCastbarPosition = ApplyPlayerCastbarPosition
 
 local function UsesUnitframeWidth(g, unit)
     local normalized = NormalizeUnit(unit)
@@ -925,6 +962,10 @@ local function ApplyPlayerCastbarEffectiveSize(g)
     local w, h, preserveWidth = Anchors.GetCastbarDesiredSize("player", g, target, 250, 18)
     if frame then ApplyPlayerCastbarSizeAndLayout(frame, g, w, h, preserveWidth) end
     if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
+    if UsesPlayerUtilityAnchor(g) then
+        ApplyPlayerCastbarPosition(frame, g)
+        ApplyPlayerCastbarPosition(preview, g)
+    end
     return true
 end
 
@@ -1017,7 +1058,8 @@ local function RefreshCastbarCooldownWidthSource(sourceName)
     local applied = false
     for i = 1, #CASTBAR_UNITS do
         local unit = CASTBAR_UNITS[i]
-        if ConfiguredWidthSource(g, unit) == kind then
+        if ConfiguredWidthSource(g, unit) == kind
+            or (kind == "utility" and unit == "player" and UsesPlayerUtilityAnchor(g)) then
             applied = ApplyCastbarEffectiveSizeUnit(unit, g) or applied
             WidthSourceNeedsReanchor(g, unit)
         end
@@ -1134,18 +1176,7 @@ local function ReanchorPlayerCastBarBase()
         Manager.InitSafePlayerCastbar()
     end
 
-    local anchorFrame = GetUnitframe("player")
-    if not Frames.player or (not g.castbarPlayerDetached and not anchorFrame) then
-        return
-    end
-
-    local offsetX = Round(g.castbarPlayerOffsetX or 0)
-    local offsetY = Round(g.castbarPlayerOffsetY or 5)
-    if g.castbarPlayerDetached then
-        SetPoint(Frames.player, "CENTER", UIParent, "CENTER", offsetX, offsetY)
-    else
-        SetPoint(Frames.player, "BOTTOM", anchorFrame, "TOP", offsetX, offsetY)
-    end
+    if not ApplyPlayerCastbarPosition(Frames.player, g) then return end
 
     Anchors.UpdateCastbarWidthSourceSync(g, "player", true)
     local width, height, preserveWidth = Anchors.GetCastbarDesiredSize("player", g, Frames.player, 250, 18)

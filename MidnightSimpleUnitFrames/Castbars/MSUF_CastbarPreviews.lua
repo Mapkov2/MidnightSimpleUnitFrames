@@ -171,16 +171,19 @@ local function PositionPreview(unit, frame)
     local width, height, preserveWidth = GetDesiredPreviewSize(unit, frame)
 
     ApplyPlayerCastbarSizeAndLayout(frame, general, width, height, preserveWidth)
+    if unit == "player" then
+        if not Anchors.ApplyPlayerCastbarPosition(frame, general) then return end
+        HardSyncCastbarPreview(frame, SourceCastbarForUnit(unit))
+        ApplyCastbarFrameLayer(frame, general, unit)
+        return
+    end
 
     local parent = general[config.detached] and UIParent or CoreFrame(unit)
     if not parent then return end
 
     local offsetX = tonumber(general[config.x])
     local offsetY = tonumber(general[config.y])
-    if unit == "player" then
-        offsetX = offsetX or 0
-        offsetY = offsetY or 5
-    elseif unit == "target" then
+    if unit == "target" then
         offsetX = offsetX or 65
         offsetY = offsetY or -15
     else
@@ -191,8 +194,6 @@ local function PositionPreview(unit, frame)
     frame:ClearAllPoints()
     if general[config.detached] then
         frame:SetPoint("CENTER", parent, "CENTER", offsetX, offsetY)
-    elseif unit == "player" then
-        frame:SetPoint("BOTTOM", parent, "TOP", offsetX, offsetY)
     else
         local autoX = GetCastbarAutoAnchorOffsetX(general, unit, frame)
         frame:SetPoint("BOTTOMLEFT", parent, "TOPLEFT", offsetX + autoX, offsetY)

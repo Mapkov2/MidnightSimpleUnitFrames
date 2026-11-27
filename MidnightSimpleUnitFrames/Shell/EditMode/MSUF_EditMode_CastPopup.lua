@@ -244,6 +244,7 @@ local function ResetPosition()
     if not (xKey and yKey) then return end
     MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("castbar", unit)
     local dx, dy = DefaultOffsets(unit)
+    if unit == "player" and g.castbarPlayerAnchorToUtility == true then dx, dy = 0, 0 end
     g[xKey], g[yKey] = dx, dy
     ReapplyCastbar(unit)
     if pf and pf:IsShown() then Sync() end
@@ -327,7 +328,8 @@ function Sync(committedX)
     Quick.SetBoxText(pf.hBox, h)
     if pf.detachBtn and pf.detachBtn.SetCheckedVisual then
         local dKey = DetachedKey(unit)
-        pf.detachBtn:SetCheckedVisual(dKey and g[dKey] == true)
+        local utility = unit == "player" and g.castbarPlayerAnchorToUtility == true
+        pf.detachBtn:SetCheckedVisual(utility or (dKey and g[dKey] == true))
     end
 end
 

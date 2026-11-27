@@ -541,6 +541,23 @@ function CastbarSection.General(s)
         scope = unit, meta = SettingMeta(ctx, "castbar.width_mode", "general", CastbarWidthSourceKey()),
         beforeBind = s.PrepareControl, castbarControl = true,
     })
+    if unit == "player" and MSUF.Client.Family == "Mainline" then
+        local key = "castbarPlayerAnchorToUtility"
+        local label = M.Format("%s · %s", M.Tr("Below"), M.Tr("Utility cooldown viewer"))
+        local anchor = ControlRow(ctx, sizeCard, { "toggle", "utilityAnchor", false, { label, 16, -106, sizeControlWLeft },
+            get = function() return ReadGeneralBool(key, false) end,
+            companionWrites = { "general.castbarPlayerOffsetX", "general.castbarPlayerOffsetY" },
+            write = { call = SetGeneralValue, keyOnly = true, args = { "MSUF2_CASTBAR_UTILITY_ANCHOR" },
+                before = function(value)
+                    local g = GetGeneral()
+                    if value == true and g[key] ~= true then g.castbarPlayerOffsetX, g.castbarPlayerOffsetY = 0, 0 end
+                end,
+            },
+            scope = unit, meta = SettingMeta(ctx, "castbar.utility_anchor", "general", key),
+            beforeBind = s.PrepareControl, castbarControl = true,
+        })
+        BindExactCastbarTabTarget(anchor, "general", "general." .. key)
+    end
     local widthKey = CastbarWidthKey()
     local heightKey = CastbarHeightKey()
     local defaultSize = CASTBAR_DEFAULT_SIZE[unit] or CASTBAR_DEFAULT_SIZE.target

@@ -531,9 +531,11 @@ local MSUF_EM_SetCastbarAnchoredToUnit = function(unit, anchored)
     local detachedKey, oxKey, oyKey = fields.detached, fields.x, fields.y
 
     local wantDetached = (anchored == false)
-    if (g[detachedKey] == true) == wantDetached then return end
+    local utility = unit == "player" and g.castbarPlayerAnchorToUtility == true
+    if not utility and (g[detachedKey] == true) == wantDetached then return end
 
     local castbar, beforeX, beforeY = CastbarToggleFrameCenter(unit)
+    if utility then g.castbarPlayerAnchorToUtility = nil end
     g[detachedKey] = wantDetached or nil
     ApplyCastbarAnchorState(unit)
 

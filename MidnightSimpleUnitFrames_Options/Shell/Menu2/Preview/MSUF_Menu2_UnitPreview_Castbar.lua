@@ -42,6 +42,7 @@ end
 function Castbar.Detached(key, g)
     key = CanonKey(key)
     if not g then return false end
+    if key == "player" and MSUF.Castbars.Anchors.GetPlayerUtilityAnchor(g) then return true end
     if key == "boss" then return g.bossCastbarDetached == true end
     if key == "arena" then return g.arenaCastbarDetached == true end
     local prefix = Castbar.Prefix(key)
@@ -66,14 +67,6 @@ local function WidthSource(g, key)
     if source then return source end
     if legacy and g[legacy] == true then return "unitframe" end
     return nil
-end
--- Blizzard's cooldown viewers appear when their load-on-demand addon loads, so they are read at use time.
-local function ExternalWidthSourceFrame(source)
-    if source == "essential" then
-        return GetEffectiveCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer
-    elseif source == "utility" then
-        return UtilityCooldownViewer
-    end
 end
 --- The live castbar frame a unit's preview projects from (boss and arena: the
 --- first frame of their pool). Runtime.lua reads the same lookup for scale and
@@ -114,8 +107,8 @@ local function EffectiveScaleProxy(frame)
         end
     }
 end
-local function ReadExternalWidth(source, targetFrame)
-    local frame = ExternalWidthSourceFrame(source)
+local function ReadEssentialWidth(targetFrame)
+    local frame = GetEffectiveCooldownFrame("EssentialCooldownViewer") or EssentialCooldownViewer
     if not (frame and frame.GetWidth and frame.IsShown and frame:IsShown()) then return nil end
     local scaled = CDMGetScaledWidth(frame, targetFrame)
     if scaled and scaled > 0 then return scaled end
@@ -129,10 +122,11 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     local widthSource = WidthSource(g, key)
     local targetFrame = RuntimeCastbarFrame(key) or EffectiveScaleProxy(RuntimeUnitFrame(key))
     local w, h
-    if widthSource == "essential" or widthSource == "utility" then
-        w = ReadExternalWidth(widthSource, targetFrame) or nil
+    if widthSource == "essential" then
+        w = ReadEssentialWidth(targetFrame)
     end
-    local desiredW, desiredH = GetCastbarDesiredSize(RUNTIME_UNITS[key] or key, g or {}, targetFrame, fallbackW, fallbackH)
+    local desiredW, desiredH, preserveWidth =
+        GetCastbarDesiredSize(RUNTIME_UNITS[key] or key, g or {}, targetFrame, fallbackW, fallbackH)
     if not w or w <= 0 then w = desiredW end
     h = desiredH
     if not w or w <= 0 then
@@ -157,7 +151,9 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     end
     w = tonumber(w) or fallbackW
     h = tonumber(h) or fallbackH
-    if w < 40 then w = 40 elseif w > 900 then w = 900 end
+    if widthSource ~= "utility" or not preserveWidth then
+        if w < 40 then w = 40 elseif w > 900 then w = 900 end
+    end
     if h < 6 then h = 6 elseif h > 80 then h = 80 end
     return w, h
 end

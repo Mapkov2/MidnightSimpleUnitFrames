@@ -111,6 +111,7 @@ local function ConfiguredCooldownWidthMask()
   end
   local visualMask = mask
   local castbarMask = 0
+  local cooldownSupported = CooldownAnchorSupported()
 
   local general = type(db.general) == "table" and db.general or nil
   if general then
@@ -122,6 +123,11 @@ local function ConfiguredCooldownWidthMask()
         castbarMask = MaskAdd(castbarMask, bit)
       end
     end
+    if cooldownSupported and general.castbarPlayerAnchorToUtility == true and general.enablePlayerCastbar ~= false then
+      local bit = COOLDOWN_WIDTH_SOURCE_BITS.UtilityCooldownViewer
+      mask = MaskAdd(mask, bit)
+      castbarMask = MaskAdd(castbarMask, bit)
+    end
   end
   -- Reuse the existing cold CDM observer for anchor snapshots as well as
   -- widths. This adds no polling: provider Show/Hide/Size events merely queue
@@ -129,7 +135,6 @@ local function ConfiguredCooldownWidthMask()
   local anchorMask = 0
   -- Only Cooldown Manager frames carry a source bit. A client that cannot host
   -- one must not observe a viewer name left over in an imported profile.
-  local cooldownSupported = CooldownAnchorSupported()
   local function AddAnchorName(name)
     if not cooldownSupported then return end
     local bit = COOLDOWN_WIDTH_SOURCE_BITS[CanonicalAnchorFrameName(name)]
