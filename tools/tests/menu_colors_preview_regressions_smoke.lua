@@ -84,12 +84,10 @@ else
     local powerSurface = assert(surfaces[#surfaces])
     local frame = assert(powerSurface.scene.frame)
     Check(frame.targetPowerBar:IsShown(), "resource power sample is missing")
-    local lanes = 0
-    for key, host in pairs(frame._msufGFFrameAuraPreviewHosts or {}) do
-        lanes = lanes + 1
-        Check(not host:IsShown(), "resource strip leaks aura lane " .. key)
+    for index, icon in ipairs(frame._msufGFFrameAuraPreviews or {}) do
+        Check(not icon:IsVisible(), "resource strip shows aura sample " .. index)
     end
-    Check(lanes >= 2, "resource sample did not exercise buff and debuff lanes")
+    Check(frame._msufGFFrameAuraPreviews == nil, "resource strip built aura samples")
     for _, key in ipairs({ "hpBar", "incomingHealBar", "absorbBar", "healAbsorbBar", "tempMaxHealthBar",
         "nameText", "raidTargetIcon", "MSUFPortraitHolder" }) do
         local region = frame[key]

@@ -1080,7 +1080,7 @@ function PainterBuild.ResourcesStrip(state)
             spec.width, spec.height = barW, 18
             spec.power.enabled, spec.power.detached, spec.power.height = true, false, 18
             spec.prediction.enabled = false
-        end)
+        end, true)
         local resourceRow = StripButton(-66, 56, "Class Power Colors", "colors_class_power", "Color")
         local resourceLabel = Label(resourceRow, "", 12, -4, barW, T.colors.text)
         local resourceHost = PixelLayoutRegion(CreateFrame("Frame", nil, resourceRow))
