@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.5-beta3 - 2026-11-27
+
+### Unit frames and resources
+
+- Fixed the missing-health background on Retail unit, party and raid frames. It now stays opaque at full opacity, including while health animates.
+- Class resource pips now use physical pixel spacing and realign after UI scale changes. Combo points clear stale charged colors when resource data becomes restricted and restore the correct colors when it becomes readable.
+- Fixed inline Target of Target positioning when using direct text layouts. The name anchor selector now updates those layouts too.
+- Group frames use their configured NPC name colors, and long names leave room for visible health text.
+- Fixed Blizzard Raid Manager visibility when opened from a shortcut or gamepad in automatic mode.
+- The 3D portrait performance warning now appears whenever 3D is selected from the render dropdown.
+
+### Castbars and combat timer
+
+- Fixed player castbar placement and width when attached to the Utility cooldown row. Options and Edit Mode show the same anchor, and the castbar keeps the row's width when space is tight.
+- Cast timers show **>30** while more than 30 seconds remain on supported timer displays.
+- The combat timer can anchor to the top-right of the chat window. Its timer format can also display brackets.
+
+### Auras and options
+
+- Aura previews now fade expired icons and slide the remaining icons into place. Aura Style exposes the shared new-icon animation option, and custom auras can override it. Reduce menu motion affects the preview, while Aura Style controls animation in the game.
+- Fixed custom aura icon dimensions in previews and kept the Resources color preview clear of aura icons.
+- Fixed clipped tab labels at different menu zoom levels and fixed the Icon Skins preview so captions and icons stay within their section.
+- The menu can inherit the global font and refreshes when that font changes.
+- Reduce menu motion leaves in-game unit-frame and castbar fades under their own settings.
+
+
 ## 7.0.5-beta2 - 2026-11-25
 
 ### Highlights

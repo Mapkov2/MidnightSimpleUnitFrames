@@ -1,46 +1,46 @@
 {
   "clients": {
     "Forever": {
-      "declarations": 7486,
-      "initialDeclarations": 4900,
-      "profileControls": 4067,
-      "proven": 4067
+      "declarations": 7545,
+      "initialDeclarations": 4897,
+      "profileControls": 4099,
+      "proven": 4099
     },
     "Mainline": {
-      "declarations": 8040,
-      "initialDeclarations": 5126,
-      "profileControls": 4419,
-      "proven": 4419
+      "declarations": 8112,
+      "initialDeclarations": 5123,
+      "profileControls": 4455,
+      "proven": 4455
     },
     "Mists": {
-      "declarations": 7495,
-      "initialDeclarations": 5097,
-      "profileControls": 3962,
-      "proven": 3962
+      "declarations": 7484,
+      "initialDeclarations": 5086,
+      "profileControls": 3963,
+      "proven": 3963
     },
     "TBC": {
-      "declarations": 6875,
-      "initialDeclarations": 4696,
-      "profileControls": 3578,
-      "proven": 3578
+      "declarations": 6868,
+      "initialDeclarations": 4689,
+      "profileControls": 3579,
+      "proven": 3579
     },
     "Vanilla": {
-      "declarations": 5299,
-      "initialDeclarations": 3588,
-      "profileControls": 2621,
-      "proven": 2621
+      "declarations": 5292,
+      "initialDeclarations": 3581,
+      "profileControls": 2622,
+      "proven": 2622
     }
   },
   "generatorVersion": "menu-schema-coverage/4",
   "issueCount": 0,
-  "projectionSha256": "a162dcd4b43ed200a3fce1570faf65b51cb485ab6aa4863b8086873a6e495960",
+  "projectionSha256": "76f29aaead1f98baa68ed7a1b361200016fc56db7ff2ce873a0c100fbef5bfba",
   "projectionVersion": 2,
-  "sourceSha256": "CC8A2B3C7901224924B380951494371845B3AB9D12339EDB90E4A5F5202C12EF",
+  "sourceSha256": "FAD4979A0539002E688ABDA09DDD00C58B6B43988AA617ED14B84EEF90A8B7ED",
   "totals": {
-    "declarations": 35195,
-    "initialDeclarations": 23407,
-    "profileControls": 18647,
-    "proven": 18647
+    "declarations": 35301,
+    "initialDeclarations": 23376,
+    "profileControls": 18718,
+    "proven": 18718
   },
   "version": 1
 }

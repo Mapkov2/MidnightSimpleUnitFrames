@@ -8,55 +8,43 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "3D0F741BEEE5C08474C65566513B5399571C5DEDE08CBB09E4605521FF0CBB35",
-    currentVersion = "7.0.5-beta2",
+    sourceSha256 = "9308434E62350FD828FC88B355403D139749D0749A4B7E154CDA199C6F10D372",
+    currentVersion = "7.0.5-beta3",
     historyFromVersion = "7.021",
     previousVersion = "7.0.4",
-    rangeLabel = "7.0.4 -> 7.0.5-beta2",
+    rangeLabel = "7.0.4 -> 7.0.5-beta3",
     entries = {
         {
-            version = "7.0.5-beta2",
-            date = "2026-11-25",
+            version = "7.0.5-beta3",
+            date = "2026-11-27",
             sections = {
                 {
-                    title = "Highlights",
+                    title = "Unit frames and resources",
                     bullets = {
-                        {
-                            text = "Class-colored frame outlines. In Bars > Frame Outline, turn on Class Color Outline to use each player character's class color. NPCs keep the outline color you picked. Set it once in Shared or override it for a unit, party or raid scope.",
-                            link = {
-                                pageKey = "opt_bars",
-                                query = "class color outline",
-                                label = "Class Color Outline",
-                                sectionId = "bars_outline",
-                                controlId = "menu2.opt.bars.global.outline.class.color",
-                                settingKey = "",
-                            },
-                        },
+                        "Fixed the missing-health background on Retail unit, party and raid frames. It now stays opaque at full opacity, including while health animates.",
+                        "Class resource pips now use physical pixel spacing and realign after UI scale changes. Combo points clear stale charged colors when resource data becomes restricted and restore the correct colors when it becomes readable.",
+                        "Fixed inline Target of Target positioning when using direct text layouts. The name anchor selector now updates those layouts too.",
+                        "Group frames use their configured NPC name colors, and long names leave room for visible health text.",
+                        "Fixed Blizzard Raid Manager visibility when opened from a shortcut or gamepad in automatic mode.",
+                        "The 3D portrait performance warning now appears whenever 3D is selected from the render dropdown.",
                     },
                 },
                 {
-                    title = "Frames and portraits",
+                    title = "Castbars and combat timer",
                     bullets = {
-                        "Joining a group while already in combat could block the health bar layout and leave a party portrait missing. The frame now retries protected layout when it becomes writable.",
-                        "Party members whose names arrive late when entering a dungeon appear in the roster and move into the configured sort order when their names are ready.",
-                        "The animated party preview now shows the spell icon while a sample cast is active and restores the 3D portrait afterwards.",
+                        "Fixed player castbar placement and width when attached to the Utility cooldown row. Options and Edit Mode show the same anchor, and the castbar keeps the row's width when space is tight.",
+                        "Cast timers show >30 while more than 30 seconds remain on supported timer displays.",
+                        "The combat timer can anchor to the top-right of the chat window. Its timer format can also display brackets.",
                     },
                 },
                 {
-                    title = "Colors and appearance",
+                    title = "Auras and options",
                     bullets = {
-                        "Open the outline settings from the gear beside a border control or color shortcut. The overview also lets you adjust the shared group-border and focus-highlight colors and set thickness for the selected group scope.",
-                        "External Defensives have their own aura icon style and shape. Each setting inherits the Buffs appearance until you override it.",
-                        "The player castbar can show the collected item's icon for recognized pickups. Icon spacing is consistent on either side of the bar and in its preview.",
-                    },
-                },
-                {
-                    title = "Options and compatibility",
-                    bullets = {
-                        "The Nameplates font preview shows the selected color. Reset restores the inherited color, and searching for character name parts opens Shared.",
-                        "On WoW Forever, hand settings in Swing Timer reflect the module's enabled state. Characters whose realm is temporarily unavailable can recover an existing profile and its specialization assignments.",
-                        "The Misc tooltip shortcut opens the Suite's unit-frame tooltip settings when available. Core provides its own tooltip controls when used on its own.",
-                        "Added the Midnight 12.1.7 interface alongside 12.1.5.",
+                        "Aura previews now fade expired icons and slide the remaining icons into place. Aura Style exposes the shared new-icon animation option, and custom auras can override it. Reduce menu motion affects the preview, while Aura Style controls animation in the game.",
+                        "Fixed custom aura icon dimensions in previews and kept the Resources color preview clear of aura icons.",
+                        "Fixed clipped tab labels at different menu zoom levels and fixed the Icon Skins preview so captions and icons stay within their section.",
+                        "The menu can inherit the global font and refreshes when that font changes.",
+                        "Reduce menu motion leaves in-game unit-frame and castbar fades under their own settings.",
                     },
                 },
             },
