@@ -356,20 +356,59 @@ end
 
 local function BuildStrip(P, b)
     local entries = StripEntries()
-    local estimate = b.width or 720
-    local perRow = max(1, min(#entries, floor((estimate - 48) / 120)))
-    local section = b:CollapsibleSection("icon_skins_strip", "Your Icons", 16 + ceil(#entries / perRow) * 84, true)
-    local width = section._msuf2Width or estimate
-    local step = max(120, floor((width - 48) / perRow))
+    local section = b:CollapsibleSection("icon_skins_strip", "Your Icons", nil, true)
     P.samples = {}
     for i, entry in ipairs(entries) do
-        local x, y = 24 + ((i - 1) % perRow) * step, -16 - floor((i - 1) / perRow) * 84
-        local icon = NewIcon(section, entry.icon, SAMPLE, x, y)
+        local icon = NewIcon(section, entry.icon, SAMPLE, 24, -16)
         icon.kind = entry.key
-        icon.label = W.Text(section, entry.label, x - 8, y - 44, step - 8, T.colors.text)
-        icon.skin = W.Text(section, "", x - 8, y - 60, step - 8, T.colors.muted)
+        icon.label = W.Text(section, entry.label, 0, 0, 120, T.colors.text)
+        icon.skin = W.Text(section, "", 0, 0, 120, T.colors.muted)
+        icon.label:SetWordWrap(true)
+        icon.label:SetNonSpaceWrap(true)
+        icon.skin:SetWordWrap(true)
+        icon.skin:SetNonSpaceWrap(true)
+        icon.label:ClearAllPoints()
+        icon.label:SetPoint("TOPLEFT", icon, "BOTTOMLEFT", -8, -8)
+        icon.skin:ClearAllPoints()
+        icon.skin:SetPoint("TOPLEFT", icon.label, "BOTTOMLEFT", 0, -4)
         P.samples[i] = icon
     end
+
+    local ctx = P.ctx
+    local function LayoutStrip()
+        -- Skin changes can refresh cached views while another page owns the scroll area.
+        if not ctx._msuf2Building and (M.activeKey ~= PAGE or M.cache[PAGE] ~= ctx.entry) then return end
+        local usable = max(1, section._msuf2Width - 48)
+        local perRow = max(1, min(#P.samples, floor(usable / 120)))
+        local step = floor(usable / perRow)
+        local captionWidth = max(1, step - 8)
+        local y, rowHeight = -16, 0
+        for i, icon in ipairs(P.samples) do
+            local column = (i - 1) % perRow
+            if column == 0 and i > 1 then
+                y, rowHeight = y - rowHeight - 12, 0
+            end
+            local x = 24 + column * step
+            local _, _, _, oldX, oldY = icon:GetPoint()
+            if oldX ~= x or oldY ~= y then
+                icon:ClearAllPoints()
+                icon:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
+            end
+            if icon.label:GetWidth() ~= captionWidth then icon.label:SetWidth(captionWidth) end
+            if icon.skin:GetWidth() ~= captionWidth then icon.skin:SetWidth(captionWidth) end
+            local titleHeight = max(12, ceil(icon.label:GetStringHeight()))
+            local skinHeight = max(12, ceil(icon.skin:GetStringHeight()))
+            rowHeight = max(rowHeight, SAMPLE + 12 + titleHeight + skinHeight)
+        end
+        local bottom = y - rowHeight
+        if section._msuf2CursorY ~= bottom then
+            section._msuf2CursorY = bottom
+            b:FinishSection(section, 14)
+        end
+    end
+
+    ctx:AddResizeCallback(LayoutStrip)
+    section._msuf2CollapsibleEntry._msuf2RefreshState = LayoutStrip
     function P.RefreshStrip()
         for i = 1, #P.samples do
             local icon = P.samples[i]
@@ -378,6 +417,7 @@ local function BuildStrip(P, b)
             local name = Page.SkinName(Page.EffectiveSkin(icon.kind))
             T.SetTranslatedText(icon.skin, own == DEFAULT and M.Format("Like default (%s)", name) or name)
         end
+        LayoutStrip()
     end
 end
 
