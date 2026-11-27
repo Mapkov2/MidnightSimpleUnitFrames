@@ -150,8 +150,8 @@ local function SyncGameplayPanel()
     if m2 and type(m2.RefreshVisibleSliders) == "function" then m2.RefreshVisibleSliders("GAMEPLAY_MOVER_POSITION_CHANGED") end
 end
 
-local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues)
-    return MSUF.EditModeKinds.gameplay:applyDrag(frame, db, xKey, yKey, anchor, roundValues, RoundInt)
+local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues, anchorPoint)
+    return MSUF.EditModeKinds.gameplay:applyDrag(frame, db, xKey, yKey, anchor, roundValues, RoundInt, anchorPoint)
 end
 
 local function BeginGameplayDrag(frame, label, source)
@@ -248,8 +248,14 @@ local function SetCombatTimerText(text)
     end
 end
 
-local function SetCombatTimerValue(minutes, seconds, padded)
-    local format = padded and "%02d:%02d" or "%d:%02d"
+local function CombatTimerFormat(config)
+    if config.combatTimerBrackets then
+        return config.combatTimerPadMinutes and "[%02d:%02d]" or "[%d:%02d]"
+    end
+    return config.combatTimerPadMinutes and "%02d:%02d" or "%d:%02d"
+end
+
+local function SetCombatTimerValue(minutes, seconds, format)
     if lastTimerText == format and minutes == lastTimerMinute and seconds == lastTimerSecond then
         return
     end
@@ -277,17 +283,20 @@ local function TickCombatTimer(event)
     -- The regen handlers pass their event: at PLAYER_REGEN_DISABLED the lockdown has
     -- not started yet. The ticker passes its handle, which reads as no event.
     local inCombat = MSUF.Util.InCombat(event)
+    local format = CombatTimerFormat(gNow)
 
     if not inCombat then
         if gNow.combatTimerKeepLast then
             if combatStartTime then
                 local elapsed = math_max(GetTime() - combatStartTime, 0)
-                SetCombatTimerValue(math.floor(elapsed / 60), math.floor(elapsed % 60), gNow.combatTimerPadMinutes)
+                SetCombatTimerValue(math.floor(elapsed / 60), math.floor(elapsed % 60), format)
             else
-                SetCombatTimerValue(lastTimerMinute or 0, lastTimerSecond or 0, gNow.combatTimerPadMinutes)
+                SetCombatTimerValue(lastTimerMinute or 0, lastTimerSecond or 0, format)
             end
+        elseif gNow.lockCombatTimer then
+            SetCombatTimerText("")
         else
-            SetCombatTimerText(gNow.lockCombatTimer and "" or (gNow.combatTimerPadMinutes and "00:00" or "0:00"))
+            SetCombatTimerValue(0, 0, format)
         end
         SetCombatTimerShown(gNow.combatTimerKeepLast or not gNow.lockCombatTimer)
         combatStartTime = nil
@@ -298,7 +307,7 @@ local function TickCombatTimer(event)
     local now = GetTime()
     combatStartTime = combatStartTime or now
     local elapsedCombat = math_max(now - combatStartTime, 0)
-    SetCombatTimerValue(math.floor(elapsedCombat / 60), math.floor(elapsedCombat % 60), gNow.combatTimerPadMinutes)
+    SetCombatTimerValue(math.floor(elapsedCombat / 60), math.floor(elapsedCombat % 60), format)
 end
 
 local function _StartCombatTimerTick()
@@ -792,7 +801,7 @@ local function ApplyLockState()
 end
 
 local function ValidateCombatTimerAnchor(v)
-    if v == "player" or v == "target" or v == "focus" then
+    if v == "player" or v == "target" or v == "focus" or v == "chat" then
         return v
     end
     return "none"
@@ -803,10 +812,15 @@ local function GetCombatTimerAnchorFrame(g)
     if key == "none" then
         return UIParent
     end
+    if key == "chat" then return ChatFrame1 or UIParent end
     local uf = MSUF and MSUF.UF
     local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame(key) or nil
     local list = uf and uf.frames
     return frame or (list and list[key]) or (_G and _G["MSUF_" .. key]) or UIParent
+end
+
+local function CombatTimerAnchorPoint(g, anchor)
+    return g.combatTimerAnchor == "chat" and anchor ~= UIParent and "TOPRIGHT" or "CENTER"
 end
 
 local function ApplyCombatTimerAnchor(g)
@@ -816,17 +830,25 @@ local function ApplyCombatTimerAnchor(g)
 
     g = g or GameplayDefaults()
     local anchor = GetCombatTimerAnchorFrame(g)
+    local anchorPoint = CombatTimerAnchorPoint(g, anchor)
     local x, y = tonumber(g.combatOffsetX) or 0, tonumber(g.combatOffsetY) or 0
 
-    if combatFrame._msufAppliedAnchor ~= anchor
+    if combatFrame._msufAppliedAnchor ~= anchor or combatFrame._msufAppliedAnchorPoint ~= anchorPoint
         or combatFrame._msufAppliedPositionX ~= x
         or combatFrame._msufAppliedPositionY ~= y
     then
         combatFrame:ClearAllPoints()
-        combatFrame:SetPoint("CENTER", anchor, "CENTER", x, y)
+        combatFrame:SetPoint("CENTER", anchor, anchorPoint, x, y)
         combatFrame._msufAppliedAnchor = anchor
+        combatFrame._msufAppliedAnchorPoint = anchorPoint
         combatFrame._msufAppliedPositionX = x
         combatFrame._msufAppliedPositionY = y
+    end
+    local textPoint = anchorPoint == "TOPRIGHT" and "RIGHT" or "CENTER"
+    if timerText and timerText._msufCombatTextPoint ~= textPoint then
+        timerText:ClearAllPoints()
+        timerText:SetPoint(textPoint, combatFrame, "CENTER", 0, 0)
+        timerText._msufCombatTextPoint = textPoint
     end
 
     local want = ValidateCombatTimerAnchor(g.combatTimerAnchor)
@@ -854,7 +876,6 @@ local function CreateCombatTimerFrame()
     local g = GameplayDefaults()
 
     combatFrame = CreateMovableGameplayFrame("MSUF_CombatTimerFrame", 220, 60)
-    ApplyCombatTimerAnchor(g)
     SetupArrowNudge(combatFrame,
         function(self, dx, dy)
             local db = GameplayDefaults()
@@ -885,14 +906,9 @@ local function CreateCombatTimerFrame()
 
         local db = GameplayDefaults()
         local anchorFrame = GetCombatTimerAnchorFrame(db)
-        StoreCenteredOffset(self, db, "combatOffsetX", "combatOffsetY", anchorFrame)
-        -- Re-anchor to the stored offsets and sync the applied cache so the next apply does not
-        -- re-anchor (and visibly jump) from stale cached values.
-        self:ClearAllPoints()
-        self:SetPoint("CENTER", anchorFrame, "CENTER", tonumber(db.combatOffsetX) or 0, tonumber(db.combatOffsetY) or 0)
-        self._msufAppliedAnchor = anchorFrame
-        self._msufAppliedPositionX = tonumber(db.combatOffsetX) or 0
-        self._msufAppliedPositionY = tonumber(db.combatOffsetY) or 0
+        StoreCenteredOffset(self, db, "combatOffsetX", "combatOffsetY", anchorFrame, nil, CombatTimerAnchorPoint(db, anchorFrame))
+        self._msufAppliedAnchor = nil
+        ApplyCombatTimerAnchor(db)
 
         SyncGameplayPanel()
 
@@ -902,7 +918,7 @@ local function CreateCombatTimerFrame()
     end)
 
     timerText = PixelLayoutRegion(combatFrame:CreateFontString(nil, "OVERLAY"))
-    timerText:SetPoint("CENTER")
+    ApplyCombatTimerAnchor(g)
 
     ApplyFontToCounter()
     timerText:SetText("")

@@ -111,7 +111,7 @@ function Kinds.Clear()
     Driver.Clear()
 end
 
-local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues, RoundInt)
+local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues, RoundInt, anchorPoint)
     local x, y = frame:GetCenter()
     if not (x and y) then return end
 
@@ -126,6 +126,12 @@ local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues, R
     local anchorScale = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or frameScale
     if anchor and anchor.GetCenter then
         local tx, ty = anchor:GetCenter()
+        if anchorPoint == "TOPRIGHT" then
+            if not (anchor.GetRight and anchor.GetTop) then return end
+            tx, ty = anchor:GetRight(), anchor:GetTop()
+            if issecretvalue and (issecretvalue(tx) or issecretvalue(ty)) then return end
+            if type(tx) ~= "number" or type(ty) ~= "number" then return end
+        end
         if tx and ty then
             ax, ay = tx, ty
             anchorScale = (anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or anchorScale

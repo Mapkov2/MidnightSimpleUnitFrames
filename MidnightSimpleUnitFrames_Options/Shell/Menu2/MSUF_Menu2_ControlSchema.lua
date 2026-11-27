@@ -10,6 +10,7 @@ M.ControlSchema = Schema
 local UI_DEFAULTS = {
     gameplay = {
         combatTimerAnchor = "none", combatFontSize = 24, lockCombatTimer = false, combatTimerClickThrough = false,
+        combatTimerBrackets = false,
         combatOffsetX = 0, combatOffsetY = -200, lockCombatState = false, combatStateFontSize = 24,
         combatStateDuration = 1.5, combatStateOffsetX = 0, combatStateOffsetY = 80,
         playerTotemsIconSize = 24, playerTotemsOffsetX = 0, playerTotemsOffsetY = -6,

@@ -7705,6 +7705,7 @@ L["Fade castbars in and out"] = "Плавное появление и исчез
 L["Latency zone color"] = "Цвет зоны задержки"
 L["Rank 4"] = "Ранг 4"
 L["Disabled while Reduce menu motion is enabled."] = "Отключено, пока включено уменьшение анимации меню."
+L["Show timer in brackets"] = "Показывать таймер в скобках"
 L["Fade in when shown"] = "Плавное появление при отображении"
 L["Edit positions"] = "Изменить позиции"
 L["Continue to keep your current positions."] = "Нажмите «Далее», чтобы сохранить текущие позиции."

@@ -7711,6 +7711,7 @@ L["Fade castbars in and out"] = "Suavizar a entrada e a saída das barras de lan
 L["Latency zone color"] = "Cor da zona de latência"
 L["Rank 4"] = "Nível 4"
 L["Disabled while Reduce menu motion is enabled."] = "Desativado enquanto a redução de movimento do menu estiver ativada."
+L["Show timer in brackets"] = "Mostrar o cronômetro entre parênteses"
 L["Fade in when shown"] = "Aparecer suavemente ao exibir"
 L["Edit positions"] = "Editar posições"
 L["Continue to keep your current positions."] = "Continue para manter as posições atuais."

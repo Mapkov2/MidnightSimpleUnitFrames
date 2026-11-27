@@ -29,6 +29,17 @@
       ]
     },
     {
+      "test": "tools/tests/combat_timer_chat_anchor_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
       "test": "tools/tests/classpower_pip_layout_smoke.lua",
       "phase": "runtime",
       "clients": [

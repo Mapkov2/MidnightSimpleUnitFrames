@@ -979,7 +979,7 @@ Schema.ReadDefaults = {
     gameplay = {
         combatFontSize = 24, combatOffsetX = 0, combatOffsetY = -200, combatStateDuration = 1.5, combatStateEnterText = "+Combat",
         combatStateFontSize = 24, combatStateLeaveText = "-Combat", combatStateOffsetX = 0, combatStateOffsetY = 80,
-        combatTimerAnchor = "none", combatTimerClickThrough = false, crosshairSize = 40, crosshairThickness = 3,
+        combatTimerAnchor = "none", combatTimerBrackets = false, combatTimerClickThrough = false, crosshairSize = 40, crosshairThickness = 3,
         enableCombatCrosshair = false, enableCombatCrosshairMeleeRangeColor = false, enableCombatStateText = false,
         enableCombatTimer = false, enablePlayerTotems = false, lockCombatState = false, lockCombatTimer = false,
         meleeSpellPerClass = false, meleeSpellPerSpec = false, playerTotemsAnchorFrom = "TOPLEFT", playerTotemsAnchorTo = "BOTTOMLEFT",

@@ -60,6 +60,7 @@ local function GameplayDeclarations(anchorValues,frameAnchors)
         combatFontSize = { "slider", "combatFontSize", nil, { "Timer size", 10, 64, 1 } },
         lockCombatTimer = { "flowToggle", "lockCombatTimer", nil, { "Lock position" } },
         combatTimerClickThrough = { "flowToggle", "combatTimerClickThrough", nil, { "Click-through (ALT to drag when unlocked)" } },
+        combatTimerBrackets = { "flowToggle", "combatTimerBrackets", nil, { "Show timer in brackets" } },
         combatOffsetX = { "slider", "combatOffsetX", nil, { "X offset", -800, 800, 1 } },
         combatOffsetY = { "slider", "combatOffsetY", nil, { "Y offset", -800, 800, 1 } },
         lockCombatState = { "flowToggle", "lockCombatState", nil, { "Lock position" } },
@@ -292,24 +293,25 @@ local TIMER_ROWS = {
     { "combatFontSize", 1, -138, -94, nil, 270 },
     { "lockCombatTimer", 2, -192, -100 },
     { "combatTimerClickThrough", 2, -224, -132 },
+    { "combatTimerBrackets", 1, -256, -132 },
 }
 local TIMER_OFFSET_ROWS = {
-    { "combatOffsetX", 1, -316, -216 },
-    { "combatOffsetY", 2, -386, -216 },
+    { "combatOffsetX", 1, -348, -216 },
+    { "combatOffsetY", 2, -418, -216 },
 }
 local function BuildGameplayTimer(env, controls)
     --- Old order: Combat Timer, Combat Enter/Leave, Class-specific toggles, Combat Crosshair.
-    local timer, stacked = OpenSection(env, "gameplay_timer", "Combat Timer", 570, 430, true)
+    local timer, stacked = OpenSection(env, "gameplay_timer", "Combat Timer", 602, 430, true)
     AttachTextShortcut(timer, "Combat Timer Text Settings", "Combat timer color", "menu:gameplay-timer-color",
         "gameplay_timer", { "gameplay.timer" }, "Combat Timer Color", "Combat Timer text follows the shared Fonts settings.")
     local geo = SectionGeometry(env.ctx, timer, 300)
     local x1, _, w = Columns(stacked, geo)
-    AddCards(timer, geo.cardW, stacked and { -38, 220, -274, 238 } or { -38, 126, -178, 150 })
+    AddCards(timer, geo.cardW, stacked and { -38, 252, -306, 238 } or { -38, 126, -178, 150 })
     local enable = SwitchAt(env.ctx, timer, "Combat Timer", x1, -40, min(230, w), "enableCombatTimer", env.apply, Meta("timer.enabled"))
     PlaceRows(env, controls, timer, stacked, geo, TIMER_ROWS)
-    LabelAt(timer, "Timer position (offset)", 30, stacked and -284 or -186, 260, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(timer, "Timer position (offset)", 30, stacked and -316 or -186, 260, "GameFontHighlightSmall", T.colors.muted)
     PlaceRows(env, controls, timer, stacked, geo, TIMER_OFFSET_ROWS)
-    LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, stacked and -492 or -312, min(520, geo.width - 60), "GameFontDisableSmall",
+    LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, stacked and -524 or -312, min(520, geo.width - 60), "GameFontDisableSmall",
         T.colors.muted)
     -- controls[3] is the timer's "Lock position" toggle in both layouts above.
     AddLockTooltip(controls[3], "While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge "
@@ -498,7 +500,11 @@ local function BuildGameplay(ctx)
     end
     -- Only frames this client has (Classic Era has no Focus); a stored one stays listed, read-only.
     local anchorItems = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
-    local function anchorValues() return M.AnchorTargetValues(anchorItems, Gameplay().combatTimerAnchor) end
+    local function anchorValues()
+        local values = M.AnchorTargetValues(anchorItems, Gameplay().combatTimerAnchor)
+        values[#values + 1] = { value = "chat", text = "Chat" }
+        return values
+    end
     local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT",
         "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
     local env = { ctx = ctx, b = b, apply = ApplyGameplayUI,
