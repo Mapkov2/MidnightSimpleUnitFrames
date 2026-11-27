@@ -498,6 +498,8 @@ local function MSUF_SetTextIfChanged(fs, text)
 end
 
 local MSUF_CASTBAR_TIME_FORMAT_CURRENT = "CURRENT"
+local CASTBAR_REMAINING_TIME_LIMIT = 30
+local CASTBAR_LONG_REMAINING_TEXT = ">" .. CASTBAR_REMAINING_TIME_LIMIT
 local MSUF_CASTBAR_TIME_FORMATS = {
     CURRENT = true,
     ELAPSED = true,
@@ -546,16 +548,23 @@ local function MSUF_GetCastbarTimeFormat(unit, g)
 end
 
 local function MSUF_FormatCastbarTimeText(mode, current, total)
+    if IsSecretValue(current) then return nil end
     local cur = tonumber(current)
     if type(cur) ~= "number" then return nil end
     if cur < 0 then cur = 0 end
 
     mode = MSUF_NormalizeCastbarTimeFormat(mode)
-    local maxTime = tonumber(total)
+    local maxTime = not IsSecretValue(total) and tonumber(total)
     if not maxTime or maxTime <= 0 then
-        return string.format("%.1f", cur)
+        return cur > CASTBAR_REMAINING_TIME_LIMIT and CASTBAR_LONG_REMAINING_TEXT or string.format("%.1f", cur)
     end
     if cur > maxTime then cur = maxTime end
+
+    if cur > CASTBAR_REMAINING_TIME_LIMIT then
+        if mode == "CURRENT" then return CASTBAR_LONG_REMAINING_TEXT end
+        if mode == "CURRENT_MAX" then return string.format("%s / %.1f", CASTBAR_LONG_REMAINING_TEXT, maxTime) end
+        if mode == "MAX_CURRENT" then return string.format("%.1f / %s", maxTime, CASTBAR_LONG_REMAINING_TEXT) end
+    end
 
     if mode == "CURRENT_MAX" then
         return string.format("%.1f / %.1f", cur, maxTime)
@@ -587,8 +596,6 @@ local function MSUF_SetCastTimeText(frame, seconds, totalSeconds)
         return
     end
 
-    --- Midnight/Beta "secret value" safety:
-    --- Avoid arithmetic directly on potentially secret values by converting to a Lua number.
     local n = tonumber(seconds)
     if type(n) ~= "number" then
         MSUF_SetTextIfChanged(fs, "")
@@ -602,8 +609,12 @@ local function MSUF_SetCastTimeText(frame, seconds, totalSeconds)
     mode = MSUF_NormalizeCastbarTimeFormat(mode)
 
     if mode == "CURRENT" and fs.SetFormattedText then
-        fs._msufLastText = nil
-        fs:SetFormattedText("%.1f", n)
+        if not IsSecretValue(n) and n > CASTBAR_REMAINING_TIME_LIMIT then
+            MSUF_SetTextIfChanged(fs, CASTBAR_LONG_REMAINING_TEXT)
+        else
+            fs._msufLastText = nil
+            fs:SetFormattedText("%.1f", n)
+        end
     else
         local text = MSUF_FormatCastbarTimeText(mode, n, totalSeconds or frame._msufPlainTotal)
         MSUF_SetTextIfChanged(fs, text or "")
@@ -687,6 +698,8 @@ U.SetTextIfChanged = MSUF_SetTextIfChanged
 U.NormalizeCastbarTimeFormat = MSUF_NormalizeCastbarTimeFormat
 U.GetCastbarTimeFormatDBKey = MSUF_GetCastbarTimeFormatDBKey
 U.GetCastbarTimeFormat = MSUF_GetCastbarTimeFormat
+U.CastbarRemainingTimeLimit = CASTBAR_REMAINING_TIME_LIMIT
+U.CastbarLongRemainingText = CASTBAR_LONG_REMAINING_TEXT
 U.FormatCastbarTimeText = MSUF_FormatCastbarTimeText
 U.SetCastTimeText = MSUF_SetCastTimeText
 U.SetAlphaIfChanged = MSUF_SetAlphaIfChanged

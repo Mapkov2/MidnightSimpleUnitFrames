@@ -196,6 +196,7 @@ end
 
 local nativeTextFormats
 local nativeTextFormatsUnavailable
+local remainingTimeFormatter
 
 local function BuildNativeTextFormats(allowRetry)
     if nativeTextFormats then return nativeTextFormats end
@@ -216,6 +217,7 @@ local function BuildNativeTextFormats(allowRetry)
         return nil
     end
 
+    local plainRule = { threshold = 0, step = 0.1, rounding = rounding.Nearest, format = "%.1f" }
     -- Fixed, ascending, docs-valid breakpoints: the 12.1 contract has no
     -- rejection path for this input, so the calls are direct. API absence on
     -- older clients is handled by the type guards above.
@@ -225,16 +227,16 @@ local function BuildNativeTextFormats(allowRetry)
         return nil
     end
 
-    formatter:SetBreakpoints({
-        {
-            threshold = 0,
-            step = 0.1,
-            rounding = rounding.Nearest,
-            format = "%.1f",
-        },
+    formatter:SetBreakpoints({ plainRule })
+    local time = ns.MSUF_Util
+    remainingTimeFormatter = createFormatter()
+    remainingTimeFormatter:SetBreakpoints({
+        plainRule,
+        -- Breakpoints are inclusive. Keep exactly 30 seconds in the countdown.
+        { threshold = time.CastbarRemainingTimeLimit + 0.000001, format = time.CastbarLongRemainingText },
     })
 
-    local remaining = { property = durationProperties.RemainingDuration, formatter = formatter }
+    local remaining = { property = durationProperties.RemainingDuration, formatter = remainingTimeFormatter }
     local elapsed = { property = durationProperties.ElapsedDuration, formatter = formatter }
     local total = { property = durationProperties.TotalDuration, formatter = formatter }
 
@@ -247,6 +249,11 @@ local function BuildNativeTextFormats(allowRetry)
         MAX_ELAPSED = { "{} / {}", { total, elapsed } },
     }
     return nativeTextFormats
+end
+
+function Runtime:GetRemainingTimeFormatter()
+    if not nativeTextFormats then BuildNativeTextFormats() end
+    return remainingTimeFormatter
 end
 
 local function DisableNativeTimeText(frame)

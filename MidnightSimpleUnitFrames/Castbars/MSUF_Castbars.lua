@@ -40,6 +40,7 @@ local FILE = "Castbars/MSUF_Castbars.lua"
 local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
 local SetTextIfChanged = MSUF.Require("MSUF_SetTextIfChanged", FILE)
 local SetCastTimeTextShared = MSUF.Require("MSUF_SetCastTimeText", FILE)
+local CASTBAR_REMAINING_TIME_LIMIT = MSUF.MSUF_Util.CastbarRemainingTimeLimit
 local SetRoundLayoutToNearestPixel = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", FILE)
 local GetCastbarBackgroundColor = MSUF.Require("MSUF_GetCastbarBackgroundColor", FILE)
 local PlayerCastbarCast = Player.PlayerCastbar_Cast
@@ -126,6 +127,13 @@ local function SetCastTimeTextIfChanged(frame, remaining, total)
     local remainingDecimal = math_floor((remaining or 0) * 10)
     local totalDecimal = total and math_floor((total or 0) * 10) or -1
     local format = frame._msufCastTimeFormat or "CURRENT"
+    if remainingDecimal >= CASTBAR_REMAINING_TIME_LIMIT * 10 and remaining > CASTBAR_REMAINING_TIME_LIMIT
+        and (format == "CURRENT" or (format == "CURRENT_MAX" or format == "MAX_CURRENT")
+            and (not total or total <= 0 or total > CASTBAR_REMAINING_TIME_LIMIT))
+    then
+        -- All capped values share one cache key. 30.0 still needs its own paint.
+        remainingDecimal = -1
+    end
     if remainingDecimal == frame._msufLastTimeDecimal
         and totalDecimal == frame._msufLastTimeTotalDecimal
         and format == frame._msufLastTimeFormat
@@ -1260,7 +1268,10 @@ local function UpdateDurationObjectFrame(frame, now)
                 and frame._msufNativeTimeBound ~= true
                 and (issecretvalue(rawRemaining) == true or rawRemaining ~= nil)
             then
-                if type(rawRemaining) == "number" and frame.timeText.SetFormattedText then
+                local formatter = durationObj.FormatRemainingDuration and Runtime:GetRemainingTimeFormatter()
+                if formatter and frame.timeText.SetText then
+                    SetTextIfChanged(frame.timeText, durationObj:FormatRemainingDuration(formatter))
+                elseif type(rawRemaining) == "number" and frame.timeText.SetFormattedText then
                     frame.timeText:SetFormattedText("%.1f", rawRemaining)
                 else
                     SetText(frame.timeText, tostring(rawRemaining or ""))

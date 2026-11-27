@@ -107,6 +107,18 @@ function Duration:GetRemainingDuration(modifier)
     if self.secret then return S() end
     return self:Remaining()
 end
+function Duration:FormatRemainingDuration(formatter)
+    RejectSecrets("Duration:FormatRemainingDuration", formatter)
+    local remaining = self:Remaining()
+    local format
+    for _, breakpoint in ipairs(formatter.breakpoints) do
+        if remaining < breakpoint.threshold then break end
+        format = breakpoint.format
+    end
+    self.lastRemainingFormat = format
+    if self.secret then return S("string") end
+    return format:format(remaining)
+end
 function Duration:GetTotalDuration() if self.secret then return S() end return self.total end
 function Duration:GetElapsedDuration() if self.secret then return S() end return self.total - self:Remaining() end
 function Duration:GetStartTime() if self.secret then return S() end return self.startTime end
@@ -708,7 +720,9 @@ local function InstallClient(world, env)
         end,
     }
     env.C_StringUtil = {
-        CreateNumericRuleFormatter = function() return { SetBreakpoints = function() end } end,
+        CreateNumericRuleFormatter = function()
+            return { SetBreakpoints = function(self, breakpoints) self.breakpoints = breakpoints end }
+        end,
         TruncateWhenZero = function(value) if IsSecret(value) then return S("string") end return tostring(value) end,
         WrapString = function(infix, prefix, suffix)
             if AnySecret(infix, prefix, suffix) then return S("string") end
