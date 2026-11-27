@@ -135,8 +135,8 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   local px, py = 0, 0
   if kind == "unit" and (lane.padding or 0) > 0 then
     px, py = Auras.PaddingInset(initialAnchor, lane.padding)
+    x, y = x + px, y + py
   end
-  x, y = x + px, y + py
 
   PlaceFrameAuraPreview(visual, lane, host, initialAnchor, x, y, 1)
   if lane.auraBarFill then return PaintFrameAuraBar(visual, lane, descriptor, slot + 1, scene) end

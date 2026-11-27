@@ -583,11 +583,11 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
-          "source_sha256": "e48ae2d6fc1dd755aa1ae0927e0fe9b5b92a432a70450823b1d98e09debd7bcd"
+          "source_sha256": "1f350305c233f52a571352b9982943de32675f4597fcb08d37540b84c9b8c15a"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",
-          "source_sha256": "c4cd8bfbe0bf3ece85c1487ce1b067bb62afd160542a4c5e029a05d0de49a476"
+          "source_sha256": "51202c8cd6c6f4aa64272d3b9cb536772461c00ce1a8829701f6d9f03b2972cd"
         },
         {
           "file": "MSUF_Menu2_PreviewContracts.lua",

@@ -11,6 +11,8 @@ local Layout = assert(GF.PreviewLayout, "Group preview requires PreviewLayout")
 local NormalizeKind = Layout.NormalizeKind
 local Animation = assert(MSUF.PreviewAnimation, "Group preview requires PreviewAnimation")
 local GetPreviewAnimationFrameState = Animation.FrameState
+local AuraPainter = MSUF.Require("MSUF_Auras3", "GroupFrames/Preview").MockAuraPainter
+local PREVIEW_REFLOW_EXPIRY = AuraPainter.PREVIEW_REFLOW_EXPIRY
 local UnitName = UnitName
 local issecretvalue = issecretvalue
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
@@ -384,7 +386,8 @@ end
 local function PaintSampleAuras(frame, kind, index, scene, sample, animation)
   if not GF.PreviewFrameAuras then return end
   GF.PreviewFrameAuras(frame, kind, index, nil, nil, scene, sample)
-  if animation and GF.AnimateUnitFrameAuras then
+  -- Until the first expiry, the initial aura paint already has the correct layout.
+  if animation and animation.elapsed >= PREVIEW_REFLOW_EXPIRY and GF.AnimateUnitFrameAuras then
     GF.AnimateUnitFrameAuras(frame, animation.elapsed)
   end
 end

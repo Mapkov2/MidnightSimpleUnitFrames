@@ -275,9 +275,11 @@ if observe then print("GROUP_DRAWING " .. flavor .. " " .. #drawing .. " " .. st
 -- 12 repeated health/power SetValue calls are cached, and six bar colors pass
 -- RGB with the default alpha of 1. Warm passes no longer rewrite the
 -- creation-time status labels. Forever also binds its layer status handle.
+-- Beta 3: six first-in-lane sample timers display the actual countdown
+-- to the preview expiry. Drawing order, counts and other arguments are unchanged.
 local drawingPins = {
-    Mainline = { 1811, 3044966710 }, Vanilla = { 1847, 3246844198 }, TBC = { 1847, 3246844198 },
-    Mists = { 1835, 3672595422 }, Forever = { 1847, 3076733034 },
+    Mainline = { 1811, 3746005356 }, Vanilla = { 1847, 1429793116 }, TBC = { 1847, 1429793116 },
+    Mists = { 1835, 2674351124 }, Forever = { 1847, 3299883168 },
 }
 if not observe then
     local pin = assert(drawingPins[flavor], "missing positional drawing receipt")

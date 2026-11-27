@@ -19,6 +19,7 @@ local Painter = { AURA_BAR_FILL_ALPHA = 0.42 }
 A3.MockAuraPainter = Painter
 
 local REFLOW_EXPIRES_AT, REFLOW_SECONDS, REFLOW_HOLD_SECONDS = 2.6, 0.18, 3.4
+Painter.PREVIEW_REFLOW_EXPIRY = REFLOW_EXPIRES_AT
 
 function Painter.PreviewReflowReducedMotion(elapsed)
     if elapsed == nil then return false end
