@@ -1597,6 +1597,8 @@ do
   bossPixelEvents:SetScript("OnEvent", function()
     Dep("MSUF_UpdatePixelPerfect")()
     Factory.ForceReanchor()
+    -- Layout resets pip backgrounds. Restore the active resource paint.
+    Dep("MSUF_ClassPower_RefreshLayout")(true)
     if MSUF.GF then
       MSUF.GF.RefreshHeaderLayout()
     end

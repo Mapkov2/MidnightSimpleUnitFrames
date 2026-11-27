@@ -20,6 +20,7 @@ modeBuilders.SEGMENTED = function(E)
     local _cpDB, PLAYER_CLASS, PT, CPConst, CP
     local UnitPower, UnitPartialPower, NotSecret, CP_CheckAutoHide
     local GetSpec, GetTime, GetPowerRegenForPowerType
+    local RefreshChargedPoints, comboPointsRestricted
     local nativeTimer
 
     --- Essence smooth recharge (Evoker only); fresh on every build.
@@ -303,9 +304,13 @@ modeBuilders.SEGMENTED = function(E)
 
         if maxPower <= 0 then return end
         local cur = UnitPower("player", powerType)
+        local comboPoints = powerType == PT.ComboPoints
         if not NotSecret(cur) then
             CP.paintedComboPoints = nil
+            local enteredComboRestriction = comboPoints and not comboPointsRestricted
+            if comboPoints then comboPointsRestricted = true end
             local visual = CP.visual
+            local version = visual and visual.version or 0
             local smoothInterp = visual and visual.smoothInterp
             local filledAlpha = visual and visual.filledAlpha or (CP.filledAlpha or 1)
             for i = 1, maxPower do
@@ -314,6 +319,11 @@ modeBuilders.SEGMENTED = function(E)
                     CP_StampMinMax(bar, i - 1, i)
                     CP_SetPowerValue(bar, cur, smoothInterp, true)
                     CP_StampAlpha(bar, filledAlpha)
+                    -- The same restriction hides charged point indices.
+                    -- Repaint the base palette to discard the previous charged tint.
+                    if comboPoints and (enteredComboRestriction or bar._msufCPVisualVersion ~= version) then
+                        CP_PaintVisualPip(bar, visual, i, nil)
+                    end
                 end
             end
             local txt = CP.text
@@ -330,14 +340,18 @@ modeBuilders.SEGMENTED = function(E)
             CP_CheckAutoHide(nil, maxPower)
             return
         end
+        if comboPoints and comboPointsRestricted then
+            comboPointsRestricted = nil
+            if RefreshChargedPoints then RefreshChargedPoints() end
+        end
         cur = tonumber(cur) or 0
         --- Read back by the runtime's borrowed-token test (Energy events).
-        CP.paintedComboPoints = powerType == PT.ComboPoints and cur or nil
+        CP.paintedComboPoints = comboPoints and cur or nil
         local visual = CP.visual
         local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
         local chargedMap = CP.chargedAny and CP.chargedMap or nil
-        local showCharged = visual and visual.showCharged == true and powerType == PT.ComboPoints
+        local showCharged = visual and visual.showCharged == true and comboPoints
         local chargedR, chargedG, chargedB
         if showCharged and chargedMap then chargedR, chargedG, chargedB = visual.chargedR, visual.chargedG, visual.chargedB end
         local useSlotColors = visual and visual.useSlotColors == true
@@ -415,6 +429,7 @@ modeBuilders.SEGMENTED = function(E)
         UnitPower, UnitPartialPower, NotSecret = E.UnitPower, E.UnitPartialPower, E.NotSecret
         CP_CheckAutoHide, GetSpec, GetTime = E.CP_CheckAutoHide, E.GetSpec, E.GetTime
         GetPowerRegenForPowerType = E.GetPowerRegenForPowerType
+        RefreshChargedPoints = E.RefreshChargedPoints
         nativeTimer = CreateNativeTimerSupport(E)
         _essPrevCur, _essRechargeAt, _essRate = nil, 0, 0
         _essActiveBar, _essNativeBar, _essRestricted = nil, nil, false

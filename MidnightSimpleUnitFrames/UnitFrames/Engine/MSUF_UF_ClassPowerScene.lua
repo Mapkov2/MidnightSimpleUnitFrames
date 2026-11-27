@@ -126,7 +126,6 @@ local function Build(scene, frame)
   E.EnsureRuneText, E.EnsureMainText = build.CP_EnsureRuneText, build.CP_EnsureMainText
   local presentation = builders.PRESENTATION(E)
   E.ApplyFont = presentation.CP_ApplyFont
-  CP.cdmScaledWidth = presentation.CDM_GetScaledWidth
   build.CP_Create(frame)
   CP._pf = frame
   scene.emptyCharged = CP.chargedMap

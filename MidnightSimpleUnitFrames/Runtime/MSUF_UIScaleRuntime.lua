@@ -63,6 +63,8 @@ local pendingReloadOnScalingOff
 local scaleApplyWatcher
 local scaleEvents
 local scaleReanchorTimer
+local scaleReanchorAfterCombat
+local EnsureScaleApplyAfterCombat
 local restoreBlizzardScaleTimers = {}
 local UpdateGlobalScaleEvents
 local lastGlobalUiParentScale
@@ -128,6 +130,9 @@ local function FlushUnitframeReanchorAfterScale()
     if InCombatLockdown and InCombatLockdown() then
         local UF = MSUF.UF
         if UF and UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
+        -- A scale write can finish just before combat blocks this queued pass.
+        scaleReanchorAfterCombat = true
+        EnsureScaleApplyAfterCombat()
         RefreshGroupFrameGeometryAfterScale()
         return
     end
@@ -138,6 +143,7 @@ local function FlushUnitframeReanchorAfterScale()
     ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
     forceReanchor(true)
     ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
+    MSUF.Require("MSUF_ClassPower_RefreshLayout", "Runtime/MSUF_UIScaleRuntime.lua")(true)
     RefreshGroupFrameGeometryAfterScale()
 end
 local function ScheduleUnitframeReanchorAfterScale()
@@ -149,7 +155,6 @@ local function ScheduleUnitframeReanchorAfterScale()
         C_Timer.After(0, FlushUnitframeReanchorAfterScale)
     end
 end
-local EnsureScaleApplyAfterCombat
 local ResetGlobalUiScale
 local function CancelScaleTimer(timer)
     if not (timer and type(timer.Cancel) == "function") then return end
@@ -405,6 +410,10 @@ EnsureScaleApplyAfterCombat = function()
             pendingGlobalScale = nil
             if msufScale then ApplyMsufScale(msufScale) end
             if globalScale then SetGlobalUiScale(globalScale, true) end
+        end
+        if scaleReanchorAfterCombat then
+            scaleReanchorAfterCombat = nil
+            ScheduleUnitframeReanchorAfterScale()
         end
         if pendingReloadOnScalingOff then
             pendingReloadOnScalingOff = nil

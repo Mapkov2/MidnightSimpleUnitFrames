@@ -10,6 +10,17 @@
       ]
     },
     {
+      "test": "tools/tests/classpower_pip_layout_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/aura_externals_appearance_smoke.lua",
       "phase": "runtime"
     },

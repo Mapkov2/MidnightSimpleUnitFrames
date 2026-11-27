@@ -226,7 +226,7 @@ local function RefreshChargedPoints()
 
     for i = 1, #indices do
         local idx = indices[i]
-        if type(idx) == "number" then
+        if NotSecret(idx) and type(idx) == "number" then
             CP.chargedMap[idx] = true
             CP.chargedAny = true
         end
@@ -510,6 +510,7 @@ do
         GetSpec = GetSpec,
         GetTime = GetTime,
         NotSecret = NotSecret,
+        RefreshChargedPoints = RefreshChargedPoints,
         ResolveClassPowerColor = CPColors.ResolveClassPowerColor,
         ResolveClassPowerBgColor = CPColors.ResolveClassPowerBgColor,
         ResolveChargedColor = CPColors.ResolveChargedColor,
@@ -577,12 +578,11 @@ do
             CP_ResolveTexture = CPConfig.ResolveTexture,
             RunActiveUpdate = function(powerType, maxP) return CP_RunActiveUpdate(powerType, maxP) end,
         })
-    CP.cdmScaledWidth = presentation.CDM_GetScaledWidth
+    ExportPublic("MSUF_CDM_GetScaledWidth", presentation.CDM_GetScaledWidth)
     CP_ApplyFont = presentation.CP_ApplyFont
     CP_ApplyColors = presentation.CP_ApplyColors
     CP_RefreshTexture = presentation.CP_RefreshTexture
 end
-ExportPublic("MSUF_CDM_GetScaledWidth", CP.cdmScaledWidth)
 
 --- Apply-time surface helpers live in ClassPower/MSUF_CP_Controller_Surface.lua:
 --- the Ebon Might host/style on the Player Power bar, the Aug composite reset,
@@ -1795,7 +1795,7 @@ CP.RefreshTexturesPublic = function()
 end
 ExportPublic("MSUF_ClassPower_RefreshTextures", CP.RefreshTexturesPublic)
 
-CP.RefreshLayoutCurrent = function()
+CP.RefreshLayoutCurrent = function(refreshScale)
     local playerFrame = GetPlayerFrame()
     if not playerFrame then
         return false
@@ -1811,7 +1811,11 @@ CP.RefreshLayoutCurrent = function()
     if maxP <= 0 then
         return false
     end
-    CP_Layout(playerFrame, maxP, cpHeight, CP.powerType)
+    if refreshScale and b.classPowerIndependentVisibility and MSUF.ResourceVisibility then
+        MSUF.ResourceVisibility.Bind(CP.container, playerFrame._msufHealthVisualRoot or playerFrame,
+            b, "classPower", "class")
+    end
+    if not CP_Layout(playerFrame, maxP, cpHeight, CP.powerType) then return false end
     if CP.ironfur and CP.ironfur.InvalidateLayout then
         CP.ironfur.InvalidateLayout()
     end
@@ -1822,9 +1826,13 @@ CP.RefreshLayoutCurrent = function()
     return true
 end
 
-ExportPublic("MSUF_ClassPower_RefreshLayout", function()
+ExportPublic("MSUF_ClassPower_RefreshLayout", function(refreshScale)
     CPConfig.RefreshConfig()
-    return CP.RefreshLayoutCurrent()
+    local refreshed = CP.RefreshLayoutCurrent(refreshScale == true)
+    if refreshed and refreshScale == true and CP.visible then
+        CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+    end
+    return refreshed
 end)
 
 -- Called only while Edit Mode is building its resource movers. A Druid outside

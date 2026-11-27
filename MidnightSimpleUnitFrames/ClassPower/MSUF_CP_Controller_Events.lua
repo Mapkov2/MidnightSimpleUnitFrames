@@ -205,8 +205,8 @@ local function CP_ShouldUseFrequentPowerEvents(classOnly)
         or (IS_CLASSIC and mode == CPK.MODE.SIGNED_CONTINUOUS)
         or mode == CPK.MODE.FRACTIONAL
         or (mode == CPK.MODE.SEGMENTED and CP.powerType == PT.Essence)
-        --- Target-owned combo points follow Blizzard's ComboFrame (UNIT_POWER_FREQUENT).
-        or (ClientCP ~= nil and mode == CPK.MODE.SEGMENTED and CP.powerType == PT.ComboPoints)
+        --- Both Blizzard's Retail class resource and Classic combo frames use UNIT_POWER_FREQUENT.
+        or (mode == CPK.MODE.SEGMENTED and CP.powerType == PT.ComboPoints)
 end
 
 local function CP_ShouldUseLiteBindings()

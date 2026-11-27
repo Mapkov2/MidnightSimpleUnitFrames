@@ -7,11 +7,11 @@ local CacheScreenPosition = shared.CacheScreenPosition
 local ApplyCachedScreenPosition = shared.ApplyCachedScreenPosition
 local RequestUFReanchorAfterCombat = shared.RequestUFReanchorAfterCombat
 local tonumber = shared.tonumber
-local math_floor = shared.math_floor
+local math_floor, math_max = shared.math_floor, shared.math_max
+local math_min = math.min
 local CP_ResolveTextLayerLevel = shared.CP_ResolveTextLayerLevel
 local CP_NormalizeShape = shared.CP_NormalizeShape
 local CP_ShapeTextures = shared.CP_ShapeTextures
-local type = shared.type
 local IS_CLASSIC = shared.IS_CLASSIC
 local CP_IsUsableCooldownAnchorFrame = shared.CP_IsUsableCooldownAnchorFrame
 local CP_AboveCooldownGap = shared.CP_AboveCooldownGap
@@ -27,6 +27,8 @@ local ApplyPowerBarEmbedLayout = shared.ApplyPowerBarEmbedLayout
 local CP_ApplyRoundedSurface = shared.CP_ApplyRoundedSurface
 local CP_LevelOffset = shared.CP_LevelOffset
 local Snap = MSUF.Require("MSUF_Snap", "ClassPower/MSUF_CP_Layout.lua")
+local PixelSize = MSUF.Require("MSUF_GetPhysicalPixelSize", "ClassPower/MSUF_CP_Layout.lua")
+local GetCooldownAnchorScaledWidth = MSUF.Require("MSUF_GetCooldownAnchorScaledWidth", "ClassPower/MSUF_CP_Layout.lua")
 
 builders.LAYOUT = function(E)
     local ApplyRoundedSurface = E.ApplyRoundedSurface or CP_ApplyRoundedSurface
@@ -76,7 +78,7 @@ builders.LAYOUT = function(E)
     end
 
     --- Stage 2: profile snapshot, container/text frame levels, and the
-    --- separator width, pixel snapper and pip shape every later stage shares.
+    --- pixel grid, divider widths and pip shape every later stage shares.
     function Layout.Prepare()
         local playerFrame, powerType = pass.playerFrame, pass.powerType
         local b = _cpDB.bars or {}
@@ -108,11 +110,12 @@ builders.LAYOUT = function(E)
             end
         end
 
-        local tickW = tonumber(b.classPowerTickWidth) or 1
-        if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
-        pass.tickW = tickW
-
-        pass.snap = Snap
+        local pixel = PixelSize(CP.container, 1)
+        local gap = math_min(8, math_max(0, tonumber(b.classPowerGap) or 0))
+        local tick = math_min(4, math_max(0, tonumber(b.classPowerTickWidth) or 1))
+        pass.pixel = pixel
+        pass.gapPixels = math_floor(gap / pixel + 0.5)
+        pass.tickPixels = math_floor(tick / pixel + 0.5)
 
         local shape = (powerType == "WHIRLWIND" or powerType == "SWEEPING_STRIKES")
             and "BAR" or CP_NormalizeShape(b.classPowerShape)
@@ -125,59 +128,42 @@ builders.LAYOUT = function(E)
     --- explicit setting, the pip auto-fit or a cooldown frame.
     function Layout.ResolveWidth()
         local playerFrame, maxPower, h, b = pass.playerFrame, pass.maxPower, pass.h, pass.b
-        local inLockdown, layoutCache, snap, shapeMode = pass.inLockdown, pass.layoutCache, pass.snap, pass.shapeMode
+        local inLockdown, layoutCache, pixel = pass.inLockdown, pass.layoutCache, pass.pixel
         local widthMode = b.classPowerWidthMode or "player"
-        local userW
-        local playerSpecW = (playerFrame and playerFrame.MSUFSpec and tonumber(playerFrame.MSUFSpec.width)) or 275
-        local autoFitGap = tonumber(b.classPowerGap) or 0
-        if autoFitGap < 0 then autoFitGap = 0 elseif autoFitGap > 8 then autoFitGap = 8 end
-        local snapAutoGap = (autoFitGap > 0 and type(snap) == "function") and snap(CP.container, autoFitGap) or autoFitGap
-
-        --- Width can follow the player frame, explicit settings, or supported
-        --- cooldown frames. Cooldown widths are cached so entering combat does
-        --- not force protected anchor/measurement work.
         local cdmName = CPConst.CDM_FRAMES[widthMode]
-        if shapeMode and widthMode == "auto_pips" then
-            local slot = tonumber(h) or 1
-            if slot < 1 then slot = 1 end
-            slot = snap(CP.container, slot) or slot
-            if slot < 1 then slot = 1 end
-            userW = (slot * maxPower) + ((maxPower - 1) * snapAutoGap)
-        elseif cdmName then
-            local cachedW = (layoutCache and tonumber(layoutCache["width:" .. cdmName])) or tonumber(CP.container._msufStableWidth)
-            if inLockdown and cachedW and cachedW >= 30 then
-                userW = cachedW
-            else
-                local cdmFrame = GetEffectiveCooldownFrame(cdmName) or _G[cdmName]
-                local cdmWidthFn = CP.cdmScaledWidth or MSUF.Require("MSUF_CDM_GetScaledWidth", "ClassPower/MSUF_CP_Layout.lua")
-                userW = cdmWidthFn(cdmFrame, CP.container)
-            end
-            if not userW or userW < 30 then
-                userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
-                if userW < 30 then
-                    userW = playerSpecW
-                end
-                userW = userW - 4
-            end
-        elseif widthMode == "custom" then
-            userW = tonumber(b.classPowerWidth) or 0
-            if userW < 30 then
-                userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
-                if userW < 30 then
-                    userW = playerSpecW
-                end
-                userW = userW - 4
-            end
+        local widthPixels
+        if pass.shapeMode and widthMode == "auto_pips" then
+            local slot = math_max(1, math_floor(h / pixel + 0.5))
+            widthPixels = slot * maxPower + (maxPower - 1) * pass.gapPixels
         else
-            userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
-            if userW < 30 then
-                userW = playerSpecW
+            local userW
+            --- Keep the measured width in layout units until converting once
+            --- to pixels. During combat the cached cooldown width is reused.
+            if cdmName then
+                local cachedW = (layoutCache and tonumber(layoutCache["width:" .. cdmName])) or tonumber(CP.container._msufStableWidth)
+                if inLockdown and cachedW and cachedW > 0 then
+                    userW = cachedW
+                else
+                    local cdmFrame = GetEffectiveCooldownFrame(cdmName) or _G[cdmName]
+                    local measured = GetCooldownAnchorScaledWidth(cdmFrame, CP.container)
+                    -- Keep the previous eligibility cutoff for rounded CDM widths.
+                    if measured and measured >= 29.5 then userW = measured end
+                end
+            elseif widthMode == "custom" then
+                local custom = tonumber(b.classPowerWidth)
+                if custom and custom >= 30 then userW = custom end
             end
-            if widthMode ~= "player" then userW = userW - 4 end
+            if not userW then
+                userW = (playerFrame.GetWidth and playerFrame:GetWidth()) or 0
+                if userW < 29.5 then
+                    userW = (playerFrame.MSUFSpec and tonumber(playerFrame.MSUFSpec.width)) or 275
+                end
+                if widthMode ~= "player" then userW = userW - 4 end
+            end
+            widthPixels = math_max(maxPower, math_floor(userW / pixel + 0.5))
         end
-        userW = snap(CP.container, userW)
-        if not userW or userW < 1 then userW = 1 end
-        pass.userW = userW
+        pass.widthPixels = widthPixels
+        pass.userW = widthPixels * pixel
         pass.cdmName = cdmName
     end
 
@@ -278,14 +264,14 @@ builders.LAYOUT = function(E)
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
         CP._layoutDirty = positionDeferred and true or nil
-        if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
-            layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
+        if not inLockdown and layoutCache and cdmName then
+            layoutCache["width:" .. cdmName] = userW
         end
     end
 
     --- Stage 5: the rectangular-mode outline frame around the container.
     function Layout.Outline()
-        local b, snap, shapeMode = pass.b, pass.snap, pass.shapeMode
+        local b, shapeMode = pass.b, pass.shapeMode
         local outlineThick = tonumber(b.classPowerOutline) or 1
         if outlineThick < 0 then outlineThick = 0 elseif outlineThick > 4 then outlineThick = 4 end
 
@@ -301,7 +287,7 @@ builders.LAYOUT = function(E)
                 CP._outline = ol
                 CP._outlineEdge = -1
             end
-            local edge = snap(CP._outline, outlineThick) or outlineThick
+            local edge = Snap(CP._outline, outlineThick) or outlineThick
             if not edge or edge <= 0 then
                 CP._outline:Hide()
             else
@@ -326,33 +312,20 @@ builders.LAYOUT = function(E)
     --- Stage 6: segment metrics - pip gap, separator width and the bar space
     --- left once the separators are budgeted.
     function Layout.Metrics()
-        local maxPower, b, snap, tickW = pass.maxPower, pass.b, pass.snap, pass.tickW
-        local frameW = pass.userW
-        local gap = tonumber(b.classPowerGap) or 0
-        if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
-        local snapGap = gap > 0 and snap(CP.container, gap) or gap
-
-        pass.fillReverse = (b.classPowerFillReverse == true)
+        local maxPower, framePixels = pass.maxPower, pass.widthPixels
+        local gapPixels = pass.gapPixels
+        local tickPixels = pass.shapeMode and 0 or pass.tickPixels
         local numTicks = maxPower - 1
-        local snapTickW = tickW > 0 and snap(CP.container, tickW) or tickW
-        local sepW = snapTickW + snapGap
+
+        pass.fillReverse = pass.b.classPowerFillReverse == true
         if numTicks > 0 then
-            local maxSepW = math_floor((frameW - maxPower) / numTicks)
-            if maxSepW < 0 then maxSepW = 0 end
-            if sepW > maxSepW then
-                if snapTickW > maxSepW then
-                    snapTickW = maxSepW
-                    snapGap = 0
-                else
-                    snapGap = maxSepW - snapTickW
-                end
-                sepW = snapTickW + snapGap
-            end
+            local budget = math_floor((framePixels - maxPower) / numTicks)
+            tickPixels = math_min(tickPixels, budget)
+            gapPixels = math_min(gapPixels, budget - tickPixels)
         end
-        local totalSepW = numTicks * sepW
-        local totalBarSpace = frameW - totalSepW
-        if totalBarSpace < maxPower then totalBarSpace = maxPower end
-        pass.snapGap, pass.snapTickW, pass.sepW, pass.totalBarSpace = snapGap, snapTickW, sepW, totalBarSpace
+        local sepPixels = gapPixels + tickPixels
+        pass.gapPixels, pass.tickPixels, pass.sepPixels = gapPixels, tickPixels, sepPixels
+        pass.barPixels = framePixels - numTicks * sepPixels
     end
 
     --- Stage 7: background colour, pip alpha and the auto-hide gate the
@@ -380,35 +353,24 @@ builders.LAYOUT = function(E)
     --- tick separators, then hide every bar and tick past maxPower.
     function Layout.PlaceBars()
         local maxPower, h, b = pass.maxPower, pass.h, pass.b
-        local snap, shapeInfo, shapeMode, fillReverse = pass.snap, pass.shapeInfo, pass.shapeMode, pass.fillReverse
-        local frameW = pass.userW
-        local snapGap, snapTickW, sepW, totalBarSpace = pass.snapGap, pass.snapTickW, pass.sepW, pass.totalBarSpace
+        local shapeInfo, shapeMode, fillReverse = pass.shapeInfo, pass.shapeMode, pass.fillReverse
+        local pixel, framePixels = pass.pixel, pass.widthPixels
+        local gapPixels, tickPixels, sepPixels, barPixels = pass.gapPixels, pass.tickPixels, pass.sepPixels, pass.barPixels
         local bgA, bgR, bgG, bgB = pass.bgA, pass.bgR, pass.bgG, pass.bgB
         if shapeMode then
             local shapeFill = shapeInfo.fill
             local shapeBg = shapeInfo.bg
-            local slot = h
-            if slot < 1 then slot = 1 end
-            slot = snap(CP.container, slot) or slot
-            if slot < 1 then slot = 1 end
-            local totalGap = (maxPower - 1) * snapGap
-            local maxSlot = math_floor((frameW - totalGap) / maxPower)
-            if maxSlot < 1 then maxSlot = 1 end
-            if slot > maxSlot then slot = maxSlot end
-            local rowW = (slot * maxPower) + totalGap
-            if rowW > frameW then rowW = frameW end
+            local slot = math_max(1, math_floor(h / pixel + 0.5))
+            slot = math_min(slot, math_floor(barPixels / maxPower))
+            local spare = framePixels - (slot * maxPower + (maxPower - 1) * gapPixels)
             local align = CP_NormalizeShapeAlign(b.classPowerShapeAlign)
-            local startX
-            if align == "LEFT" then
-                startX = 0
-            elseif align == "RIGHT" then
-                startX = math_floor(frameW - rowW + 0.5)
-            else
-                startX = math_floor((frameW - rowW) * 0.5 + 0.5)
+            local startX = 0
+            if align == "RIGHT" then
+                startX = spare
+            elseif align ~= "LEFT" then
+                startX = math_floor(spare / 2 + 0.5)
             end
-            if startX < 0 then startX = 0 end
-            local rightInset = math_floor(frameW - rowW - startX + 0.5)
-            if rightInset < 0 then rightInset = 0 end
+            local rightInset = spare - startX
             local xPos = 0
             for i = 1, maxPower do
                 local bar = CP.bars[i]
@@ -427,14 +389,14 @@ builders.LAYOUT = function(E)
                         CP_LayoutBackground(bar._bg, bgR, bgG, bgB, bgA)
                     end
                     if fillReverse then
-                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(rightInset + xPos), 0)
+                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(rightInset + xPos) * pixel, 0)
                     else
-                        bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", startX + xPos, 0)
+                        bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", (startX + xPos) * pixel, 0)
                     end
-                    bar:SetSize(slot, h)
+                    bar:SetSize(slot * pixel, h)
                     ClearShapeEdge(bar)
                     CP_LayoutShown(bar, true)
-                    xPos = xPos + slot + snapGap
+                    xPos = xPos + slot + gapPixels
                 end
             end
             for i = 1, #CP.ticks do
@@ -449,32 +411,33 @@ builders.LAYOUT = function(E)
                     bar:ClearAllPoints()
                     if bar.SetReverseFill then bar:SetReverseFill(false) end
                     ClearShapeEdge(bar)
-                    local boundary = math_floor((totalBarSpace * i) / maxPower)
+                    --- Distribute remainder pixels across the row, keeping every
+                    --- gap identical and the final pip flush with the container.
+                    local boundary = math_floor(barPixels * i / maxPower + 0.5)
                     local thisW = boundary - prevBoundary
-                    if thisW < 1 then thisW = 1 end
                     if fillReverse then
-                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -xPos, 0)
+                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -xPos * pixel, 0)
                     else
-                        bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
+                        bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos * pixel, 0)
                     end
-                    bar:SetSize(thisW, h)
+                    bar:SetSize(thisW * pixel, h)
                     CP_LayoutBackground(bar._bg, bgR, bgG, bgB, bgA)
                     CP_LayoutShown(bar, true)
-                    if snapTickW > 0 and i < maxPower then
+                    if tickPixels > 0 and i < maxPower then
                         local tick = CP.ticks[i]
                         if tick then
-                            local tickX = xPos + thisW + math_floor(snapGap / 2)
+                            local tickX = (xPos + thisW + math_floor(gapPixels / 2)) * pixel
                             tick:ClearAllPoints()
                             if fillReverse then
                                 tick:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -tickX, 0)
                             else
                                 tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
                             end
-                            tick:SetSize(snapTickW, h)
+                            tick:SetSize(tickPixels * pixel, h)
                             CP_LayoutShown(tick, true)
                         end
                     end
-                    xPos = xPos + thisW + sepW
+                    xPos = xPos + thisW + sepPixels
                     prevBoundary = boundary
                 end
             end
@@ -488,7 +451,7 @@ builders.LAYOUT = function(E)
         end
 
         if not shapeMode then
-            local hideFrom = (snapTickW > 0) and maxPower or 1
+            local hideFrom = (tickPixels > 0) and maxPower or 1
             for i = hideFrom, #CP.ticks do
                 if CP.ticks[i] then CP_LayoutShown(CP.ticks[i], false) end
             end
@@ -526,7 +489,7 @@ builders.LAYOUT = function(E)
         local pf = CoreUnitFrame("player")
         local powerSpec = pf and pf.MSUFSpec and pf.MSUFSpec.power
         if powerSpec and powerSpec.detached == true and (powerSpec.detachedSyncClass == true or powerSpec.detachedAnchorClass == true) then
-            local anchorW = math_floor(userW + 0.5)
+            local anchorW = userW
             local anchorH = math_floor(h + 0.5)
             if CP._lastDetachedPowerAnchorW ~= anchorW or CP._lastDetachedPowerAnchorH ~= anchorH then
                 CP._lastDetachedPowerAnchorW = anchorW
@@ -560,6 +523,7 @@ builders.LAYOUT = function(E)
         Layout.Surface()
         Layout.PlaceBars()
         Layout.Finish()
+        return true
     end
 
     local API = {
