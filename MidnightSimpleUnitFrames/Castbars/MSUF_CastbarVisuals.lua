@@ -706,6 +706,41 @@ local function ApproxTimeTextReserve(frame, g, prefix, statusW)
     return math.max(44, reserve)
 end
 
+local function TimeTextAnchor(g, unit, prefix)
+    local pool = POOL_SHOW_KEYS[unit] ~= nil
+    local x = DetailNum(g, prefix, "TimeOffsetX", not pool and "castbarPlayerTimeOffsetX" or nil, pool and 0 or -2)
+    local position = NormalizeTextPosition(DetailString(g, prefix, "TimePosition", nil, "RIGHT"), "RIGHT")
+    return position, pool and x - 2 or x
+end
+
+local function CenteredSpellTextSpace(frame, g, unit, prefix, statusW, x)
+    if not (frame.timeText and ShowTimeForUnit(g, unit)) then return x end
+    local timePosition, timeX = TimeTextAnchor(g, unit, prefix)
+    if timePosition == "ABOVE" or timePosition == "BELOW" then return x end
+
+    local timeW = RegionNumber(frame.timeText, "GetStringWidth", nil)
+    local reserve = math.max(timeW and timeW + 10 or 0, ApproxTimeTextReserve(frame, g, prefix, statusW))
+    local left, right = 0, statusW
+    local center = statusW / 2 + x
+    if timePosition == "LEFT" then
+        left = Clamp(2 + timeX + reserve, 0, statusW - 1)
+    elseif timePosition == "RIGHT" then
+        right = Clamp(statusW + timeX - reserve, 1, statusW)
+    else
+        -- A timer that also uses CENTER needs its own interval.
+        local timerLeft = Clamp(statusW / 2 + timeX - reserve / 2, 0, statusW)
+        local timerRight = Clamp(statusW / 2 + timeX + reserve / 2, 0, statusW)
+        if statusW - timerRight > timerLeft then
+            left = math.min(statusW - 1, timerRight)
+        else
+            right = math.max(1, timerLeft)
+        end
+        center = Clamp((left + right) / 2 + x, left + .5, right - .5)
+        x = center - statusW / 2
+    end
+    return x, math.max(0, 2 * math.min(center - left, right - center))
+end
+
 --- Spell text width is derived from remaining statusbar space after reserving
 --- time text. This prevents the two font strings from fighting over the same
 --- pixels when users increase font size.
@@ -734,11 +769,14 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     local x = DetailNum(g, prefix, "TextOffsetX", nil, 0)
     local y = DetailNum(g, prefix, "TextOffsetY", nil, 0)
     local position = NormalizeTextPosition(DetailString(g, prefix, "SpellNamePosition", nil, "LEFT"), "LEFT")
-    AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
-
     local statusW = RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250)
     local maxWidth = DetailNum(g, prefix, "SpellNameMaxWidth", nil, 0)
     local truncate = NormalizeSpellNameTruncate(DetailString(g, prefix, "SpellNameTruncate", nil, "AUTO"))
+    local centeredRoom
+    if position == "CENTER" and truncate ~= "NONE" then
+        x, centeredRoom = CenteredSpellTextSpace(frame, g, unit, prefix, math.max(1, statusW), x)
+    end
+    AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
     local shortening, shorteningMaxLen, shorteningReserved = GetSpellNameShorteningConfig(frame)
     --- Returns the comfortable auto width plus the hard edge the spell text may
     --- never cross. Both keep the time text's own pixels and the user's
@@ -761,6 +799,14 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     local width, autoHardMax
     if truncate == "NONE" then
         width = math.max(statusW, 1000)
+    elseif centeredRoom then
+        local reserved = shortening and (tonumber(shorteningReserved) or 0) or 0
+        local hardMax = math.max(1, centeredRoom - reserved)
+        if truncate == "CLIP" and maxWidth and maxWidth > 0 then
+            width = math.min(maxWidth, hardMax)
+        else
+            width, autoHardMax = math.max(math.min(20, hardMax), hardMax - 8), hardMax
+        end
     elseif truncate == "CLIP" then
         if maxWidth and maxWidth > 0 then
             width = maxWidth
@@ -822,12 +868,8 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
     -- Boss and arena time offsets are stored relative to a -2 base, without
     -- the player-offset fallback; the Unit preview and its drag handle
     -- (bossBaseX) read and write them the same way.
-    local poolUnit = POOL_SHOW_KEYS[unit] ~= nil
-    local fallbackX = poolUnit and 0 or -2
-    local x = DetailNum(g, prefix, "TimeOffsetX", not poolUnit and "castbarPlayerTimeOffsetX" or nil, fallbackX)
-    local y = DetailNum(g, prefix, "TimeOffsetY", not poolUnit and "castbarPlayerTimeOffsetY" or nil, 0)
-    if poolUnit then x = -2 + (tonumber(x) or 0) end
-    local position = NormalizeTextPosition(DetailString(g, prefix, "TimePosition", nil, "RIGHT"), "RIGHT")
+    local position, x = TimeTextAnchor(g, unit, prefix)
+    local y = DetailNum(g, prefix, "TimeOffsetY", not POOL_SHOW_KEYS[unit] and "castbarPlayerTimeOffsetY" or nil, 0)
     AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
     return fontReady
 end

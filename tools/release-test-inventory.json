@@ -3185,6 +3185,17 @@
       ]
     },
     {
+      "test": "tools/tests/profile_castbar_layout_smoke.lua",
+      "phase": "profiles",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/profile_decompression_smoke.lua",
       "phase": "profiles",
       "clients": [
@@ -3197,6 +3208,17 @@
     },
     {
       "test": "tools/tests/castbar_artwork_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/castbar_spell_text_layout_smoke.lua",
       "phase": "runtime",
       "clients": [
         "Mainline",
