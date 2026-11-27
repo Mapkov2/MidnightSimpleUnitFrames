@@ -387,8 +387,9 @@ local function PaintSampleAuras(frame, kind, index, scene, sample, animation)
   if not GF.PreviewFrameAuras then return end
   GF.PreviewFrameAuras(frame, kind, index, nil, nil, scene, sample)
   -- Until the first expiry, the initial aura paint already has the correct layout.
-  if animation and animation.elapsed >= PREVIEW_REFLOW_EXPIRY and GF.AnimateUnitFrameAuras then
-    GF.AnimateUnitFrameAuras(frame, animation.elapsed)
+  local elapsed = animation and animation.elapsed
+  if elapsed and elapsed >= PREVIEW_REFLOW_EXPIRY and GF.AnimateUnitFrameAuras then
+    GF.AnimateUnitFrameAuras(frame, elapsed)
   end
 end
 
