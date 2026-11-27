@@ -586,10 +586,12 @@ local function FontKeySet(value)
     end
     G().fontKey = value or FontSelectionValue("FRIZQT", "Fonts\\FRIZQT___CYR.TTF")
     ClearUFFontKeyOverrides()
+    if G().menuFontKey == "GLOBAL" then M.Theme.RefreshMenuFonts() end
 end
 local function MenuFontValues()
     local out = {
         { value = "", text = "Blizzard default" },
+        { value = "GLOBAL", text = "Global Font" },
     }
     local fonts = FontValues(false)
     for i = 1, #(fonts or {}) do
@@ -600,11 +602,12 @@ end
 local function MenuFontKeyGet()
     local value = ReadG("menuFontKey", "")
     if value == nil or value == "" then return "" end
+    if value == "GLOBAL" then return value end
     return FontSelectionValue(value)
 end
 local function MenuFontKeySet(value)
-    if value == nil or value == "" then
-        G().menuFontKey = ""
+    if value == nil or value == "" or value == "GLOBAL" then
+        G().menuFontKey = value or ""
         return
     end
     G().menuFontKey = FontSelectionValue(value) or ""

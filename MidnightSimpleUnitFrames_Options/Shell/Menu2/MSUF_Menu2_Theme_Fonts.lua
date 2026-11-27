@@ -15,14 +15,15 @@ local Tr = M.Tr
 local NO_MENU_FONT = {}
 local menuFontCache = {}
 local styledFontCache, styledMenuFontKey = {}, nil
-local function MenuGeneralDB()
-    return M.GetGeneralDB()
+local function EffectiveMenuFontKey()
+    local general = M.GetGeneralDB()
+    if type(general) ~= "table" then return nil end
+    if general.menuFontKey == "GLOBAL" then return general.fontKey end
+    return general.menuFontKey
 end
-local function ResolveMenuFontPath(size, flags, role)
-    local g = MenuGeneralDB()
+local function ResolveMenuFontPath(key, size, flags, role)
     -- No theme sets a heading font: the Classic Glass preset keeps the user's
     -- readable menu font, so headings follow menuFontKey like every role.
-    local key = type(g) == "table" and g.menuFontKey or nil
     if type(key) ~= "string" or key == "" then return nil end
     size = tonumber(size) or 14
     flags = flags or ""
@@ -34,7 +35,9 @@ local function ResolveMenuFontPath(size, flags, role)
         path = CoreFont.KeyPath(key, size, flags) or path
     end
     path = CoreFont.ResolveSafe(path, size, flags, key)
-    path = SharedUI.ResolveRoleFontPath(path, role == "navigation" and "card" or role)
+    -- Navigation and Suite setting text keep the card weight at their own size.
+    local weightRole = (role == "navigation" or role == "settingCard") and "card" or role
+    path = SharedUI.ResolveRoleFontPath(path, weightRole)
     if type(path) ~= "string" or path == "" then path = nil end
     menuFontCache[cacheKey] = path or NO_MENU_FONT
     return path
@@ -45,8 +48,7 @@ end
 -- FontStrings share resolved styles, while each string still verifies native
 -- readback. A caller changing SetFont directly is repaired on the next apply.
 local function StyledFont(font, size, role)
-    local general = MenuGeneralDB()
-    local key = type(general) == "table" and general.menuFontKey or nil
+    local key = EffectiveMenuFontKey()
     if key ~= styledMenuFontKey then
         styledFontCache, styledMenuFontKey = {}, key
     end
@@ -62,7 +64,7 @@ local function StyledFont(font, size, role)
     end
     local style = roles[size]
     if not style then
-        local path = ResolveMenuFontPath(size, "", role) or font
+        local path = ResolveMenuFontPath(key, size, "", role) or font
         style = { font = path, key = tostring(path or "") .. "\030" .. tostring(size or "") .. "\030" }
         roles[size] = style
     end

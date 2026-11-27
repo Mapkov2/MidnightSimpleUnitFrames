@@ -80,6 +80,14 @@ Case("font readback and style invalidation", function()
     T.ApplyMenuFont(fs, 1, "body")
     local alternate = fs.fontPath
     assert(alternate:lower():find("arialn", 1, true), "menu font change was ignored")
+    local oldGlobal = general.fontKey
+    general.menuFontKey, general.fontKey = "GLOBAL", "Fonts\\FRIZQT__.TTF"
+    T.ApplyMenuFont(fs, 1, "body")
+    assert(fs.fontPath:lower():find("frizqt", 1, true), "the menu did not inherit the global font")
+    general.fontKey = "Fonts\\ARIALN.TTF"
+    T.ApplyMenuFont(fs, 1, "body")
+    assert(fs.fontPath == alternate, "a global font change left stale menu typography")
+    general.fontKey = oldGlobal
     general.menuFontKey = oldKey
     T.ApplyMenuFont(fs, 1, "caption")
     assert(fs.fontSize == T.FontSize("caption") and fs.fontPath ~= alternate, "font role/key restoration failed")
