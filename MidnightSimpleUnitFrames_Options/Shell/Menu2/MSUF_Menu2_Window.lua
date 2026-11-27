@@ -1072,6 +1072,7 @@ function M.EnsureFixedPreviewExpansionRoom(expander, animate)
     return applied == true
 end
 ApplyMenuFrameScale = function(frame)
+    local previousScale = frame:GetScale()
     if not (frame and frame.SetScale) then return end
     local g = M.GetGeneralDB()
     local previousW = frame.GetWidth and frame:GetWidth() or WINDOW_W
@@ -1089,6 +1090,7 @@ ApplyMenuFrameScale = function(frame)
         -- so cached responsive pages use the new content width immediately.
         RebuildActivePageForResize(frame, { source = "menu-scale" })
     end
+    if frame:GetScale() ~= previousScale then T.RefreshTabLayouts(true) end
     if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end
 

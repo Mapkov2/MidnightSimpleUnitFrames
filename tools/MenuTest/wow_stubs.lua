@@ -159,6 +159,7 @@ local regionMethods = {
     GetParent = function(self) return rawget(self, "_parent") end,
     GetWidth = ReturnOne, GetHeight = ReturnOne,
     GetSize = function() return 1, 1 end,
+    GetNumPoints = ReturnOne,
     GetPoint = function() return "CENTER", G.UIParent, "CENTER", 0, 0 end,
     IsShown = ReturnTrue, IsVisible = ReturnTrue, CanChangeAttribute = ReturnTrue,
 }

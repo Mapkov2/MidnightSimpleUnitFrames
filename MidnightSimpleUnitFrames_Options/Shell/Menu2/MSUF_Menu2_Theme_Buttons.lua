@@ -718,29 +718,46 @@ function T.StyleTabButton(button)
     return button
 end
 
--- Measure with the same font as the visible tab, including translated labels.
-function T.MeasureTabWidth(text, minimum)
-    if not tabMeasure then
-        local owner = CreateFrame("Frame", nil, UIParent)
-        tabMeasure = T.Font(owner, "GameFontHighlightSmall", "", T.colors.text, "control")
-        tabMeasure:SetPoint("TOPLEFT")
-        tabMeasure:SetAlpha(0)
-        tabMeasure:SetWordWrap(false)
+local function UnboundedTabTextWidth(label)
+    return label.GetUnboundedStringWidth and tonumber(label:GetUnboundedStringWidth()) or 0
+end
+
+-- Prefer the visible label's metrics so font rendering uses the menu's scale.
+-- Keep a probe for callers that need a width before the button exists.
+function T.MeasureTabWidth(text, minimum, label)
+    local width = label and UnboundedTabTextWidth(label) or 0
+    if label and label:GetText() ~= text then
+        local measure = label.GetUnboundedStringWidthForText
+        width = measure and tonumber(measure(label, text)) or 0
     end
-    T.ApplyMenuFont(tabMeasure, 0, "control")
-    T.SetTranslatedText(tabMeasure, text)
-    local width = tabMeasure.GetUnboundedStringWidth and tonumber(tabMeasure:GetUnboundedStringWidth())
-    if not width or width <= 0 then width = tonumber(tabMeasure:GetStringWidth()) or 0 end
+    if width <= 0 then
+        if not tabMeasure then
+            local owner = CreateFrame("Frame", nil, UIParent)
+            tabMeasure = T.Font(owner, "GameFontHighlightSmall", "", T.colors.text, "control")
+            tabMeasure:SetPoint("TOPLEFT")
+            tabMeasure:SetAlpha(0)
+            tabMeasure:SetWordWrap(false)
+        end
+        T.ApplyMenuFont(tabMeasure, 0, "control")
+        T.SetTranslatedText(tabMeasure, text)
+        width = UnboundedTabTextWidth(tabMeasure)
+        if width <= 0 then width = tonumber(tabMeasure:GetStringWidth()) or 0 end
+    end
     return math.max(tonumber(minimum) or TAB_MIN_WIDTH, math.ceil(width) + TAB_LABEL_INSET * 2 + 2)
 end
 
 local tabLayouts = setmetatable({}, { __mode = "k" })
-function T.TrackTabLayout(owner, refresh)
-    tabLayouts[owner] = true
+function T.TrackTabLayout(owner, refresh, remeasureOnZoom)
+    tabLayouts[owner] = remeasureOnZoom == true
     owner._msuf2TabLayoutRefresh = refresh
 end
-function T.RefreshTabLayouts()
-    for owner in pairs(tabLayouts) do owner:_msuf2TabLayoutRefresh() end
+function T.TrackZoomTabLayout(owner, refresh)
+    T.TrackTabLayout(owner, refresh, true)
+end
+function T.RefreshTabLayouts(zoomOnly)
+    for owner, remeasureOnZoom in pairs(tabLayouts) do
+        if not zoomOnly or (remeasureOnZoom and owner:IsVisible()) then owner:_msuf2TabLayoutRefresh() end
+    end
 end
 
 function T.SkinDangerButton(btn) return T.ApplyButtonRole(btn, "danger") end
@@ -771,7 +788,8 @@ function T.MeasureButtonWidth(btn, minWidth, maxWidth)
     local label = btn._msuf2Label
     local width
     if label and label.GetStringWidth then
-        local measured = label:GetStringWidth()
+        local measure = label.GetUnboundedStringWidth or label.GetStringWidth
+        local measured = measure(label)
         if type(measured) == "number" and measured > 0 then
             width = measured + BUTTON_LABEL_INSET + 1
         end

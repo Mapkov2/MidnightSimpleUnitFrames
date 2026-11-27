@@ -621,10 +621,16 @@ function W.SectionSwitch(section, label, displayLabel)
     if M.AddTooltip then M.AddTooltip(button, label, nil, { hook = true }) end
     return button
 end
-local function ScopeButtonWidth(item, overrides)
+local function ScopeButtonWidth(item, overrides, button)
     local text = Tr(item.text or item.label or tostring(item.value or ""))
     if overrides and item.value ~= "shared" then text = text .. " *" end
-    return T.MeasureTabWidth(text, item.width or 56)
+    local minimum = item.width or 56
+    local label = button and button._msuf2Label
+    local width = T.MeasureTabWidth(text, minimum, label)
+    if label and label:GetText() ~= text then
+        width = math.max(width, T.MeasureTabWidth(label:GetText(), minimum, label))
+    end
+    return width
 end
 local function MeasureScopeOverrideLayout(values, opts)
     opts = opts or {}
@@ -759,7 +765,7 @@ local function ReflowScopeBar(ctx, section, bar, layout, measure)
     local x, y, rows = startX, layout.centerY, 1
     for i = 1, #bar.buttons do
         local btn = bar.buttons[i]
-        if measure then btn._msuf2BaseWidth = ScopeButtonWidth(bar.values[i], layout.hasOverride) end
+        if measure then btn._msuf2BaseWidth = ScopeButtonWidth(bar.values[i], layout.hasOverride, btn) end
         local buttonW = math.min(math.max(1, maxRight - startX), btn._msuf2BaseWidth)
         btn:SetWidth(buttonW)
         if x > startX and x + buttonW > maxRight then
@@ -863,7 +869,10 @@ function W.ScopeOverrideBar(ctx, section, opts)
             centerY = centerY, buttonHeight = buttonH, metrics = metrics, hasOverride = opts.hasOverride }
         bar._msuf2ScopeLayout = layout
         ctx:AddResizeCallback(function() ReflowScopeBar(ctx, section, bar, layout) end)
-        T.TrackTabLayout(bar, function() ReflowScopeBar(ctx, section, bar, layout, true) end)
+        local function Remeasure() ReflowScopeBar(ctx, section, bar, layout, true) end
+        T.TrackTabLayout(bar, Remeasure, true)
+        bar:HookScript("OnShow", Remeasure)
+        Remeasure()
     end
     function bar:GetValue()
         if type(opts.getValue) == "function" then return opts.getValue() end
@@ -1296,7 +1305,7 @@ end
 local function MeasureSegmentTabs(holder)
     local total = 0
     for i, button in ipairs(holder.buttons) do
-        local preferred = T.MeasureTabWidth(button:GetText(), holder.values[i].width)
+        local preferred = T.MeasureTabWidth(button:GetText(), holder.values[i].width, button._msuf2Label)
         button._msuf2TabPreferredWidth = preferred
         total = total + preferred
     end
@@ -1333,7 +1342,8 @@ function W.Segment(section, label, values, width, opts)
         holder.buttons[i] = btn
     end
     MeasureSegmentTabs(holder)
-    T.TrackTabLayout(holder, MeasureSegmentTabs)
+    T.TrackTabLayout(holder, MeasureSegmentTabs, true)
+    holder:HookScript("OnShow", MeasureSegmentTabs)
     holder:HookScript("OnSizeChanged", LayoutSegment)
     function holder:SetValue(value)
         self.value = value

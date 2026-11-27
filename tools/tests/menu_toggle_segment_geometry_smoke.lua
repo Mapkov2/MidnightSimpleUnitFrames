@@ -105,4 +105,53 @@ assert(strip.buttons[2]:GetWidth() > before, "retained tab did not remeasure aft
 mw.world.widgets.Methods.GetStringWidth = glyphWidth
 T.RefreshMenuFonts()
 assert(strip.buttons[2]:GetWidth() == before, "restoring the menu font kept the wider tab")
+
+-- The text shown in the scaled menu can measure wider than the same caption
+-- in the shared UIParent probe. Use the rendered label for segment geometry.
+local unbounded = mw.world.widgets.Methods.GetUnboundedStringWidth
+local menuTextScale = 1.20
+mw.world.widgets.Methods.GetUnboundedStringWidth = function(self)
+    local _, owner = self:GetPoint(1)
+    local width = self:GetStringWidth()
+    return owner and owner._msuf2SegmentChoice == true and width * menuTextScale or width
+end
+local reminderTabs = W.SegmentTabs(ctx, section, { label = "", compact = true, wrap = true, width = 650,
+    values = {
+        { value = "reminders", text = "What to remind" },
+        { value = "visibility", text = "When to show" },
+        { value = "appearance", text = "Appearance", width = 145 },
+    }, defaultTab = "reminders" })
+local function CheckReminderCaptions()
+    for _, choice in ipairs(reminderTabs.buttons) do
+        local label = choice._msuf2Label
+        assert(label:GetUnboundedStringWidth() == label:GetStringWidth() * menuTextScale, "fixture did not scale the tab font")
+        assert(choice:GetWidth() >= label:GetUnboundedStringWidth() + 20, "scaled reminder caption is clipped: " .. label:GetText())
+    end
+    assert(reminderTabs:GetHeight() == 26, "reminder tabs wrapped despite available space")
+    assert(reminderTabs:GetValue() == "reminders", "remeasuring reminder tabs changed selection")
+    assert(reminderTabs.buttons[3]:GetWidth() >= 145, "remeasurement ignored the caller's minimum width")
+end
+CheckReminderCaptions()
+menuTextScale = 1.4
+World.FireScript(reminderTabs, "OnShow")
+CheckReminderCaptions()
+local general = M.GetGeneralDB()
+local originalZoom = general.slashMenuScale
+local unrelated = env.CreateFrame("Frame", nil, mw.win)
+local unrelatedRefreshes = 0
+T.TrackTabLayout(unrelated, function() unrelatedRefreshes = unrelatedRefreshes + 1 end)
+general.slashMenuScale = 0.80
+M.ApplyMenuFrameScale(mw.win)
+local zoomedWidth = reminderTabs.buttons[1]:GetWidth()
+menuTextScale = 1.55
+general.slashMenuScale = 0.92
+M.ApplyMenuFrameScale(mw.win)
+CheckReminderCaptions()
+assert(reminderTabs.buttons[1]:GetWidth() > zoomedWidth, "menu zoom did not resize the retained tabs")
+assert(unrelatedRefreshes == 0, "menu zoom ran an unrelated tab layout")
+menuTextScale = 1
+general.slashMenuScale = originalZoom
+M.ApplyMenuFrameScale(mw.win)
+CheckReminderCaptions()
+mw.world.widgets.Methods.GetUnboundedStringWidth = unbounded
 print("menu_toggle_segment_geometry_smoke " .. flavor .. ": pass")
