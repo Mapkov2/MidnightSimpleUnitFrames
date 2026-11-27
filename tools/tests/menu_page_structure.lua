@@ -73,9 +73,9 @@ end
 -- Both current generated indexes retain all 8 relocated action identities below.
 -- 7.0.3: 28 Mainline and 27 Classic additions; all 7.021 identities retained.
 local indexes = {
-    -- Beta 2 adds outline class color and External Defensives appearance. Existing identities are retained.
-    { "", 4911, 4223664233 },
-    { "_Classic", 4287, 3499897391 },
+    -- Beta 3 adds appearance motion and combat timer controls. Existing identities are retained.
+    { "", 4947, 4091604847 },
+    { "_Classic", 4288, 1425320156 },
 }
 local moved = {
     { "opt_colors", "workbench_accessibility", "accessibility", "preview review" },

@@ -362,12 +362,12 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "f5341a3a5633fde022724123210603b0fbe7940f67c869601dc2c22332ddafab",
+          "source_sha256": "e51c79c040d364b018fdeb1ce251a91a11cb657ab300ee6c429466458d33445e",
           "review_note": "2026-11-17: independently reviewed searchIndexed metadata on the existing ephemeral gradient opener; renderer unchanged."
         },
         {
           "file": "Pages/MSUF_Menu2_UnitText.lua",
-          "source_sha256": "653e0aa954889ae2f985415d7ef965e8357ec6e0b30588d83cfc47d96cba9c47"
+          "source_sha256": "0924ffbaa6db975df13eeb30c662969f21fc56cdb6c43f51a223a054d6635d21"
         },
         {
           "file": "Pages/MSUF_Menu2_GroupBars.lua",
@@ -489,7 +489,7 @@
           607
         ]
       ],
-      "source_sha256": "b8542130938b93a3ee4395a9c357f4a8e4dbea4289e3f2a4a789a587ba9ae9a7",
+      "source_sha256": "09a2cc941cca20d521ead218fa398d3e3c7cdbe6d79a182dc36f727e25a50763",
       "adapter_exclusions": [
         {
           "name": "WorkbenchRefresh",
@@ -550,7 +550,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
-          "source_sha256": "cf0768bfe19494ed4119c6d45c180dca275287efcb2571b20cc72701f60799ac"
+          "source_sha256": "20f95b9780513ba61e933f96be8bc72022e268f9647a61c4cdfb91cb756ce2fa"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View.lua",
@@ -583,11 +583,11 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
-          "source_sha256": "efb9f94c31c2dd1449e3a4b52b310af89afbb87a6ab9b54de35eed1fd4ae1de7"
+          "source_sha256": "e48ae2d6fc1dd755aa1ae0927e0fe9b5b92a432a70450823b1d98e09debd7bcd"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",
-          "source_sha256": "d7b51452a25656ac9e5ea2ada0f659396ea6323a4fdb21b6c7edbad73ce59f30"
+          "source_sha256": "c4cd8bfbe0bf3ece85c1487ce1b067bb62afd160542a4c5e029a05d0de49a476"
         },
         {
           "file": "MSUF_Menu2_PreviewContracts.lua",
@@ -845,7 +845,7 @@
           1115
         ]
       ],
-      "source_sha256": "468365b6502db7ee082e5f68cbe0f5b88a80123bc6fbf69f28372c40e2755bc6",
+      "source_sha256": "743fb4cc9880cfc2e6f3a6ec46913aae4496e5c4d27b16afe4c6bad08e7f2e75",
       "adapter_exclusions": [
         {
           "name": "PainterBuild.ResourcesStrip",
