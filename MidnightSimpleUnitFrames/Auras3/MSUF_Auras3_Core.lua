@@ -368,11 +368,15 @@ local function BuildLaneKeySchema()
         SCOPE_MATERIALIZED_LAYOUT_KEYS = {},
         LANE_STYLE_KEYS = {},
     }
-    local OWNER_SETS = {
-        layout = { schema.LAYOUT_KEYS },
-        layoutShared = { schema.SHARED_LAYOUT_KEYS },
-        styleLayout = { schema.LAYOUT_KEYS, schema.STYLE_LAYOUT_KEYS },
-        styleLayoutShared = { schema.SHARED_LAYOUT_KEYS, schema.STYLE_SHARED_LAYOUT_KEYS },
+    local ownerSet = {
+        layout = schema.LAYOUT_KEYS,
+        layoutShared = schema.SHARED_LAYOUT_KEYS,
+        styleLayout = schema.LAYOUT_KEYS,
+        styleLayoutShared = schema.SHARED_LAYOUT_KEYS,
+    }
+    local styleOwnerSet = {
+        styleLayout = schema.STYLE_LAYOUT_KEYS,
+        styleLayoutShared = schema.STYLE_SHARED_LAYOUT_KEYS,
     }
     local seedDefaults, fallbackDefaults, ownerOf = {}, {}, {}
     local function AddKey(key, owner, default, defaults)
@@ -380,9 +384,11 @@ local function BuildLaneKeySchema()
             error("MSUF Auras3 lane key listed twice: " .. key)
         end
         ownerOf[key] = owner
-        local sets = OWNER_SETS[owner]
-        if sets then
-            for _, set in ipairs(sets) do set[key] = true end
+        local keys = ownerSet[owner]
+        if keys then
+            keys[key] = true
+            local styleKeys = styleOwnerSet[owner]
+            if styleKeys then styleKeys[key] = true end
         elseif owner ~= false then
             error("MSUF Auras3 lane key has an unknown owner: " .. key)
         end
