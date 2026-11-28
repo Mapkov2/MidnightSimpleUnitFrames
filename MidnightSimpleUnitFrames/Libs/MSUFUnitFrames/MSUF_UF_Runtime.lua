@@ -345,50 +345,56 @@ local function RunDependentUnits(parent)
   return a or b or c
 end
 
--- Blizzard's TargetOfTargetMixin samples its own unit. Share one driver
--- across the visible, enabled dependent frames, with no idle OnUpdate.
-local function PollDependentFrame(frame)
-  if frame and not frame._msufPreviewAnimUnitRestore then
-    UF.RunLeanIdentity(frame, "MSUF_DEPENDENT_TARGET_POLL")
+-- Compound filters can miss value events even when registration succeeds.
+-- Sample only the HP and power of visible target/pet targets without an alias.
+local function StartDependentVitalsTicker(driver)
+  local ticker
+  ticker = C_Timer.NewTicker(0.2, function()
+    if driver.ticker ~= ticker then return end
+    if driver.targetTarget then UF.RunDependentVitals(driver.targetTarget) end
+    if driver.petTarget then UF.RunDependentVitals(driver.petTarget) end
+  end)
+  return ticker
+end
+
+local function NeedsVitalsFallback(frame)
+  if not (frame and frame._msufCoreVisible == true and frame._msufCoreSpecEnabled == true)
+    or frame._msufDependentEventAlias then return nil end
+  local active = frame._msufActiveElements
+  if frame._msufIdentityBarPath or frame._msufDependentHealthText or (active and active.PowerText == true) then
+    return frame
   end
 end
 
-local function DependentTargetsOnUpdate(driver, elapsed)
-  local passed = driver.elapsed + elapsed
-  if passed < 0.2 then
-    driver.elapsed = passed
-    return
+function UF.SyncRuntimeDriver(changedFrame)
+  local frames = UF.frames
+  local rebound
+  if changedFrame then
+    rebound = UF.RefreshDependentEventAlias(changedFrame)
+  else
+    UF.RefreshDependentEventAlias(frames.targettarget)
+    UF.RefreshDependentEventAlias(frames.focustarget)
+    UF.RefreshDependentEventAlias(frames.pettarget)
   end
-  driver.elapsed = 0
-  if MSUF.PublicGlobals.MSUF_PreviewTestMode == true then return end
-  PollDependentFrame(driver.targetTarget)
-  PollDependentFrame(driver.focusTarget)
-  PollDependentFrame(driver.petTarget)
-end
 
-local function VisibleDependentFrame(frame)
-  if frame and frame._msufCoreVisible == true then return RuntimeFrame(frame) end
-end
-
-function UF.SyncRuntimeDriver()
-  local targetTarget = VisibleDependentFrame(UF.frames.targettarget)
-  local focusTarget = VisibleDependentFrame(UF.frames.focustarget)
-  local petTarget = VisibleDependentFrame(UF.frames.pettarget)
-  local active = targetTarget ~= nil or focusTarget ~= nil or petTarget ~= nil
+  local targetTarget = NeedsVitalsFallback(frames.targettarget)
+  local petTarget = NeedsVitalsFallback(frames.pettarget)
+  local active = targetTarget ~= nil or petTarget ~= nil
   local driver = UF.driver
-  if active and not driver then
-    driver = CreateFrame("Frame")
+  if not driver then
+    if not active then return true, rebound end
+    driver = {}
     UF.driver = driver
   end
-  if driver then
-    driver.targetTarget, driver.focusTarget, driver.petTarget = targetTarget, focusTarget, petTarget
-    if driver.active ~= active then
-      driver.active = active
-      driver.elapsed = 0
-      driver:SetScript("OnUpdate", active and DependentTargetsOnUpdate or nil)
-    end
+  driver.targetTarget, driver.petTarget = targetTarget, petTarget
+  local ticker = driver.ticker
+  if active then
+    if not ticker then driver.ticker = StartDependentVitalsTicker(driver) end
+  elseif ticker then
+    driver.ticker = nil
+    ticker:Cancel()
   end
-  return true
+  return true, rebound
 end
 
 local function ConfigTouchesDependentUnits(unit)

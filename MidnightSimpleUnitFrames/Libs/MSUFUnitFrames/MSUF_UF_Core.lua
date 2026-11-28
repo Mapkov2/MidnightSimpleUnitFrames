@@ -302,10 +302,14 @@ local function ReadDeadCached(frame, unit, state)
     -- into nil and pay a second native read for every living unit.
     local raw
     if UnitIsDeadOrGhost then raw = UnitIsDeadOrGhost(unit) end
-    if (issecretvalue(raw) == true or raw == nil) and UnitIsDead then
+    -- One secret test per read: the classification is retested only when
+    -- the fallback replaced the value.
+    local rawSecret = issecretvalue(raw) == true
+    if (rawSecret or raw == nil) and UnitIsDead then
       raw = UnitIsDead(unit)
+      rawSecret = issecretvalue(raw) == true
     end
-    if issecretvalue(raw) == true or raw == nil then
+    if rawSecret or raw == nil then
       dead, known = false, false
     else
       dead, known = raw == true or raw == 1, true
@@ -627,7 +631,7 @@ end
 
 local function FrameOnShow(frame)
   frame._msufCoreVisible = true
-  if UF.IsDependentUnit(frame.MSUFUnitKey) and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  if UF.IsDependentUnit(frame.MSUFUnitKey) and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver(frame) end
   frame._msufCoreOnShowIdentityRefreshed = nil
   -- Restore the full event set suspended by the aggressive hidden-frame path.
   -- Re-registering from the recorded recipe reactivates every unit event; the
@@ -726,7 +730,7 @@ end
 
 local function FrameOnHide(frame)
   frame._msufCoreVisible = false
-  if UF.IsDependentUnit(frame.MSUFUnitKey) and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  if UF.IsDependentUnit(frame.MSUFUnitKey) and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver(frame) end
   frame._msufCoreOnShowFollowupEvent = nil
   frame._msufCoreOnShowFollowupGUID = nil
   frame._msufCoreOnShowFollowupTime = nil
@@ -818,7 +822,7 @@ local function DependentSource(frame, event)
     return frame and UF.ParentUnitForDependentUnit(frame.MSUFUnitKey)
   end
   if event == "UNIT_PET" and frame
-    and (frame.MSUFUnitKey == "pet" or frame.MSUFUnitKey == "pettarget") then
+    and (frame.MSUFUnitKey == "pet" or UF.IsDependentUnit(frame.MSUFUnitKey)) then
     return "player"
   end
   return nil
@@ -1107,28 +1111,72 @@ RegisterFrameEvent = function(frame, event, unitless)
     frame:RegisterEvent(event)
     return
   end
-  local source = DependentSource(frame, event) or frame.MSUFUnitKey
+  local unit = frame.MSUFUnitKey
+  local source = DependentSource(frame, event) or unit
   local dependent = UF.dependentUnitParents[source] ~= nil
-  if dependent then
-    -- A portrait can change model without changing its unit identity. Its
-    -- two refresh events sample the bound unit, never the event payload.
-    if event ~= "UNIT_PORTRAIT_UPDATE" and event ~= "UNIT_MODEL_CHANGED" then
-      frame:UnregisterEvent(event)
-      return
-    end
-    frame:RegisterEvent(event)
-  elseif not IsUnitToken(source) then
-    frame:RegisterEvent(event)
-    return
-  else
-    frame:RegisterUnitEvent(event, source)
-  end
-  if dependent or source ~= frame.MSUFUnitKey then
+  if dependent or source ~= unit then
     frame._msufFrameUnitEvents = frame._msufFrameUnitEvents or {}
     frame._msufFrameUnitEventTargets = frame._msufFrameUnitEventTargets or {}
     frame._msufFrameUnitEvents[event] = source
-    frame._msufFrameUnitEventTargets[event] = frame.MSUFUnitKey
+    frame._msufFrameUnitEventTargets[event] = unit
   end
+  if dependent then
+    local alias = frame._msufDependentEventAlias
+    if alias then
+      frame:RegisterUnitEvent(event, alias)
+      return
+    end
+    -- Compound filters can silently subscribe to every unit. Keep the
+    -- subscription only when the client reports the requested filter.
+    if frame.IsEventRegistered then
+      frame:RegisterUnitEvent(event, source)
+      local registered, filter = frame:IsEventRegistered(event)
+      if registered and issecretvalue(filter) ~= true and filter == source then return end
+    end
+    if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
+      frame:RegisterEvent(event)
+    else
+      frame:UnregisterEvent(event)
+    end
+  elseif IsUnitToken(source) then
+    frame:RegisterUnitEvent(event, source)
+  else
+    frame:RegisterEvent(event)
+  end
+end
+
+local DEPENDENT_EVENT_ALIASES = { "player", "target", "pet" }
+local DEPENDENT_CAN_FOCUS = MSUF.Client.SupportsUnit("focus")
+if DEPENDENT_CAN_FOCUS then DEPENDENT_EVENT_ALIASES[4] = "focus" end
+
+local function ResolveDependentEventAlias(unit)
+  if not UnitGUID then return nil end
+  local guid = UnitGUID(unit)
+  if issecretvalue(guid) == true or guid == nil then return nil end
+  for i = 1, #DEPENDENT_EVENT_ALIASES do
+    local token = DEPENDENT_EVENT_ALIASES[i]
+    local candidate = UnitGUID(token)
+    if issecretvalue(candidate) ~= true and candidate == guid then return token end
+  end
+  return nil
+end
+
+function UF.RefreshDependentEventAlias(frame)
+  if not (frame and frame._msufCoreVisible == true and frame._msufCoreSpecEnabled == true
+    and UF.IsDependentUnit(frame.MSUFUnitKey)) then return false end
+  local alias = ResolveDependentEventAlias(frame.MSUFUnitKey)
+  if frame._msufDependentEventAlias == alias then return false end
+  frame._msufDependentEventAlias = alias
+  local names, reg = frame._msufEventNames, frame._msufEventReg
+  if names and reg and frame._msufCoreEventsSuspended ~= true then
+    for i = 1, #names do
+      local event = names[i]
+      if reg[event] == false and IsUnitEvent(event) and not DependentSource(frame, event) then
+        RegisterFrameEvent(frame, event, false)
+      end
+    end
+  end
+  return true
 end
 
 local function ClearFrameEvents(frame)
@@ -1212,6 +1260,7 @@ local function FlushDependentIdentity(frame)
   frame._msufDependentIdentityQueued = nil
   local event = frame._msufDependentIdentityEvent or "MSUF_DEPENDENT_IDENTITY"
   frame._msufDependentIdentityEvent = nil
+  if UF.IsDependentUnit(frame.MSUFUnitKey) and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver(frame) end
   if UF.RunLeanIdentity then
     UF.RunLeanIdentity(frame, event)
   else
@@ -1221,6 +1270,9 @@ end
 
 local function QueueDependentIdentity(frame, event)
   if not frame then return end
+  -- Retire an old alias before its remaining events can reach the new unit.
+  -- The queued refresh rechecks after the native identity burst has settled.
+  if frame._msufDependentEventAlias and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver(frame) end
   frame._msufDependentIdentityEvent = event or "MSUF_DEPENDENT_IDENTITY"
   if frame._msufDependentIdentityQueued == true then return end
   frame._msufDependentIdentityQueued = true
@@ -1310,10 +1362,32 @@ local function ArenaOpponentIdentityUpdate(frame, event, unit)
   QueueDependentIdentity(frame, event)
 end
 
+local function DependentAliasChanged(frame)
+  if not UF.SyncRuntimeDriver then return end
+  local _, changed = UF.SyncRuntimeDriver(frame)
+  if changed then UF.RunDependentVitals(frame, frame._msufDispatchActive == true) end
+end
+
+local function DependentWorldIdentityUpdate(frame, event)
+  if UF.SyncRuntimeDriver then UF.SyncRuntimeDriver(frame) end
+  return IdentityEventUpdate(frame, event)
+end
+
 local function AddIdentityLifecycleHandlers(frame)
   if not FrameNeedsIdentityLifecycle(frame) then return end
   local unit = frame.MSUFUnitKey
-  AddEventHandler(frame, "PLAYER_ENTERING_WORLD", IdentityEventUpdate, true)
+  local dependent = UF.IsDependentUnit(unit)
+  local worldUpdate = dependent and DependentWorldIdentityUpdate or IdentityEventUpdate
+  AddEventHandler(frame, "PLAYER_ENTERING_WORLD", worldUpdate, true)
+  if dependent then
+    -- Own identity edges already rebind the alias. Observe the other direct
+    -- tokens' changes without running the full identity refresh.
+    if unit ~= "targettarget" then AddEventHandler(frame, "PLAYER_TARGET_CHANGED", DependentAliasChanged, true) end
+    if unit ~= "pettarget" then AddEventHandler(frame, "UNIT_PET", DependentAliasChanged, false) end
+    if DEPENDENT_CAN_FOCUS and unit ~= "focustarget" then
+      AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", DependentAliasChanged, true)
+    end
+  end
   if unit == "target" then
     AddEventHandler(frame, "PLAYER_TARGET_CHANGED", IdentityEventUpdate, true)
   elseif unit == "focus" then
@@ -1482,6 +1556,13 @@ function UF.RebuildRuntimeStatusState(frame)
   frame._msufGroupIdentityLabels = frame._msufIdentityLabels
   frame._msufGroupIdentityPath = frame._msufIdentityPath
   frame._msufIdentityBarPath = Compiler.CompileIdentityBars(frame)
+  local active = frame._msufActiveElements
+  if active and active.HealthText == true and UF.IsDependentUnit(frame.MSUFUnitKey) then
+    local healthText = UF.elements.HealthText
+    frame._msufDependentHealthText = healthText.SelectVitalsUpdate and healthText.SelectVitalsUpdate(frame) or nil
+  elseif frame._msufDependentHealthText then
+    frame._msufDependentHealthText = nil
+  end
   -- Prewarm the shared unit/read-through state while routes are compiled,
   -- never on the first target/combat event that consumes those routes.
   if (frame._msufIdentityPath or frame._msufIdentityBarPath)
@@ -1598,7 +1679,7 @@ local function RebuildFrameEvents(frame)
     frame._msufEventRouteNeedsIdentity = false
     pool[#pool + 1] = scratch
     UF.RebuildRuntimeStatusState(frame)
-    if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
+    if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver(frame) end
     return true
   end
   -- Only the per-event lists can be captured by a generic compiled route.
@@ -1712,7 +1793,7 @@ local function RebuildFrameEvents(frame)
   for event in pairs(buildEvents) do buildEvents[event] = nil end
   pool[#pool + 1] = scratch
   UF.RebuildRuntimeStatusState(frame)
-  if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
+  if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver(frame) end
   return true
 end
 UF.RefreshFrameUnitEventRouting = RebuildFrameEvents
@@ -1880,7 +1961,7 @@ local function RetargetFrameUnitEvents(frame)
     if hidden then SuspendHiddenFrameEvents(frame) end
   end
   UF.RebuildRuntimeStatusState(frame)
-  if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
+  if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver(frame) end
   return true
 end
 
@@ -1920,6 +2001,38 @@ function UF.RunLeanIdentity(frame, event)
       power, powerMax, powerType, powerToken, powerMetaChanged)
   end
   EndFrameEvent(frame)
+  return true
+end
+
+function UF.RunDependentVitals(frame, withinDispatch)
+  if frame._msufCoreSpecEnabled ~= true or frame._msufCoreVisible ~= true
+    or frame._msufPreviewAnimUnitRestore or PublicGlobals.MSUF_PreviewTestMode == true then return false end
+
+  local active = frame._msufActiveElements
+  local barPath = frame._msufIdentityBarPath
+  local healthText = frame._msufDependentHealthText
+  local powerText = active and active.PowerText == true and frame._msufUpdatePowerText
+  if not (barPath or healthText or powerText) then return false end
+
+  local unit, event = frame.MSUFUnitKey, "MSUF_DEPENDENT_TARGET_POLL"
+  if withinDispatch ~= true then BeginFrameEvent(frame, event) end
+  if ReadUnitExistsCached(frame, unit) ~= true then
+    if withinDispatch ~= true then EndFrameEvent(frame) end
+    return false
+  end
+
+  local hp, hpMax, healthPercentReady
+  local power, powerMax, powerType, powerToken, powerMetaChanged
+  if barPath then
+    hp, hpMax, healthPercentReady,
+      power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
+  end
+  if healthText then
+    if healthPercentReady == true then hp, hpMax = nil, nil end
+    healthText(frame, event, unit, hp, hpMax)
+  end
+  if powerText then powerText(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged) end
+  if withinDispatch ~= true then EndFrameEvent(frame) end
   return true
 end
 
@@ -2106,6 +2219,7 @@ local function RunDetachFrame(frame, wasApplying)
   frame._msufIdentityLabels = nil
   frame._msufIdentityPath = nil
   frame._msufIdentityBarPath = nil
+  frame._msufDependentHealthText = nil
   frame._msufRuntimeAllFns = nil
   frame._msufRuntimeAllCount = nil
   frame._msufRuntimeAllLabels = nil
@@ -2127,7 +2241,7 @@ local function RunDetachFrame(frame, wasApplying)
   end
   if SyncGroupLifecycleDriver then SyncGroupLifecycleDriver() end
   UF._msufApplyingSpec = wasApplying
-  if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver(frame) end
   return true
 end
 
@@ -2230,7 +2344,7 @@ local function RunElementSelection(frame, wasApplying, wasBatching, selection, s
   if wasBatching ~= true then rebuilt = RefreshFrameRoutingAfterElementApply(frame) end
   UF._msufApplyingSpec = wasApplying
   if (rebuilt or UF.dependentUnitParents[frame.MSUFUnitKey] ~= nil) and wasApplying ~= true and UF.SyncRuntimeDriver then
-    UF.SyncRuntimeDriver()
+    UF.SyncRuntimeDriver(frame)
   end
   if Compiler.AfterApply then Compiler.AfterApply(frame) end
   return true

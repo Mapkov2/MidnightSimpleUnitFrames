@@ -210,7 +210,7 @@ local function ReadPowerTypeCached(bar, unit, force)
       bar._msufPowerTypeUnit = nil
       bar._msufPowerDisplayMana = nil
     end
-    return nil, nil, powerType
+    return nil, nil, powerType, token
   end
   if bar then
     bar._msufPowerType = powerType
@@ -768,18 +768,25 @@ function Power.RefreshDetachedSyncedWidth(frame, power)
   return RefreshDetachedWidthOnly(frame, bar, power)
 end
 
-local function SetColor(frame, force, resolvedPowerType, resolvedToken, resolvedMetaReady)
+local function SetColor(frame, force, resolvedPowerType, resolvedToken, resolvedMetaReady, event)
   local bar = frame and frame.targetPowerBar
   if not bar then return end
   local power = SpecPower(frame) or {}
   local mode = power.mode
+  local valueSample = event == "MSUF_DEPENDENT_TARGET_POLL"
+  if valueSample and not force and bar._msufR ~= nil
+    and (mode == "class" or mode == "dark" or mode == "unified" or mode == "static") then
+    return
+  end
   local r, g, b
   if mode == "dark" or mode == "unified" or mode == "static" then
     r, g, b = power.r, power.g, power.b
   end
   if not (IsFiniteNumber(r) and IsFiniteNumber(g) and IsFiniteNumber(b)) then
     local powerType, token = resolvedPowerType, resolvedToken
-    local metaKnown = resolvedMetaReady == true and (powerType ~= nil or token ~= nil) or false
+    -- A dependent sample already tried to read the type. If both fields
+    -- were opaque, use the fallback color without another native read.
+    local metaKnown = resolvedMetaReady == true and (valueSample or powerType ~= nil or token ~= nil)
     if mode ~= "class" and resolvedMetaReady ~= true and frame.MSUFUnitKey then
       powerType, token = ReadPowerTypeCached(bar, frame.MSUFUnitKey, true)
       metaKnown = powerType ~= nil or token ~= nil
@@ -1107,7 +1114,10 @@ local function UpdatePercent(frame, event, unit, animate)
   -- this value read. Preserve that freshness here now that both consumers
   -- share the same result instead of calling ReadPowerTypeCached twice.
   local forceType = animate ~= true
-  local powerType, token = ReadPowerTypeCached(bar, unit, forceType)
+  local powerType, token, colorType, colorToken = ReadPowerTypeCached(bar, unit, forceType)
+  if event == "MSUF_DEPENDENT_TARGET_POLL" then
+    SetColor(frame, false, powerType or colorType, token or colorToken, true, event)
+  end
   local pct = UnitPowerPercent(unit, powerType or 0, true, SCALE_100)
   local secret = issecretvalue(pct) == true
   if not secret and pct == nil then pct = 0 end
@@ -1137,10 +1147,12 @@ local function UpdatePercent(frame, event, unit, animate)
 end
 
 local function UpdateAbsolute(frame, event, unit, animate)
-  local powerType, token
   local bar = frame.targetPowerBar
   local forceType = animate ~= true
-  powerType, token = ReadPowerTypeCached(bar, unit, forceType)
+  local powerType, token, colorType, colorToken = ReadPowerTypeCached(bar, unit, forceType)
+  if event == "MSUF_DEPENDENT_TARGET_POLL" then
+    SetColor(frame, false, powerType or colorType, token or colorToken, true, event)
+  end
   local value
   local maxValue
   local refreshMax = animate ~= true
@@ -1221,11 +1233,11 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
   end
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if ok then
-    if not animate then SetColor(frame, false, powerType, token, true) end
+    if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" then SetColor(frame, false, powerType, token, true) end
     return nil, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
   end
   local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, event, unit, animate)
-  if not animate then SetColor(frame, false, absoluteType, absoluteToken, true) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" then SetColor(frame, false, absoluteType, absoluteToken, true) end
   return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
 end
 
@@ -1255,7 +1267,7 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
     SnapBarInterpolation(bar)
   end
   local value, maxValue, powerType, token = UpdateAbsolute(frame, event, unit, animate)
-  if not animate then SetColor(frame, false, powerType, token, true) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" then SetColor(frame, false, powerType, token, true) end
   return value, maxValue, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
 
@@ -1283,7 +1295,7 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
   -- text from one UnitPower read, with UnitPowerMax cached between its owned
   -- invalidation events.
   local value, _, powerType, token = UpdateAbsolute(frame, event, unit, animate)
-  if not animate then SetColor(frame, false, powerType, token, true) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" then SetColor(frame, false, powerType, token, true) end
   return value, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
 
@@ -1313,12 +1325,12 @@ local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
   local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if not ok then
     local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, event, unit, animate)
-    if not animate then SetColor(frame, false, absoluteType, absoluteToken, true) end
+    if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" then SetColor(frame, false, absoluteType, absoluteToken, true) end
     return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
   end
   local value
   if powerType ~= nil then value = UnitPower(unit, powerType) else value = UnitPower(unit) end
-  if not animate then SetColor(frame, false, powerType, token, true) end
+  if not animate and event ~= "MSUF_DEPENDENT_TARGET_POLL" then SetColor(frame, false, powerType, token, true) end
   return value, nil, powerType, token, event == "UNIT_DISPLAYPOWER"
 end
 
