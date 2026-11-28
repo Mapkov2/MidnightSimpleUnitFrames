@@ -3,8 +3,7 @@
 ---
 --- Owns: the slash-menu window frame, nav rail host and sizing/minimize behavior.
 --- PageLifecycle owns page registration, construction, cache and restoration.
---- Navigation data, nav rail build,
---- persisted UI state, search bridge, page preview sync, and frame priority
+--- Navigation, persisted UI state, search, preview sync and frame priority
 --- helpers live in adjacent Menu2 modules.
 --- Must not own runtime unitframe/groupframe gameplay logic.
 local _, MSUF = ...
