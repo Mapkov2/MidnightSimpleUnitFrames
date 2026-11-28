@@ -704,7 +704,7 @@ if IS_FOREVER then
 
   SI.SpellIDs = {
     ClassicDruid = { Rejuvenation = 774, Regrowth = 8936 },
-    ClassicShaman = { AncestralFortitude = 16177 },
+    ClassicShaman = { AncestralFortitude = 16177, Riptide = 408521 },
     ClassicPriest = { PowerWordShield = 17, Renew = 139, PowerInfusion = 10060, WeakenedSoul = 6788 },
     ClassicPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
   }
@@ -718,6 +718,7 @@ if IS_FOREVER then
     return out
   end
   SI.AltSpellIDs = {
+    ClassicShaman = Ranks({ "Riptide", { 1239242, 1239243 } }),
     ClassicDruid = Ranks({
       "Rejuvenation", { 1058, 1430, 2090, 2091, 3627, 8910, 9839, 9840, 9841, 25299 },
       "Regrowth", { 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 },
@@ -756,6 +757,7 @@ if IS_FOREVER then
     },
     ClassicShaman = {
       Aura("AncestralFortitude", 0.20, 0.20, 1.00),
+      Aura("Riptide", 0.31, 0.76, 0.97),
     },
     ClassicPriest = {
       Aura("PowerWordShield", 1.00, 0.84, 0.28),
@@ -777,6 +779,7 @@ if IS_FOREVER then
     },
     ClassicShaman = {
       AncestralFortitude = Placed("icon", "TOPRIGHT", -1, -1, 22),
+      Riptide = Placed("icon", "TOPLEFT", 1, -1, 22),
     },
     ClassicPriest = {
       PowerWordShield = Placed("icon", "TOPRIGHT", -1, -1, 22),
