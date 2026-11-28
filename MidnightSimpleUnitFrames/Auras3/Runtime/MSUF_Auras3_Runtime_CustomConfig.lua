@@ -598,7 +598,7 @@ local function AppendReminderEnchantItems(lane, entry, index, items, GridOffset,
             local itemID = tonumber(entry.reminderEnchantItem)
             local durationSeconds = ClampNumber(
                 entry.reminderEnchantDurationMinutes, 60, 5, 240) * 60
-            local slotX, slotY = GridOffset(position)
+            local slotX, slotY, grid = GridOffset(position)
             items[#items + 1] = {
                 key = "reminderench_" .. tostring(index) .. "_" .. spec.key,
                 display = spec.label,
@@ -609,6 +609,7 @@ local function AppendReminderEnchantItems(lane, entry, index, items, GridOffset,
                 enchantDurationSeconds = durationSeconds,
                 icon = CustomConfig.ReminderItemIcon(itemID),
                 showWhenMissing = true,
+                fixedIconGrid = grid,
                 reminderAlpha = alpha,
                 reminderDesaturate = desaturate,
                 reminderColor = tint,
@@ -688,8 +689,13 @@ function CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, fil
         else
             col, row = n % perRow, math_floor(n / perRow)
         end
-        return Round((lane.x or 0) + col * step * xSign),
-            Round((lane.y or 0) + row * step * ySign)
+        local x, y = lane.x or 0, lane.y or 0
+        col, row = col * xSign, row * ySign
+        local slotX, slotY = Round(x + col * step), Round(y + row * step)
+        -- Keep the legacy fallback and its coordinate limits. The cold layout
+        -- uses the signed cell and one common origin at the actual owner scale.
+        if math.abs(slotX) > 4096 or math.abs(slotY) > 4096 then return slotX, slotY end
+        return slotX, slotY, { x = x, y = y, col = col, row = row, spacing = step - (lane.size or 1) }
     end
     -- Hidden entries must leave no gap, so the grid follows a running counter
     -- over the VISIBLE rows rather than the whitelist index.
@@ -707,7 +713,7 @@ function CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, fil
         end
         if visible then
             placedCount = placedCount + 1
-            local slotX, slotY = GridOffset(placedCount)
+            local slotX, slotY, grid = GridOffset(placedCount)
             items[#items + 1] = {
                 key = "reminder_" .. tostring(index) .. "_" .. tostring(spellID),
                 display = tostring(entry.name or ("Custom " .. tostring(index))),
@@ -718,6 +724,7 @@ function CustomConfig.CompileCustomReminderItems(lane, entry, index, placed, fil
                 hidePermanent = hidePermanent,
                 icon = boundItemID and CustomConfig.ReminderItemIcon(boundItemID) or CustomConfig.ReminderSpellIcon(spellID),
                 showWhenMissing = true,
+                fixedIconGrid = grid,
                 reminderAlpha = alpha,
                 reminderDesaturate = desaturate,
                 reminderColor = tint,

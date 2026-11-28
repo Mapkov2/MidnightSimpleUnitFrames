@@ -231,6 +231,8 @@ SlotLayoutSignature = function(slot)
     local color = slot.color or {}
     local effectColor = frame and frame.color or {}
     local reminderColor = slot.reminderColor or {}
+    local grid = slot.fixedIconGrid
+    local gridSignature = grid and table_concat({ "", grid.x, grid.y, grid.col, grid.row, grid.spacing }, ":") or ""
     return tostring(slot.visual) .. "\030" .. tostring(slot.hiddenVisual)
         .. "\030" .. tostring(slot.animateAppearance)
         .. "\030" .. tostring(slot.anchor) .. "\030" .. tostring(slot.x) .. "\030" .. tostring(slot.y)
@@ -266,7 +268,7 @@ SlotLayoutSignature = function(slot)
         .. "\030" .. tostring(slot.castSpellID) .. "\030" .. tostring(slot.castUnit)
         .. "\030" .. tostring(slot.castItem) .. "\030" .. tostring(slot.castItemID)
         .. "\030" .. tostring(slot.enchantSlot) .. "\030" .. tostring(slot.enchantInventorySlot)
-        .. "\030" .. tostring(slot.enchantDurationSeconds)
+        .. "\030" .. tostring(slot.enchantDurationSeconds) .. gridSignature
 end
 
 local function FinalizeSlot(slot)
@@ -407,6 +409,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         -- non-zero transition stays unobservable, so covering the placeholder
         -- is the only honest way to render a missing aura.
         showWhenMissing = item.showWhenMissing == true,
+        fixedIconGrid = item.showWhenMissing and item.fixedIconGrid or nil,
         reminderAlpha = Clamp01(item.reminderAlpha, 0.45),
         reminderDesaturate = item.reminderDesaturate ~= false,
         reminderColor = {
@@ -437,7 +440,7 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         -- Only the static border/shadow object inside this dedicated compiled
         -- appearance is shared with normal Auras. Preview and runtime consume
         -- the same slot, so no surface can silently fall back to Buff Style.
-        iconStyle = appearance and appearance.iconStyle or nil,
+        iconStyle = visual ~= "number" and visual ~= "none" and appearance and appearance.iconStyle or nil,
         -- Group scopes own their look through the shared Spell Icon Style.
         -- Unit-side items (Buff Reminder slots) carry their container's own
         -- resolved shape and zoom instead, since no style object applies.

@@ -18,7 +18,7 @@ local floor, max, min = math.floor, math.max, math.min
 local Painter = { AURA_BAR_FILL_ALPHA = 0.42 }
 A3.MockAuraPainter = Painter
 
-local REFLOW_EXPIRES_AT, REFLOW_SECONDS, REFLOW_HOLD_SECONDS = 2.6, 0.18, 3.4
+local REFLOW_EXPIRES_AT, ENTRANCE_SECONDS, REFLOW_HOLD_SECONDS = 2.6, 0.18, 3.4
 Painter.PREVIEW_REFLOW_EXPIRY = REFLOW_EXPIRES_AT
 
 function Painter.PreviewReflowReducedMotion(elapsed)
@@ -49,7 +49,7 @@ function Painter.ClearPreviewReflow(icon)
 end
 
 --- Uses the caller's preview clock and public sample positions only.
---- The first sample expires while the others keep their original artwork.
+--- The first sample hides on expiry and the remaining icons snap into their new slots.
 function Painter.UpdatePreviewReflow(icon, elapsed, reducedMotion)
     local flow = icon._msufPreviewAuraReflow
     if not (flow and flow.host) then return end
@@ -57,13 +57,12 @@ function Painter.UpdatePreviewReflow(icon, elapsed, reducedMotion)
     local cycle = expiresAt + REFLOW_HOLD_SECONDS
     local phase = elapsed and elapsed % cycle or 0
     local expired = phase >= expiresAt
-    local motionTime = phase - expiresAt
-    local motion = flow.animate and not reducedMotion
-    local exiting = flow.first and expired and motion and motionTime < REFLOW_SECONDS
-    local hidden = flow.first and expired and not exiting
+    local hidden = flow.first and expired
     if flow.first then
-        local alpha = exiting and 1 - motionTime / REFLOW_SECONDS or 1
-        if motion and elapsed and elapsed >= cycle and phase < REFLOW_SECONDS then alpha = phase / REFLOW_SECONDS end
+        local alpha = 1
+        if flow.animate and not reducedMotion and elapsed and elapsed >= cycle and phase < ENTRANCE_SECONDS then
+            alpha = phase / ENTRANCE_SECONDS
+        end
         if flow.alpha ~= alpha then
             icon:SetAlpha(alpha)
             flow.alpha = alpha
@@ -73,13 +72,8 @@ function Painter.UpdatePreviewReflow(icon, elapsed, reducedMotion)
         flow.hidden = hidden
         icon:SetShown(not hidden)
     end
-    local progress = expired and 1 or 0
-    if motion then
-        progress = max(0, min(1, (phase - expiresAt) / REFLOW_SECONDS, (cycle - phase) / REFLOW_SECONDS))
-        progress = progress * progress * (3 - 2 * progress)
-    end
-    local x = flow.x + (flow.compactX - flow.x) * progress
-    local y = flow.y + (flow.compactY - flow.y) * progress
+    local x = expired and flow.compactX or flow.x
+    local y = expired and flow.compactY or flow.y
     if flow.currentX ~= x or flow.currentY ~= y then
         flow.currentX, flow.currentY = x, y
         icon:ClearAllPoints()
@@ -87,7 +81,7 @@ function Painter.UpdatePreviewReflow(icon, elapsed, reducedMotion)
     end
     if elapsed then
         if flow.first then return phase, expiresAt, expired end
-        if flow.longSample then return phase, cycle + REFLOW_SECONDS end
+        if flow.longSample then return phase, cycle + ENTRANCE_SECONDS end
     end
 end
 
@@ -487,7 +481,7 @@ function Painter.LayoutAuraBar(bar, owner, lane, dispelType, inputs)
     LayoutAuraBarOutline(bar, lane, dispelType, inputs)
     local background = bar._msufA3AuraBarBackground
     if not background then
-        background = bar:CreateTexture(nil, "BACKGROUND")
+        background = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
         background:SetAllPoints(bar)
         bar._msufA3AuraBarBackground = background
     end
@@ -717,6 +711,8 @@ function Workbench:Paint(cfg, count, kind, style, textures)
     self.config, self.frame = lane, self.canvas
     local native = A3.Runtime and A3.Runtime.ButtonVisuals
     local classic = not native and A3._ClassicBackend.Buttons
+    self.canvas:SetScale(1)
+    self.count = count
     for i = 1, count do
         local sample = self.samples[i] or {}
         self.samples[i] = sample
@@ -741,7 +737,6 @@ function Workbench:Paint(cfg, count, kind, style, textures)
     for i = count + 1, #self.buttons do
         if classic then classic.HideButton(self.buttons[i]) else self.buttons[i]:Hide() end
     end
-    self.canvas:SetScale(1)
     local l, b, r, t
     for i = 1, count do
         local x, y, w, h = self.buttons[i]:GetRect()
@@ -756,6 +751,10 @@ function Workbench:Paint(cfg, count, kind, style, textures)
 end
 function Workbench:Fit(scale)
     self.canvas:SetScale(scale)
+    local native = A3.Runtime and A3.Runtime.ButtonVisuals
+    if native then
+        for i = 1, self.count do native.LayoutSample(self.buttons[i], self.lane, i) end
+    end
     self.canvas:ClearAllPoints()
     self.canvas:SetPoint("CENTER", self.parent, "CENTER", -self.offsetX * scale, -self.offsetY * scale)
 end
@@ -774,7 +773,7 @@ function Workbench:PreviewEntrance(enabled)
         local fade = self.entrance:CreateAnimation("Alpha")
         fade:SetFromAlpha(0)
         fade:SetToAlpha(1)
-        fade:SetDuration(REFLOW_SECONDS)
+        fade:SetDuration(ENTRANCE_SECONDS)
         fade:SetSmoothing("OUT")
     end
     self.entrance:Play()

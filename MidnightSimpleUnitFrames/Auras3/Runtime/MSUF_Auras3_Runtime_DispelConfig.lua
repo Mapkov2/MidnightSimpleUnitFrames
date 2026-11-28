@@ -80,6 +80,9 @@ function DS.Slots(symbol, size, spacing)
     local growth = DS.ResolveGrowth(symbol and symbol.growth, symbol and symbol.anchor)
     local slots, parts = {}, {}
     local step = size + spacing
+    local anchor = ReadAnchor(symbol, nil, "anchor", "TOPRIGHT")
+    local originX = Round(ClampNumber(symbol and symbol.x, 0, -256, 256))
+    local originY = Round(ClampNumber(symbol and symbol.y, 0, -256, 256))
     for i = 1, #DS.types do
         local dispelType = DS.types[i]
         local offset = (i - 1) * step
@@ -97,6 +100,9 @@ function DS.Slots(symbol, size, spacing)
             dispelType = dispelType,
             x = x,
             y = y,
+            pixelLane = { kind = "dispelSymbol", visual = "icon", anchor = anchor,
+                x = originX + x, y = originY + y, size = size, width = size, height = size,
+                fixedIconGrid = { x = originX, y = originY, col = x / step, row = y / step, spacing = spacing } },
             -- Shared immutable filter table; see DS.filters.
             candidateFilters = DS.filters[dispelType],
             candidateFilterSignature = dispelType,

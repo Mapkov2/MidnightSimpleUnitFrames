@@ -289,12 +289,12 @@ EffectPreview.ApplyDispelSymbolPreview = function(frame)
     local count = slots and #slots or 1
     -- Tiles hang off the host, which already sits at slot 1, so every tile is
     -- placed relative to that one origin.
-    local baseX, baseY = DS.SlotOffset(sensor, 1)
+    local baseX, baseY = DS.SlotOffset(sensor, 1, frame)
     for i = 1, count do
         local tile = DS.PreviewTile(host, i)
-        local slotX, slotY = DS.SlotOffset(sensor, i)
+        local slotX, slotY, width = DS.SlotOffset(sensor, i, frame)
         tile:ClearAllPoints()
-        tile:SetSize(size, size)
+        tile:SetSize(width or size, width or size)
         tile:SetPoint("TOPLEFT", host, "TOPLEFT", slotX - baseX, slotY - baseY)
         tile:SetAlpha(alpha)
         DS.PreviewArt(tile.Texture, style,
@@ -365,14 +365,14 @@ function EffectPreview.PaintScene(frame, sensors)
         end
         DS.LayoutButton(host, sensor, frame, 1)
         local slots, size = sensor.slots, ClampNumber(sensor.size, 14, 4, 64)
-        local x, y = DS.SlotOffset(sensor, 1)
+        local x, y = DS.SlotOffset(sensor, 1, frame)
         local count = slots and #slots or 1
         for i = 1, count do
             local tile = DS.PreviewTile(host, i)
-            local sx, sy = DS.SlotOffset(sensor, i)
+            local sx, sy, width = DS.SlotOffset(sensor, i, frame)
             tile:ClearAllPoints()
             tile:SetPoint("TOPLEFT", host, "TOPLEFT", sx - x, sy - y)
-            tile:SetSize(size, size)
+            tile:SetSize(width or size, width or size)
             tile:SetAlpha(Clamp01(sensor.alpha, 1))
             DS.PreviewArt(tile.Texture, sensor.style or "BLIZZARD", slots and slots[i] and slots[i].dispelType or "Magic")
             tile:Show()

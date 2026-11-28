@@ -543,7 +543,7 @@ function Runtime.HideRootMissing(parentFrame, slotRoot, ownerContainer)
 end
 
 --- Returns true when combat blocked the work and the caller must retry.
-function Runtime.SyncReminderCastButtons(parentFrame, slotRoot)
+function Runtime.SyncReminderCastButtons(parentFrame, slotRoot, container)
     if not (parentFrame and type(slotRoot) == "table") then return false end
     local rootKey = slotRoot.rootKey or "SpellIndicators"
     local signatures = parentFrame._msufA3ReminderCastSignatures
@@ -591,8 +591,7 @@ function Runtime.SyncReminderCastButtons(parentFrame, slotRoot)
             button._msufA3CastOwnerKey = rootKey
             button:ClearAllPoints()
             button:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
-            button:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT",
-                slot.x or 0, slot.y or 0)
+            Runtime.AnchorSlotRegion(button, parentFrame, slot, container)
             SyncFrameStrata(button, ResolveFrameStrata(parentFrame, slot.strata))
             -- Detail 2 sits one step above the AuraButton (1) and the
             -- placeholder (0) inside the same 32-wide Layer band, so the

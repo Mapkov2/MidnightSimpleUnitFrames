@@ -145,6 +145,8 @@ local function FlushUnitframeReanchorAfterScale()
     ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
     MSUF.Require("MSUF_ClassPower_RefreshLayout", "Runtime/MSUF_UIScaleRuntime.lua")(true)
     RefreshGroupFrameGeometryAfterScale()
+    local auras = MSUF.MSUF_Auras3
+    if auras and auras.RefreshPixelLayout then auras.RefreshPixelLayout() end
 end
 local function ScheduleUnitframeReanchorAfterScale()
     if PublicGlobals.MSUF_ScaleReanchorPending then return end

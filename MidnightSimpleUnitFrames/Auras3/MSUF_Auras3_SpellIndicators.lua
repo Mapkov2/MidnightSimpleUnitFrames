@@ -38,6 +38,19 @@ local function D()
     return Runtime._deps
 end
 
+-- The sealed slot, missing-aura placeholder and secure click surface must
+-- follow the same owned anchor when the unit's normal outline changes.
+function Runtime.AnchorSlotRegion(region, parentFrame, slot, container)
+    local point = slot.anchor or "TOPLEFT"
+    local anchors = container and container._msufA3IndicatorAnchors
+    local proxy = anchors and anchors[slot.slotKey]
+    if proxy then
+        region:SetPoint(point, proxy, point, 0, 0)
+    else
+        region:SetPoint(point, parentFrame, point, slot.x or 0, slot.y or 0)
+    end
+end
+
 local function SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
     if not (button and slot and parentFrame) then return false end
     local width, height = slot.width or slot.size or 1, slot.height or slot.size or 1
@@ -51,7 +64,7 @@ local function SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
         button._msufA3GeomWidth, button._msufA3GeomHeight = width, height
         button:ClearAllPoints()
         button:SetSize(width, height)
-        button:SetPoint(anchor, parentFrame, anchor, x, y)
+        Runtime.AnchorSlotRegion(button, parentFrame, slot, button._msufA3SpellIndicatorContainer)
     end
     SyncFrameStrata(button, ResolveFrameStrata(parentFrame, slot.strata))
     -- The native AuraSlot is only the lowest-level secret-visibility owner.
@@ -275,13 +288,26 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry, s
     if type(slotRoot.slots) == "table" then
         for i = 1, #slotRoot.slots do
             local slot = slotRoot.slots[i]
-            if not (slots and slots[i]) then SyncMissingFrame(parentFrame, slot, nil, container) end
+            if not (slots and slots[i]) then
+                if slot.visual == "icon" then
+                    -- Each owner has a bounded set of positions. User spell keys
+                    -- can change on import; reusing the ordinal avoids leaking frames.
+                    local key = (slotRoot.rootKey or "SpellIndicators") .. ":" .. i
+                    local ref = A3.ResolveOutlineSlotAnchor(parentFrame, slot, key, container)
+                    if ref and ref ~= parentFrame then
+                        local anchors = container._msufA3IndicatorAnchors or {}
+                        container._msufA3IndicatorAnchors = anchors
+                        anchors[slot.slotKey] = ref
+                    end
+                end
+                SyncMissingFrame(parentFrame, slot, nil, container)
+            end
         end
     end
     -- Click-to-cast is protected-frame work on a strictly cold path. When
     -- combat blocks it the signature stays unwritten, so the next apply --
     -- which the Aura runtime queues for PLAYER_REGEN_ENABLED -- redoes it.
-    if Runtime.SyncReminderCastButtons(parentFrame, slotRoot) == true
+    if Runtime.SyncReminderCastButtons(parentFrame, slotRoot, container) == true
         and type(A3._QueueDeferredAuraRuntime) == "function"
     then
         A3._QueueDeferredAuraRuntime(slotRoot.unit, "AURAS3_REMINDER_CLICK_CAST")

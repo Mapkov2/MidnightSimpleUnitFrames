@@ -530,7 +530,7 @@ local function ResolveLaneState(unit, kind, spec, cfg, metrics, textCfg, entries
     lane.shownIcons = shownIcons
     lane.auraBar = metrics and metrics.auraBar
     lane.size = size
-    lane.iconH = iconH
+    lane.iconW, lane.iconH = size, iconH
     lane.step = step
     lane.stepY = stepY
     lane.perRow = perRow
@@ -611,7 +611,7 @@ local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg
             icon:SetAlpha(1)
             icon._msufA3JoinedBarAlpha = nil
         end
-        icon:SetSize(lane.auraBar and lane.auraBar.buttonWidth or size, iconH)
+        icon:SetSize(lane.auraBar and lane.auraBar.buttonWidth or lane.iconW, iconH)
         icon:ClearAllPoints()
         local col, row = IconGridCoord(i, perRow, vertical)
         local body = group.Body or group
@@ -632,7 +632,7 @@ local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg
             if icon.Icon then
                 local entry = entries and entries[i]
                 icon.Icon:SetTexture((entry and entry.icon) or cfg.texture or spec.texture)
-                ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom, size, iconH)
+                ApplyIconZoom(icon.Icon, metrics and metrics.iconZoom or cfg.iconZoom, lane.iconW, iconH)
             end
             if type(A3.ApplyAuraIconShape) == "function" then
                 A3.ApplyAuraIconShape(icon, iconShape, nil, icon.Icon, icon.Shade, icon.Swipe)
@@ -640,7 +640,8 @@ local function LayoutPreviewIcons(group, unit, kind, spec, cfg, metrics, textCfg
             if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
             if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
             ApplyPreviewIconText(icon, unit, textCfg, i)
-            local skinned = A3.ApplyIconStyleSkinned(icon, iconStyle, size, iconShape, iconH)
+            local skinned = A3.ApplyIconStyleSkinned(icon, iconStyle, size, iconShape,
+                metrics and metrics.buttonHeight or size, metrics and metrics.buttonWidth or size)
             AuraPainter.SkinLayers(icon.Swipe, skinned)
         end
         icon:Show()
@@ -748,9 +749,22 @@ local function RefreshLane(unit, kind, spec, frame, frameSig, chrome, runtimeCon
             .. "\030" .. A3.GetDispelColorPreviewType()
     end
 
-    if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
+    local bounds = frame.MSUFNormalOutlineBounds
+    if group._msufA3RefreshSignature ~= signature or group._msufA3OutlineRevision ~= (bounds and bounds.revision)
+        or not (group.IsShown and group:IsShown()) then
         group._msufA3RefreshSignature = signature
+        local source = runtimeConfig and runtimeConfig.lanes and runtimeConfig.lanes[kind]
+        group._msufA3OutlineLane = MSUF.Client.IsRetail and not lane.auraBar and source or nil
+        if group._msufA3OutlineLane then
+            local iw, ih, padding, gap, width, height = A3.OutlineLaneMetrics(frame, source, 1)
+            if iw then
+                lane.iconW, lane.iconH, lane.padding = iw, ih, padding
+                lane.step, lane.stepY, lane.laneW, lane.laneH = iw + gap, ih + gap, width, height
+            end
+        end
         ApplyLaneLayout(group, frame, unit, kind, spec, cfg, metrics, textCfg, entries, lane, chrome)
+        bounds = frame.MSUFNormalOutlineBounds
+        group._msufA3OutlineRevision = bounds and bounds.revision
     elseif not spec.customIndex and not group._msufA3PreviewAnimated and MSUF.PreviewAnimation.enabled ~= true then
         -- Animation has its own tick; a refresh of unchanged standard lanes
         -- keeps those pixels and their pooled icons instead of restarting them.

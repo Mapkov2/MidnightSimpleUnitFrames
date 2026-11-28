@@ -76,35 +76,47 @@ end
 --- single slot at the configured offset; ALL mode steps each type along the
 --- growth axis. Shared by the live button and the menu preview so a dragged
 --- position can never mean two different things.
-function DS.SlotOffset(sensor, index)
+function DS.SlotOffset(sensor, index, previewFrame)
     local x = tonumber(sensor and sensor.x) or 0
     local y = tonumber(sensor and sensor.y) or 0
     local slot = sensor and sensor.slots and sensor.slots[index or 1]
     if slot then
         x = x + (tonumber(slot.x) or 0)
         y = y + (tonumber(slot.y) or 0)
+        if previewFrame and slot.pixelLane then
+            local zoom = previewFrame._msufBorderPreviewZoom or 1
+            local sx, sy = A3.ResolveOutlineLaneOffset(previewFrame, slot.pixelLane, x, y, zoom)
+            local width = A3.OutlineLaneMetrics(previewFrame, slot.pixelLane, zoom)
+            return sx, sy, width
+        end
     end
     return x, y
 end
 
-function DS.LayoutButton(button, sensor, parentFrame, index)
-    local size = ClampNumber(sensor.size, 14, 4, 64)
-    local anchor = sensor.anchor or "TOPRIGHT"
-    local x, y = DS.SlotOffset(sensor, index)
+function DS.LayoutButton(button, sensor, parentFrame, index, native)
+    local anchors = sensor._msufA3SymbolAnchors
+    local proxy = anchors and anchors[index]
     button:ClearAllPoints()
-    button:SetSize(size, size)
-    button:SetPoint(anchor, parentFrame, anchor, x, y)
+    if proxy then
+        button:SetAllPoints(proxy)
+    else
+        local anchor = sensor.anchor or "TOPRIGHT"
+        local x, y, width = DS.SlotOffset(sensor, index, not native and parentFrame)
+        local size = width or ClampNumber(sensor.size, 14, 4, 64)
+        button:SetSize(size, size)
+        button:SetPoint(anchor, parentFrame, anchor, x, y)
+    end
     SyncFrameStrata(button, ResolveFrameStrata(parentFrame, sensor.strata))
     if button.SetFrameLevel then button:SetFrameLevel(DispelSensorFrameLevel(parentFrame, sensor, parentFrame)) end
     return true
 end
 
-local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
+local function LayoutDispelSensorButton(button, sensor, parentFrame, index, native)
     if not (button and sensor and parentFrame) then return false end
     if sensor.visual == "symbol" then
         -- Symbols are the one sensor visual with their own rect: they are a
         -- placed indicator, not a wash over the health bar.
-        return DS.LayoutButton(button, sensor, parentFrame, index)
+        return DS.LayoutButton(button, sensor, parentFrame, index, native)
     end
     -- The AuraButton owns native assignment/visibility, but its stable geometry
     -- is the health-bar rectangle. The visible region is anchored separately to
@@ -251,7 +263,7 @@ local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, own
     button._msufA3DispelSensor = sensor.visual
     if button.EnableMouse then button:EnableMouse(false) end
     button:SetMouseMotionEnabled(false)
-    if not LayoutDispelSensorButton(button, sensor, parentFrame, index) then return false end
+    if not LayoutDispelSensorButton(button, sensor, parentFrame, index, true) then return false end
     -- Reset reused native buttons before a visual-specific alpha is applied.
     -- The overlay deliberately owns alpha on the button below: Blizzard's
     -- PreserveAsset path recolors its texture with SetVertexColor(..., 1) on

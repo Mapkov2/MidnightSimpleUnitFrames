@@ -220,6 +220,7 @@ local function ApplyBossPreviewFrameData(frame, index)
 
   local r, g, b, a = ResolveBossPreviewHealthColor(frame, hp / hpMax)
   SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, r, g, b, a)
+  UF.elements.Health.PaintSampleBackgroundValue(frame, hp / hpMax)
   frame._msufAlphaLastHP = nil
   SetBarPreview(frame.targetPowerBar or frame.powerBar or frame.Power, power, powerMax, 0.05, 0.64, 0.92)
   if UF.ApplyPredictionPreview then UF.ApplyPredictionPreview(frame, BossPreviewPercent(frame.MSUFUnitKey)) end
@@ -352,6 +353,7 @@ local function ApplyArenaPreviewFrameData(frame, index)
 
   local r, g, b, a = ResolveArenaPreviewHealthColor(frame, pct / 100, classToken)
   SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, r, g, b, a)
+  UF.elements.Health.PaintSampleBackgroundValue(frame, hp / hpMax)
   frame._msufAlphaLastHP = nil
   SetBarPreview(frame.targetPowerBar or frame.powerBar or frame.Power, power, powerMax, 0.05, 0.64, 0.92)
   ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classToken)

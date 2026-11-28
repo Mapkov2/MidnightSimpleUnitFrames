@@ -185,6 +185,10 @@ local function PreparePreviewFrame(scene, index, layout, w, h, spacing, growth, 
   local frame = EnsurePreviewFrame(scene, index, layout)
   SetPreviewFrameSize(frame, w, h)
   PositionPreviewFrame(frame, layout, index, scene.kind, w, h, spacing, growth, upc, primary, blockW, blockH)
+  if MSUF.Client.IsRetail then
+    frame._msufBorderPreviewZoom = scene.scale
+    MSUF.UF.elements.Borders.RefreshPixelGeometry(frame)
+  end
   if not frame.MSUFSpec and frame.Hide then frame:Hide() end
   return frame
 end

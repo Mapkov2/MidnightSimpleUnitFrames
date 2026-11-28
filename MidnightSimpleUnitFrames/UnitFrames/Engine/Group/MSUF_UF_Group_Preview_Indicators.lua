@@ -109,9 +109,15 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot, sample)
   if not (height >= 1) then height = 1 end
   local anchor = tostring(slot.anchor or "TOPLEFT"):upper()
   if not VALID_POINTS[anchor] then anchor = "TOPLEFT" end
+  local x, y = tonumber(slot.x) or 0, tonumber(slot.y) or 0
+  if MSUF.Client.IsRetail then
+    GF.PreviewAuras.PrepareLanePixels(frame, visual, slot)
+    x, y = visual._msufPreviewAuraX, visual._msufPreviewAuraY
+    width, height = visual._msufPreviewAuraWidth or width, visual._msufPreviewAuraHeight or height
+  end
   visual:ClearAllPoints()
   visual:SetSize(width, height)
-  visual:SetPoint(anchor, frame, anchor, tonumber(slot.x) or 0, tonumber(slot.y) or 0)
+  visual:SetPoint(anchor, frame, anchor, x, y)
   if visual.SetFrameLevel and frame.GetFrameLevel then
     local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
     visual:SetFrameLevel(layers.FrameElementLevel and layers.FrameElementLevel(frame, slot.layer, 9, 1)
@@ -127,6 +133,12 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot, sample)
   local swipe, timer, stack, durationBar = visual._swipe, visual._timer,
     visual._stack, visual._durationBar
   local A3 = MSUF and MSUF.MSUF_Auras3
+  local nativeSwatch = MSUF.Client.IsRetail == true and visualType == "square"
+  if nativeSwatch ~= (visual._msufSquareTextureOverlay == true) then
+    -- The native swatch covers the inner band, leaving the outside ring and shadow visible.
+    texture:SetDrawLayer(nativeSwatch and "OVERLAY" or "ARTWORK", 0)
+    visual._msufSquareTextureOverlay = nativeSwatch
+  end
   texture:ClearAllPoints()
   texture:SetAllPoints(visual)
   if swipe then swipe:Hide() end
@@ -139,7 +151,8 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot, sample)
       visual._msufSkinShape = nil
       A3.ApplyAuraIconShape(visual, "RECTANGLE", nil, texture, swipe)
     end
-    A3.ApplyIconStyleSkinned(visual, nil)
+    A3.ApplyIconStyleSkinned(visual, nativeSwatch and slot.iconStyle or nil, size,
+      nativeSwatch and slot.iconShape or nil, slot.height or size, slot.width or size)
   end
 
   local barOnly = slot.showDurationBar == true and slot.durationBarDisplay == "BAR_ONLY"
@@ -195,7 +208,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot, sample)
         visual._msufSkinShape = skinShape
         A3.ApplyAuraIconShape(visual, skinShape or "RECTANGLE", nil, texture, swipe)
       end
-      A3.ApplyIconStyleSkinned(visual, selectedValue1, size, skinShape, height, width)
+      A3.ApplyIconStyleSkinned(visual, selectedValue1, size, skinShape, slot.height or size, slot.width or size)
     end
   end
 

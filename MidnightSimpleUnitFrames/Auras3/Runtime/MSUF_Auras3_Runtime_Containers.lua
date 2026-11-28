@@ -65,6 +65,12 @@ local RegisterNativeContainer
 local ResolveFrameStrata = dependencies.Platform.ResolveFrameStrata
 local SensorLayoutSignature = dependencies.Signatures.SensorLayoutSignature
 local SyncContainerGeometry = dependencies.ButtonVisuals.SyncContainerGeometry
+local GridPixel = dependencies.ButtonVisuals.GridPixel
+local GridMetrics = dependencies.ButtonVisuals.GridMetrics
+local SyncPixelFlow = dependencies.ButtonVisuals.SyncPixelFlow
+local InCombat = dependencies.Platform.InCombat
+local AuraRuntimeCombatBlocked = dependencies.Platform.AuraRuntimeCombatBlocked
+local pixelFlowOwners = setmetatable({}, { __mode = "k" })
 local SyncFrameStrata = dependencies.Platform.SyncFrameStrata
 local ValidateNativeAuraContainerContract = dependencies.NativeContract.ValidateNativeAuraContainerContract
 
@@ -115,16 +121,15 @@ local function BuildManagedAuraGroupOptions(container, lane)
     }
 end
 
-local function ManagedAuraGroupLayoutOptions(lane, index)
-    local size = lane.size or DEFAULT_SHARED.iconSize
-    local spacing = lane.spacing or DEFAULT_SHARED.spacing
+local function ManagedAuraGroupLayoutOptions(lane, index, pixel)
+    local width, height, spacing = GridMetrics(lane, pixel, DEFAULT_SHARED)
     return {
         -- Blizzard 12.1.0 validates these per-group field names in
         -- Blizzard_CustomAuraContainer.lua. frameWidth/frameHeight (old) and
         -- elementSpacingX/elementSpacingY (pre-PTR7) are ignored; PTR 7 reads
         -- elementWidth/elementHeight plus elementSpacing (X) and lineSpacing (Y).
-        elementWidth = lane.buttonWidth or size,
-        elementHeight = lane.buttonHeight or size,
+        elementWidth = width,
+        elementHeight = height,
         elementSpacing = spacing,
         lineSpacing = spacing,
         layoutIndex = index,
@@ -132,8 +137,14 @@ local function ManagedAuraGroupLayoutOptions(lane, index)
     }
 end
 
-local function ApplyManagedAuraGroupLayout(container, groupKey, lane, index)
-    container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane, index))
+local function ApplyManagedAuraGroupLayout(container, groupKey, lane, index, state)
+    state = state or container
+    local pixel = GridPixel(container)
+    container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane, index, pixel))
+    if pixel then pixelFlowOwners[container] = true end
+    container._msufA3FlowPixel = pixel
+    state._msufA3FlowPixelRevision = A3._pixelLayoutRevision
+    state._msufA3FlowLayoutIndex = index
     A3.nativeAuraRuntimeLayoutError = nil
     return true
 end
@@ -208,22 +219,32 @@ local function BuildManagedPriorityAuraGroupOptions(container, lane, index, spel
     }
 end
 
-local function ManagedPriorityAuraGroupLayoutOptions(lane, index)
-    local size = lane.size or DEFAULT_SHARED.iconSize
-    local spacing = lane.spacing or DEFAULT_SHARED.spacing
+local function ManagedPriorityAuraGroupLayoutOptions(lane, index, pixel)
+    local width, height, spacing = GridMetrics(lane, pixel, DEFAULT_SHARED)
     return {
         -- Each priority entry owns one native AuraGroup. Empty groups contribute
         -- no spacing, while non-empty groups are packed by Blizzard in ascending
         -- layoutIndex order. elementSpacing must stay zero here: the distance
         -- between these one-frame groups is owned by groupSpacing.
-        elementWidth = lane.buttonWidth or size,
-        elementHeight = lane.buttonHeight or size,
+        elementWidth = width,
+        elementHeight = height,
         elementSpacing = 0,
         lineSpacing = spacing,
         groupSpacing = spacing,
         groupLineSpacing = spacing,
         layoutIndex = index,
     }
+end
+
+local function ApplyPriorityFlowGeometry(container, lane)
+    local pixel = GridPixel(container)
+    local keys = container._msufA3PriorityGroupKeys
+    for index = 1, #keys do
+        container:SetAuraGroupLayout(keys[index], ManagedPriorityAuraGroupLayoutOptions(lane, index, pixel))
+    end
+    if pixel then pixelFlowOwners[container] = true end
+    container._msufA3FlowPixel = pixel
+    container._msufA3FlowPixelRevision = A3._pixelLayoutRevision
 end
 
 local function CreateManagedPriorityNativeLane(container, lane, parentFrame)
@@ -242,12 +263,26 @@ local function CreateManagedPriorityNativeLane(container, lane, parentFrame)
         container._msufA3PriorityGroupKeys[i] = groupKey
         container:AddAuraGroup(groupKey, lane.nativeFilter,
             BuildManagedPriorityAuraGroupOptions(container, lane, i, priority[i]))
-        container:SetAuraGroupLayout(groupKey, ManagedPriorityAuraGroupLayoutOptions(lane, i))
     end
+    ApplyPriorityFlowGeometry(container, lane)
     container._msufA3FilterString = lane.nativeFilter
     container.createdButtons = groupCount
     container._msufA3MaxFrameCount = groupCount
     return PublishNativeContainer(container)
+end
+
+local function ApplyItemEnchantmentFlow(container, lane)
+    if lane.weaponEnchants ~= true or type(container.SetItemEnchantmentLayout) ~= "function" then return end
+    local placement = CustomAuraContainerItemEnchantmentPlacement
+    local width, height, gap = GridMetrics(lane, GridPixel(container), DEFAULT_SHARED)
+    container:SetItemEnchantmentLayout({
+        placement = placement and placement.BeforeAuraGroups or 0,
+        elementWidth = width,
+        elementHeight = height,
+        elementSpacing = gap,
+        lineSpacing = gap,
+        layoutIndex = container._msufA3EnchantmentLayoutIndex,
+    })
 end
 
 local function AttachItemEnchantments(container, lane, layoutIndex)
@@ -267,15 +302,8 @@ local function AttachItemEnchantments(container, lane, layoutIndex)
         }
         container:AddItemEnchantment(slots and slots.MainHand or 0, enchantOptions)
         container:AddItemEnchantment(slots and slots.OffHand or 1, enchantOptions)
-        if type(container.SetItemEnchantmentLayout) == "function" then
-            local placement = CustomAuraContainerItemEnchantmentPlacement
-            container:SetItemEnchantmentLayout({
-                placement = placement and placement.BeforeAuraGroups or 0,
-                elementSpacing = lane.spacing or 0,
-                lineSpacing = lane.spacing or 0,
-                layoutIndex = layoutIndex,
-            })
-        end
+        container._msufA3EnchantmentLayoutIndex = layoutIndex
+        ApplyItemEnchantmentFlow(container, lane)
     end
 end
 
@@ -301,8 +329,26 @@ local function CreateManagedNativeLane(container, lane, parentFrame)
     return PublishNativeContainer(container)
 end
 
+local function BindSymbolAnchor(container, sensor, parentFrame, index)
+    local slot = sensor.visual == "symbol" and sensor.slots and sensor.slots[index]
+    if not (slot and slot.pixelLane) then return end
+    local key = "DispelSymbol:" .. index
+    local ref = A3.ResolveOutlineSlotAnchor(parentFrame, slot.pixelLane, key, container)
+    if ref == parentFrame then return end
+    local anchors = sensor._msufA3SymbolAnchors or {}
+    sensor._msufA3SymbolAnchors = anchors
+    anchors[index] = ref
+end
+
 local function BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex, visuals)
     sensor, visuals = CaptureNativeInputs(A3, container, sensor, visuals)
+    if visuals then
+        for i = 1, #visuals do
+            BindSymbolAnchor(container, visuals[i].sensor, parentFrame, visuals[i].sensorIndex)
+        end
+    else
+        BindSymbolAnchor(container, sensor, parentFrame, sensorIndex or buttonIndex)
+    end
     return {
         maxFrameCount = 1,
         initializeFrame = function(button)
@@ -318,6 +364,14 @@ local function GroupLaneSlotKey(lane)
 end
 
 local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonIndex)
+    local anchorFrame, x, y = parentFrame, lane.x, lane.y
+    if parentFrame.MSUFSpec and lane.anchor ~= "CENTER" and dependencies.Platform.OutlineIconLane(lane) then
+        if container._msufA3StandaloneAuraSlot and container._msufA3LayoutHost then
+            anchorFrame, x, y = container._msufA3LayoutHost, 0, 0
+        else
+            anchorFrame, x, y = A3.ResolveOutlineSlotAnchor(parentFrame, lane, lane.rootKey, container)
+        end
+    end
     lane = CaptureNativeInputs(A3, container, lane)
     local sortMethod, sortDirection = AuraSortEnums(lane)
     local _, candidateFilters = EffectiveLaneFilters(lane)
@@ -343,7 +397,7 @@ local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonInd
             -- One icon fills the old fixed-size lane host exactly, so anchoring
             -- that icon by the configured outer anchor preserves its position.
             button:ClearAllPoints()
-            button:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
+            button:SetPoint(lane.anchor, anchorFrame, lane.anchor, x, y)
             -- Standalone slots inherit the lane alpha from their container.
             -- Shared GroupSlots cannot do that because every slot can have a
             -- different alpha, so those buttons continue to own it directly.
@@ -468,6 +522,9 @@ local function UpdateGroupFlowLane(container, lane, state)
         local sortMethod, sortDirection = AuraSortEnums(lane)
         container:SetAuraGroupSortMethod(groupKey, sortMethod, sortDirection)
         state._msufA3SortSignature = sortSignature
+    end
+    if Containers.FlowPixelRefreshDue(container, state) then
+        ApplyManagedAuraGroupLayout(container, groupKey, lane, state._msufA3FlowLayoutIndex, state)
     end
     return true
 end
@@ -722,7 +779,52 @@ local function AddManagedFlowGroup(container, lane, state, index)
     state._msufA3MaxFrameCount = lane.max
     state._msufA3CandidateFilterSignature = candidateFilterSignature
     state._msufA3SortSignature = AuraSortSignature(lane)
-    return ApplyManagedAuraGroupLayout(container, key, lane, index)
+    return ApplyManagedAuraGroupLayout(container, key, lane, index, state)
+end
+
+local function RefreshPixelFlowGroup(container, lane, state)
+    if lane and state and state._msufA3ManagedGroupKey then
+        ApplyManagedAuraGroupLayout(container, state._msufA3ManagedGroupKey, lane, state._msufA3FlowLayoutIndex, state)
+    end
+end
+
+function Containers.FlowPixelRefreshDue(container, state)
+    return state._msufA3FlowPixelRevision ~= A3._pixelLayoutRevision
+        and not InCombat() and not AuraRuntimeCombatBlocked() and GridPixel(container) ~= nil
+end
+
+function Containers.RefreshFlowOwner(container, config)
+    local flow = config
+    if container._msufA3GroupSlotsRoot == true then
+        flow = config.flowLane
+        RefreshPixelFlowGroup(container, flow, container)
+        RefreshPixelFlowGroup(container, config.trailingFlowLane, container._msufA3TrailingFlowGroup)
+    elseif container._msufA3PriorityAuraGroups == true then
+        ApplyPriorityFlowGeometry(container, config)
+    else
+        RefreshPixelFlowGroup(container, config, container)
+    end
+    if flow then
+        ApplyItemEnchantmentFlow(container, flow)
+        SyncPixelFlow(container, config.flowGeometry or flow)
+    end
+end
+
+function Containers.RefreshFlowPixels()
+    if InCombat() or AuraRuntimeCombatBlocked() then return end
+    for container in pairs(pixelFlowOwners) do
+        local config = container._msufA3NativeLaneConfig
+        local pixel = config and container._msufA3NativeRegistered == true and GridPixel(container)
+        if pixel then
+            if pixel ~= container._msufA3FlowPixel then
+                Containers.RefreshFlowOwner(container, config)
+            else
+                container._msufA3FlowPixelRevision = A3._pixelLayoutRevision
+                local trailing = container._msufA3TrailingFlowGroup
+                if trailing then trailing._msufA3FlowPixelRevision = A3._pixelLayoutRevision end
+            end
+        end
+    end
 end
 
 local function CreateManagedGroupSlots(container, groupSlots, parentFrame)

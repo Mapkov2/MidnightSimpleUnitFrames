@@ -97,6 +97,57 @@ else
     Check(type(perRow) == "table" and perRow ~= shared, "fixture premise: the per-row resolve should compile its own table")
     Same(shared.lanes, perRow.lanes, "lanes", 0)
     Same(shared.spellIndicators, perRow.spellIndicators, "spellIndicators", 0)
+    -- The menu uses the cold runtime resolver for each row's final position and zoom.
+    -- Keep this contract observable independently of the emulator's native pixel rounding.
+    local previewLane = assert(shared.lanes.buff)
+    local oldSolve, oldMetrics = A3.ResolveOutlineLaneOffset, A3.OutlineLaneMetrics
+    local oldZoom = row._msufBorderPreviewZoom
+    local sampleSlot = { visual = "icon", anchor = "TOPLEFT", x = 0, y = 4, size = 17,
+        icon = "Interface\\Icons\\INV_Misc_QuestionMark", iconShape = "RECTANGLE" }
+    local positions = 0
+    A3.ResolveOutlineLaneOffset = function(owner, lane, x, y, zoom)
+        if lane == sampleSlot then return x - 0.25, y + 0.5, true end
+        if lane ~= previewLane then return x, y, false end
+        Check(owner == row and zoom == 4, "aura resolver received another row or zoom")
+        Check(x == lane.x and y == lane.y, "preview replaced the configured offsets")
+        positions = positions + 1
+        return x + 0.25, y - 0.25, true
+    end
+    A3.OutlineLaneMetrics = function(owner, lane, zoom)
+        if lane == sampleSlot then return 16, 18, 0, 0, 16, 18 end
+        if lane == previewLane then
+            Check(owner == row and zoom == 4, "icon metrics received another row or zoom")
+            return 19, 21, 0, 2, 61, 21
+        end
+    end
+    row._msufBorderPreviewZoom = 4
+    GF.PreviewFrameAuras(row, "raid", 7, nil, row._msufGFSpecBase)
+    local host = row._msufGFFrameAuraPreviewHosts.buff
+    local _, parent, _, x, y = host:GetPoint(1)
+    Check(positions == 1 and parent == row and x == previewLane.x + 0.25 and y == previewLane.y - 0.25,
+        "group preview ignored the corrected aura origin")
+    Check(host:GetWidth() == 61 and host:GetHeight() == 21, "group preview lost the projected footprint")
+    local icons = 0
+    for _, icon in ipairs(row._msufGFFrameAuraPreviews) do
+        if icon:IsShown() and icon._sceneAuraLayoutHost == host then
+            Check(icon:GetWidth() == 19 and icon:GetHeight() == 21, "preview art did not use projected size")
+            icons = icons + 1
+        end
+    end
+    Check(icons > 0, "no projected raid aura samples")
+    GF.PreviewFrameAuras(row, "raid", 7, nil, row._msufGFSpecBase)
+    Check(positions == 1, "unchanged preview reapplied the pixel resolver")
+    -- The options inserter rewrites this same slot table on each settings refresh.
+    local sampleOwner = env.CreateFrame("Frame", nil, row)
+    for _, value in ipairs({ 0, 3 }) do
+        sampleSlot.x = value
+        local visual = GF.PreviewSpellSample(row, sampleOwner, sampleSlot)
+        local _, rel, _, sx, sy = visual:GetPoint(1)
+        Check(rel == row and sx == value - 0.25 and sy == 4.5, "spell sample reused a stale corrected anchor")
+        Check(visual:GetWidth() == 16 and visual:GetHeight() == 18, "spell sample ignored its pixel size")
+    end
+    A3.ResolveOutlineLaneOffset, A3.OutlineLaneMetrics = oldSolve, oldMetrics
+    row._msufBorderPreviewZoom = oldZoom
 end
 
 -- Live frames are untouched: a real raid never reaches the preview resolver.

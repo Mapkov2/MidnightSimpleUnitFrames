@@ -617,6 +617,7 @@ local function StoreUnitFrameRestore(frame)
     source = PA.source,
     unit = frame.MSUFUnitKey,
     healthBar = StoreStatusBarState(frame.hpBar or frame.Health or frame.health),
+    healthBackgroundValue = frame.healthBackgroundBar and frame.healthBackgroundBar._msufHealthMissingValue,
     powerBar = StoreStatusBarState(frame.targetPowerBar or frame.powerBar or frame.Power or frame.power),
     incomingHealBar = StoreStatusBarState(frame.incomingHealBar),
     absorbBar = StoreStatusBarState(frame.absorbBar),
@@ -643,10 +644,29 @@ local function RestoreUnitFrame(frame, refreshRuntime)
   if not restore then return false end
 
   RestoreStatusBarState(restore.healthBar, frame, "health")
+  local background = frame.healthBackgroundBar
+  local refreshBackground
+  if background and frame._msufHealthBackgroundNeedsValue == true then
+    local unit = frame.MSUFUnitKey
+    local value
+    if unit ~= nil and background._msufHealthMissingUnit == unit then
+      value = background._msufHealthMissingValue
+    elseif restore.unit == unit and background._msufHealthMissingValue ~= nil then
+      value = restore.healthBackgroundValue
+    end
+    if value ~= nil then
+      background:SetValue(value)
+    else
+      refreshBackground = true
+    end
+    background._msufHealthMissingValue, background._msufHealthMissingUnit = nil, nil
+  end
   RestoreStatusBarState(restore.powerBar, frame, "power")
   RestoreStatusBarState(restore.incomingHealBar, frame)
   RestoreStatusBarState(restore.absorbBar, frame)
   RestoreStatusBarState(restore.healAbsorbBar, frame)
+  local prediction = MSUF.UF.Elements.Prediction
+  if prediction then prediction.InvalidatePreviewBarValues(frame) end
   frame._msufPreviewNameText = restore.previewNameText
   frame._msufNameTextUnit = restore.nameTextUnit
   frame._msufNameStatusUnit = restore.nameStatusUnit
@@ -662,6 +682,8 @@ local function RestoreUnitFrame(frame, refreshRuntime)
   if power and power.SyncPreviewResource then power.SyncPreviewResource(frame, false) end
   if refreshRuntime == true then
     RefreshUnitFrameRuntimeAfterPreview(frame)
+  elseif refreshBackground and frame._msufUpdateHealth then
+    frame._msufUpdateHealth(frame, RuntimeStopReason(frame), frame.MSUFUnitKey)
   end
   frame._msufPreviewAnimState = nil
   frame._msufPreviewAnimUnitRestore = nil
@@ -845,6 +867,8 @@ function PA.ApplyUnitFrame(frame, index, kind)
   if PA.enabled ~= true or InCombat() or not IsVisible(frame) then return false end
   local state = PA.FrameState(frame, index, kind, frame._msufPreviewAnimState or {})
   frame._msufPreviewAnimState = state
+  -- Enter the synthetic range with both parts snapped before easing later samples.
+  local animateHealth = frame._msufPreviewAnimUnitRestore ~= nil
   StoreUnitFrameRestore(frame)
 
   local hpMax = 1000000
@@ -852,7 +876,8 @@ function PA.ApplyUnitFrame(frame, index, kind)
   local powerMax = 240000
   local power = floor(powerMax * (state.powerPct or 0.75) + 0.5)
 
-  SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, true)
+  SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, animateHealth)
+  MSUF.UF.Elements.Health.PaintSampleBackgroundValue(frame, hp / hpMax, animateHealth)
   local powerBar = frame.targetPowerBar or frame.powerBar or frame.Power or frame.power
   local powerSpec = frame.MSUFSpec and frame.MSUFSpec.power
   if powerSpec and powerSpec.enabled ~= true then

@@ -210,6 +210,23 @@ function Facade.EnsureDeferredAuraRuntimeDriver()
     frame:SetScript("OnEvent", function(self, event)
         if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if A3._pixelLayoutPending then A3.RefreshPixelLayout() end
+        local owners = A3._pendingOutlineOwners
+        if owners then
+            A3._pendingOutlineOwners = nil
+            for owner, rebuild in pairs(owners) do
+                UF.GetNormalOutlineBounds(owner)
+                A3.RefreshOutlineLaneAnchors(owner)
+                if type(rebuild) == "table" then
+                    -- Only combat-born AuraSlots that captured the original raw
+                    -- point need a fresh initializeFrame callback on their owner.
+                    for container in pairs(rebuild) do container._msufA3StructuralSignature = nil end
+                    if owner.Auras and owner.Auras._msufA3Applied then
+                        A3.RenderFrame(owner, "AURAS3_OUTLINE_ANCHORS")
+                    end
+                end
+            end
+        end
         if type(Facade.FlushDeferredAuraRuntime) == "function" then Facade.FlushDeferredAuraRuntime() end
     end)
     A3._deferredAuraRuntimeFrame = frame
@@ -394,6 +411,18 @@ function Facade.FlushDeferredAuraRuntime()
         end
     end
     Facade.NotifyAuraColdpathPreview(reason, previewScope)
+    return true
+end
+
+function A3.RefreshPixelLayout()
+    if InCombat() or AuraRuntimeCombatBlocked() then
+        A3._pixelLayoutPending = true
+        Facade.EnsureDeferredAuraRuntimeDriver():RegisterEvent("PLAYER_REGEN_ENABLED")
+        return false
+    end
+    A3._pixelLayoutPending = nil
+    A3._pixelLayoutRevision = (A3._pixelLayoutRevision or 0) + 1
+    Runtime.Containers.RefreshFlowPixels()
     return true
 end
 

@@ -232,6 +232,7 @@ end
 
 NativeApply.HideLane = function(lane)
     if lane then
+        lane._msufA3OutlineRetired = true
         NativeApply.UnregisterNativeContainer(lane)
         lane:Hide()
         if lane._msufA3LayoutHost and lane._msufA3LayoutHost.Hide then
@@ -291,6 +292,18 @@ local function RetireNativeLane(root, key, container, _, discard)
     root[key] = nil
 end
 
+local function RestoreOutlineHosts(owner, frame)
+    owner._msufA3OutlineRetired = nil
+    local layoutHost = owner._msufA3LayoutHost
+    if layoutHost and layoutHost._msufA3OutlineLane then
+        dependencies.Platform.BindLaneHost(layoutHost, frame, layoutHost._msufA3OutlineLane)
+    end
+    local slots = owner._msufA3OutlineSlotLanes
+    if slots then
+        for key, slot in pairs(slots) do A3.ResolveOutlineSlotAnchor(frame, slot, key, owner) end
+    end
+end
+
 -- Swaps the container parked under `signature` in for `current`, which
 -- `retire` parks. Returns `current` when it already fits or none is parked.
 local function ReviveNativeLane(root, key, current, signature, retire, parentFrame, forceRecreate)
@@ -302,6 +315,7 @@ local function ReviveNativeLane(root, key, current, signature, retire, parentFra
     pool[signature] = nil
     retire(root, key, current, parentFrame)
     root[key] = parked
+    RestoreOutlineHosts(parked, parentFrame)
     -- The host carries the lane's geometry; showing it lets the reuse path register the container.
     if parked._msufA3LayoutHost then parked._msufA3LayoutHost:Show() end
     if parked._msufA3SpellIndicatorRoot == true then SpellIndicatorsRuntime.RelistContainerEffects(parked, parentFrame) end
@@ -344,6 +358,9 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local current = ReviveNativeLane(root, key, root[key], structuralSignature, RetireNativeLane, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         NativeApply.RebindNativeContainerUnit(current, lane.unit)
+        if current._msufA3ManagedAuraGroups == true and Containers.FlowPixelRefreshDue(current, current) then
+            Containers.RefreshFlowOwner(current, lane)
+        end
         if current._msufA3StandaloneAuraSlot == true then
             UpdateGroupLaneSlot(current, lane)
         elseif current._msufA3PriorityAuraGroups == true then
@@ -436,6 +453,7 @@ local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
         current = parked
         current._msufA3Root = root
         root[rootKey] = current
+        RestoreOutlineHosts(current, parentFrame)
     end
     local headerContainer = parentFrame and parentFrame.AuraContainer
     if rootKey == "GroupSlots"
@@ -446,6 +464,7 @@ local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
         current = headerContainer
         current._msufA3Root = root
         root[rootKey] = current
+        RestoreOutlineHosts(current, parentFrame)
     end
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         NativeApply.RebindNativeContainerUnit(current, groupSlots.unit)
@@ -458,6 +477,9 @@ local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
         local slotLanes = groupSlots.slotLanes
         if slotLanes then
             for i = 1, #slotLanes do UpdateGroupLaneSlot(current, slotLanes[i]) end
+        end
+        if groupSlots.flowLane and Containers.FlowPixelRefreshDue(current, current) then
+            Containers.RefreshFlowOwner(current, groupSlots)
         end
         if groupSlots.flowLane then UpdateGroupFlowLane(current, groupSlots.flowLane) end
         if groupSlots.trailingFlowLane then

@@ -178,16 +178,18 @@ local function AssertReflow(icons, tick)
     local texture = survivor.Icon or survivor._texture
     local artwork = assert(texture.auraBarSmokeArtwork)
     assert(first:IsShown() and survivor:IsShown() and firstPos ~= oldPos)
-    tick(2.69)
-    local current = Position(survivor)
-    assert(first:IsShown() and first:GetAlpha() > 0 and first:GetAlpha() < 1 and survivor:IsShown()
-        and current > math.min(firstPos, oldPos) and current < math.max(firstPos, oldPos),
-        "surviving aura did not slide toward the expired aura's slot")
-    tick(3)
-    assert(not first:IsShown() and Position(survivor) == firstPos and texture.auraBarSmokeArtwork == artwork,
-        "surviving aura did not retain its artwork in the compact slot")
+    tick(2.59)
+    assert(first:IsShown() and first:GetAlpha() == 1 and Position(survivor) == oldPos,
+        "preview moved or dimmed an aura before expiry")
+    tick(2.6)
+    assert(not first:IsShown() and first:GetAlpha() == 1, "expired aura must hide immediately without fading")
+    assert(survivor:IsShown() and Position(survivor) == firstPos and survivor:GetAlpha() == 1
+        and texture.auraBarSmokeArtwork == artwork, "surviving aura must snap into the compact slot with its own artwork")
+    tick(5.99)
+    assert(not first:IsShown() and Position(survivor) == firstPos, "preview rearranged icons before the next aura appeared")
     tick(6.09)
     assert(first:IsShown() and first:GetAlpha() > 0 and first:GetAlpha() < 1, "returning icon skipped the entrance")
+    assert(survivor:GetAlpha() == 1 and Position(survivor) == oldPos, "only the returning aura should animate")
     tick(6.19)
     assert(first:IsShown() and first:GetAlpha() == 1 and Position(survivor) == oldPos,
         "preview cycle did not restore its original opacity and positions")

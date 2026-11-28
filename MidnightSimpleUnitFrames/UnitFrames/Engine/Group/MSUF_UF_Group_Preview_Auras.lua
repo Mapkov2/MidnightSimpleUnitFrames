@@ -87,17 +87,22 @@ local function HideFrameAuraPreview(visual)
   end
 end
 
-local function FrameAuraPreviewOffset(lane, slot)
+local function FrameAuraPreviewOffset(lane, slot, host)
   local step = tonumber(lane.stepX or lane.step) or ((tonumber(lane.size) or 1) + (tonumber(lane.spacing) or 0))
+  local stepY = lane.stepY or step
+  if host._msufPreviewAuraWidth then
+    step = host._msufPreviewAuraWidth + host._msufPreviewAuraGap
+    stepY = host._msufPreviewAuraHeight + host._msufPreviewAuraGap
+  end
   if lane.verticalGrowth == true then
-    return 0, slot * (lane.stepY or step) * (tonumber(lane.ySign) or -1)
+    return 0, slot * stepY * (tonumber(lane.ySign) or -1)
   end
   local perRow = floor((tonumber(lane.perRow) or 1) + 0.5)
   if not (perRow >= 1) then perRow = 1 end
   local column = slot % perRow
   local row = floor(slot / perRow)
   local x = column * step * (tonumber(lane.xSign) or 1)
-  local y = row * (lane.stepY or step) * (tonumber(lane.ySign) or -1)
+  local y = row * stepY * (tonumber(lane.ySign) or -1)
   return x, y
 end
 
@@ -115,7 +120,7 @@ end
 local function PlaceFrameAuraPreview(visual, lane, host, anchor, x, y, alpha)
   local size = max(1, tonumber(lane.size) or 18)
   visual:ClearAllPoints()
-  visual:SetSize(lane.buttonWidth or size, lane.buttonHeight or size)
+  visual:SetSize(host._msufPreviewAuraWidth or lane.buttonWidth or size, host._msufPreviewAuraHeight or lane.buttonHeight or size)
   visual:SetPoint(anchor, host, anchor, x, y)
   visual._sceneAuraLayoutHost = host
   if visual.SetFrameLevel and host.GetFrameLevel then visual:SetFrameLevel((host:GetFrameLevel() or 0) + 1) end
@@ -131,17 +136,20 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     initialAnchor = tostring(initialAnchor or "TOPLEFT"):upper()
     if not VALID_POINTS[initialAnchor] then initialAnchor = "TOPLEFT" end
   end
-  local x, y = FrameAuraPreviewOffset(lane, slot)
+  local x, y = FrameAuraPreviewOffset(lane, slot, host)
   local px, py = 0, 0
-  if kind == "unit" and (lane.padding or 0) > 0 then
-    px, py = Auras.PaddingInset(initialAnchor, lane.padding)
-    x, y = x + px, y + py
+  local padding = host._msufPreviewAuraPadding or lane.padding or 0
+  if kind == "unit" and padding > 0 then
+    px, py = Auras.PaddingInset(initialAnchor, padding)
+    -- The Mainline flow inset is applied once. Keep Classic's preview layout.
+    if not MSUF.Client.IsRetail then x, y = x + px, y + py end
   end
+  x, y = x + px, y + py
 
   PlaceFrameAuraPreview(visual, lane, host, initialAnchor, x, y, 1)
   if lane.auraBarFill then return PaintFrameAuraBar(visual, lane, descriptor, slot + 1, scene) end
   if animateReflow then
-    local compactX, compactY = FrameAuraPreviewOffset(lane, max(0, slot - 1))
+    local compactX, compactY = FrameAuraPreviewOffset(lane, max(0, slot - 1), host)
     AuraPainter.ConfigurePreviewReflow(visual, host, initialAnchor, slot == 0, x, y, compactX + px, compactY + py,
       lane.targetDots and 18 or nil, lane.animateAppearance)
   else
@@ -191,7 +199,9 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   if type(A3.ApplyIconStylePreview) == "function" then
     local selectedValue2
     if not (barOnly) then selectedValue2 = lane.iconStyle end
-    A3.ApplyIconStylePreview(visual, selectedValue2, size, lane.iconShape)
+    -- Skins size their decorative art from the configured sides, as the native button does.
+    A3.ApplyIconStylePreview(visual, selectedValue2, size, lane.iconShape,
+      lane.buttonHeight or size, lane.buttonWidth or size)
   end
   if lane.showAuraBorder == true and not barOnly then
     dispelBorder = EnsurePreviewTexture(visual, "_dispelBorder", "OVERLAY", 5)
@@ -302,6 +312,32 @@ local function SceneLaneEntries(frame, lane, descriptor)
   return lane._msufSceneEntries
 end
 
+local function PreparePreviewLanePixels(frame, host, lane)
+  local zoom = frame._msufBorderPreviewZoom or 1
+  local bounds = frame.MSUFNormalOutlineBounds
+  if not host._msufMenuSpellSample and host._msufPreviewAuraLane == lane and host._msufPreviewAuraZoom == zoom
+    and host._msufPreviewBoundsRevision == (bounds and bounds.revision) then return end
+  local x, y = tonumber(lane.x) or 0, tonumber(lane.y) or 0
+  local solved, iw, ih, padding, gap, hostW, hostH
+  if lane.anchorTarget ~= "portrait" and not lane.auraBarFill then
+    x, y, solved = Auras.ResolveOutlineLaneOffset(frame, lane, x, y, zoom)
+    iw, ih, padding, gap, hostW, hostH = Auras.OutlineLaneMetrics(frame, lane, zoom)
+  end
+  host._msufPreviewAuraWidth, host._msufPreviewAuraHeight = iw, ih
+  host._msufPreviewAuraPadding, host._msufPreviewAuraGap = padding, gap
+  host._msufPreviewHostWidth, host._msufPreviewHostHeight = hostW, hostH
+  host._msufPreviewAuraX, host._msufPreviewAuraY = x, y
+  -- Corrected offsets can be fractional relative to the logical owner.
+  local manual = solved and host._msufPixelLayoutEnabled or false
+  if manual ~= (host._msufPreviewAuraManual == true) then
+    host:SetRoundLayoutToNearestPixel(not manual)
+    host._msufPreviewAuraManual = manual
+  end
+  host._msufPreviewAuraLane, host._msufPreviewAuraZoom = lane, zoom
+  bounds = frame.MSUFNormalOutlineBounds
+  host._msufPreviewBoundsRevision = bounds and bounds.revision
+end
+
 local function PlaceFrameAuraHost(frame, host, lane, width, height, alpha)
   local anchor = tostring(lane.anchor or "CENTER"):upper()
   if not VALID_POINTS[anchor] then anchor = "CENTER" end
@@ -311,7 +347,13 @@ local function PlaceFrameAuraHost(frame, host, lane, width, height, alpha)
     parent = Auras.ResolvePreviewLaneParent and Auras.ResolvePreviewLaneParent(frame, lane)
       or frame.MSUFPortraitHolder or frame
   end
-  host:SetPoint(anchor, parent, anchor, tonumber(lane.x) or 0, tonumber(lane.y) or 0)
+  local x, y = tonumber(lane.x) or 0, tonumber(lane.y) or 0
+  if MSUF.Client.IsRetail then
+    PreparePreviewLanePixels(frame, host, lane)
+    x, y = host._msufPreviewAuraX, host._msufPreviewAuraY
+    width, height = host._msufPreviewHostWidth or width, host._msufPreviewHostHeight or height
+  end
+  host:SetPoint(anchor, parent, anchor, x, y)
   host:SetSize(max(1, width or lane.size or 1), max(1, height or lane.size or 1))
   if host.SetFrameLevel and frame.GetFrameLevel then
     local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
@@ -606,6 +648,7 @@ end
 -- A refresh without a kind fans out to every preview kind that is active.
 
 GF.PreviewAuras = {
+  PrepareLanePixels = PreparePreviewLanePixels,
   PreviewAuraConfigSpec = PreviewAuraConfigSpec,
   RefreshSceneAuras = RefreshSceneAuras,
 }

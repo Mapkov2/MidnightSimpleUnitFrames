@@ -362,15 +362,33 @@ local function ApplyScenePrediction(frame, sample, hpPct, animState)
   prediction(frame, hpPct * 100, heal and heal * 100, absorb and absorb * 100, sample and sample.healAbsorbPct and sample.healAbsorbPct * 100)
 end
 
---- Seed fake unit state into one preview frame after UF.ApplySpec has built the
---- regions. Keep this data fake/local; live group frames own real roster state.
-local function PaintSceneHealth(frame, hp, hpMax, animState, class, hpPct)
+-- Both health bars follow the same synthetic sample and interpolation.
+local function PaintPreviewHealth(frame, hp, hpMax, animState, class, hpPct, isolatedScene)
   local bar = frame.hpBar or frame.Health or frame.health
-  bar:SetMinMaxValues(0, hpMax)
-  if not animState then bar._msufDirectValuePlain = nil end
-  MSUF.UFBarTextCommon.SetBarValuePlain(bar, hp, animState ~= nil and bar._msufDirectValuePlain == true)
-  bar:SetStatusBarColor(PreviewHealthColor(frame, class, hpPct))
-  bar:Show()
+  local health = MSUF.UF.elements.Health
+  if isolatedScene then
+    local animate = animState ~= nil and bar._msufDirectValuePlain == true
+    bar:SetMinMaxValues(0, hpMax)
+    if not animState then bar._msufDirectValuePlain = nil end
+    MSUF.UFBarTextCommon.SetBarValuePlain(bar, hp, animate)
+    bar:SetStatusBarColor(PreviewHealthColor(frame, class, hpPct))
+    bar:Show()
+    health.PaintSampleBackgroundValue(frame, hp / hpMax, animate)
+    health.PaintSampleBackground(frame, hp / hpMax)
+  else
+    SetBar(bar, hp, hpMax, true, PreviewHealthColor(frame, class, hpPct))
+    health.PaintSampleBackgroundValue(frame, hp / hpMax, true)
+  end
+end
+
+local function SetPreviewClass(frame, class, sample)
+  local classPinned = sample and sample.class and frame._msufPortraitSampleClass ~= class
+  if classPinned then frame._msufPortraitSampleClass = class end
+  if frame._msufGFPreviewClass ~= class then
+    frame._msufGFPreviewClass = class
+    if frame._msufBorderRuntimeClassColor then MSUF.UF.elements.Borders.RefreshClassColor(frame) end
+  end
+  return classPinned
 end
 
 local function SetPreviewClass(frame, class, sample)
@@ -457,13 +475,7 @@ local function ApplyPreviewData(frame, slot, kind, scene)
   end
   local hpMax = sample and sample.hpMax or 100
   local hp = floor(hpPct * hpMax + 0.5)
-  if isolatedScene then PaintSceneHealth(frame, hp, hpMax, animState, class, hpPct)
-  else SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, true, PreviewHealthColor(frame, class, hpPct)) end
-  if isolatedScene then
-    -- A scene frame holds no unit: the dynamic background (health gradient, match health) takes the sample's health.
-    local health = MSUF.UF.elements and MSUF.UF.elements.Health
-    if health and health.PaintSampleBackground then health.PaintSampleBackground(frame, hp / hpMax) end
-  end
+  PaintPreviewHealth(frame, hp, hpMax, animState, class, hpPct, isolatedScene)
 
   local powerMax = sample and sample.powerMax or 100
   local power = sample and sample.powerPct and floor(sample.powerPct * powerMax + 0.5) or min(powerMax, 35 + ((index * 11) % 55))

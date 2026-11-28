@@ -272,7 +272,7 @@ local function SyncMissingFrame(parentFrame, slot, button, ownerContainer)
     frame._msufA3ReminderSlot = slot
     frame:ClearAllPoints()
     frame:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
-    frame:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
+    Runtime.AnchorSlotRegion(frame, parentFrame, slot, ownerContainer)
     SyncFrameStrata(frame, ResolveFrameStrata(parentFrame, slot.strata))
     frame:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(slot.layer, 9, 0)
         or ((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9) - 1))

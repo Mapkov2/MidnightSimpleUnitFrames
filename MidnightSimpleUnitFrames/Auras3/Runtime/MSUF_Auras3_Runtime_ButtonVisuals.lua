@@ -3,7 +3,47 @@
 -- recreation.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Auras3/Runtime/MSUF_Auras3_Runtime_ButtonVisuals.lua")
+local FILE = "Auras3/Runtime/MSUF_Auras3_Runtime_ButtonVisuals.lua"
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", FILE)
+local GetPhysicalPixelSize = MSUF.Require("MSUF_GetPhysicalPixelSize", FILE)
+
+local function GridPixel(region)
+    if not (region and region._msufPixelLayoutEnabled) then return nil end
+    if region.CanBeAccessedInContext then
+        local accessible = region:CanBeAccessedInContext()
+        if MSUF.Util.IsSecret(accessible) or accessible ~= true then return nil end
+    end
+    if not region.GetEffectiveScale then return nil end
+    local scale = region:GetEffectiveScale()
+    if MSUF.Util.IsSecret(scale) or type(scale) ~= "number" or scale <= 0 then return nil end
+    local parent = region._msufA3ParentFrame
+    local bounds = parent and parent.MSUFNormalOutlineBounds
+    if region._msufA3LayoutHost and bounds and bounds.pixelSize then
+        local parentScale = bounds.effectiveScale
+        if not parentScale or parentScale == scale then return bounds.pixelSize end
+        return bounds.pixelSize * parentScale / scale
+    end
+    local pixel = GetPhysicalPixelSize(region)
+    return pixel > 0 and pixel or nil
+end
+
+local function GridValue(value, pixel, minimum)
+    if not pixel then return value end
+    return math.max(minimum or 0, math.floor(value / pixel + 0.5)) * pixel
+end
+
+local function GridGap(value, pixel)
+    if not pixel or value == 0 then return value end
+    local magnitude = GridValue(math.abs(value), pixel, 1)
+    return value < 0 and -magnitude or magnitude
+end
+
+local function GridMetrics(lane, pixel, defaults)
+    local size = lane.size or (defaults and defaults.iconSize) or 1
+    local spacing = lane.spacing or (defaults and defaults.spacing) or 0
+    return GridValue(lane.buttonWidth or size, pixel, 1),
+        GridValue(lane.buttonHeight or size, pixel, 1), GridGap(spacing, pixel)
+end
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 local function PaintDurationBarColor(A3, Clamp01, bar, lane)
     if not bar then return end
@@ -52,7 +92,7 @@ local _durationTextOptions = { zeroDurationText = "", expiredText = "" }
 local _durationBarOptions = {}
 local _applicationCountOptions = {}
 local _auraSymbolOptions = { showWhenHarmful = true, showWhenHelpful = false }
-local function LayoutButton(button, lane, index)
+local function LayoutButton(button, lane, index, pixel)
     local n = index - 1
     local perRow = math_max(lane.perRow or 1, 1)
     local major = n % perRow
@@ -63,12 +103,23 @@ local function LayoutButton(button, lane, index)
     else
         col, row = major, minor
     end
-    local x = col * (lane.stepX or lane.step or lane.buttonWidth or lane.size or 1) * (lane.xSign or 1)
-    local y = row * (lane.stepY or lane.step or lane.buttonHeight or lane.size or 1) * (lane.ySign or -1)
+    local width = lane.buttonWidth or lane.size
+    local height = lane.buttonHeight or lane.size
+    local stepX = lane.stepX or lane.step or width or 1
+    local stepY = lane.stepY or lane.step or height or 1
+    if pixel and width and height then
+        local snappedWidth, snappedHeight = GridMetrics(lane, pixel)
+        -- Preserve the explicit axis pitches of custom and portrait lanes.
+        stepX = snappedWidth + GridGap(stepX - width, pixel)
+        stepY = snappedHeight + GridGap(stepY - height, pixel)
+        width, height = snappedWidth, snappedHeight
+    end
+    local x = col * stepX * (lane.xSign or 1)
+    local y = row * stepY * (lane.ySign or -1)
     button:ClearAllPoints()
     local parent = button:GetParent()
     button:SetPoint(lane.initialAnchor or "TOPLEFT", parent, lane.initialAnchor or "TOPLEFT", x, y)
-    button:SetSize(lane.buttonWidth or lane.size, lane.buttonHeight or lane.size)
+    button:SetSize(width, height)
 end
 
 local function LayoutAuraBorder(button, border, lane, useNativeAtlas)
@@ -210,6 +261,12 @@ end
 -- pass a one-icon maximumLineSize, which is the native way to force a column:
 -- every icon wraps to a new line and lines stack along the vertical growth
 -- direction. Only ever called from the signature-guarded geometry cold path.
+local function SetFlowPadding(container, padding)
+    if type(container.SetFlowLayoutPadding) == "function" then
+        container:SetFlowLayoutPadding(padding, padding, padding, padding)
+    end
+end
+
 local function ApplyContainerFlowLayout(container, anchorPoint, xSign, ySign, lineSize, padding)
     local flowDir = AnchorUtil and AnchorUtil.FlowDirection
     container:SetFlowLayoutAnchorPoint(anchorPoint)
@@ -217,10 +274,32 @@ local function ApplyContainerFlowLayout(container, anchorPoint, xSign, ySign, li
         flowDir and (xSign >= 0 and flowDir.Right or flowDir.Left) or xSign,
         flowDir and (ySign >= 0 and flowDir.Up or flowDir.Down) or ySign)
     container:SetFlowLayoutMaximumLineSize(lineSize)
-    if type(container.SetFlowLayoutPadding) == "function" then
-        padding = padding or 0
-        container:SetFlowLayoutPadding(padding, padding, padding, padding)
+    SetFlowPadding(container, padding or 0)
+end
+
+local function FlowPixelMetrics(container, lane)
+    local pixel = GridPixel(container)
+    local rawPadding = lane.padding or 0
+    if lane.combinedAuraBarFlow then return nil, GridValue(rawPadding, pixel) end
+    local rawWidth = lane.buttonWidth or lane.size or 1
+    local limit = lane.verticalGrowth and rawWidth or ((lane.width or rawWidth) - 2 * rawPadding)
+    if pixel and limit > 0 then
+        rawWidth = lane.buttonWidth or lane.size or DEFAULT_SHARED.iconSize
+        local rawSpacing = lane.spacing or DEFAULT_SHARED.spacing
+        local width, _, spacing = GridMetrics(lane, pixel, DEFAULT_SHARED)
+        if rawWidth + rawSpacing > 0 and width + spacing > 0 then
+            -- Preserve the old capacity at an exact wrap boundary.
+            local cells = math.max(1, math.floor((limit + rawSpacing) / (rawWidth + rawSpacing) + 1e-6))
+            limit = cells * width + (cells - 1) * spacing + pixel * 0.125
+        end
     end
+    return limit, GridValue(rawPadding, pixel)
+end
+
+function ButtonVisuals.SyncPixelFlow(container, lane)
+    local limit, padding = FlowPixelMetrics(container, lane)
+    container:SetFlowLayoutMaximumLineSize(limit)
+    SetFlowPadding(container, padding)
 end
 
 local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry, preserveAlpha)
@@ -272,15 +351,16 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     local initialAnchor = lane.initialAnchor or "TOPLEFT"
     -- maximumLineSize measures CONTENT extent; the host box (lane.width/height)
     -- already includes 2*padding, so strip it back out for the line limit.
-    local lineSize
     if lane.combinedAuraBarFlow then
         local axis = AnchorUtil.FlowLayoutAxis
         container:SetFlowLayoutAxis(lane.verticalGrowth and axis.Vertical or axis.Horizontal)
-    else
-        lineSize = lane.verticalGrowth == true and (lane.buttonWidth or lane.size or 1)
-            or ((lane.width or lane.size or 1) - 2 * (lane.padding or 0))
     end
-    ApplyContainerFlowLayout(container, initialAnchor, lane.xSign or 1, lane.ySign or -1, lineSize, lane.padding)
+    if layoutHost and parentFrame and parentFrame.MSUFSpec and not parentFrame.MSUFNormalOutlineBounds
+        and dependencies.Platform.OutlineIconLane(lane) and not dependencies.Platform.InCombat() then
+        UF.GetNormalOutlineBounds(parentFrame)
+    end
+    local lineSize, padding = FlowPixelMetrics(container, lane)
+    ApplyContainerFlowLayout(container, initialAnchor, lane.xSign or 1, lane.ySign or -1, lineSize, padding)
     container.createdButtons = lane.max
     container:SetSize(lane.buttonWidth or lane.size or 1, lane.buttonHeight or lane.size or 1)
     if parentFrame and layoutHost then
@@ -293,9 +373,8 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
             and layoutHost:GetParent() ~= visualParent and layoutHost.SetParent then
             layoutHost:SetParent(visualParent)
         end
-        layoutHost:ClearAllPoints()
-        layoutHost:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
-        layoutHost:SetSize(lane.width, lane.height)
+        layoutHost._msufA3FlowContainer = container
+        dependencies.Platform.BindLaneHost(layoutHost, parentFrame, lane, nil, forceGeometry)
         -- Anchor the sealed container to its host once; growth-direction
         -- changes alter the tracking signature and recreate the container, so
         -- this never needs to re-anchor a live (sealed) container.
@@ -840,7 +919,11 @@ function ButtonVisuals.PaintSample(button, lane, index, sample)
     if A3.ApplyPandemicVisual then A3.ApplyPandemicVisual(button, lane, sample.pandemic == true) end
     button:Show()
 end
-ButtonVisuals.LayoutSample = LayoutButton
+function ButtonVisuals.LayoutSample(button, lane, index)
+    LayoutButton(button, lane, index, GridPixel(button))
+end
+ButtonVisuals.GridPixel = GridPixel
+ButtonVisuals.GridMetrics = GridMetrics
 
 local exports = {
     PrepareAuraButton = PrepareAuraButton,

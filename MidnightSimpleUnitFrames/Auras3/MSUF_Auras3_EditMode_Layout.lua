@@ -116,6 +116,8 @@ end
 
 local function PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
     if not (group and frame) then return end
+    local lane = group._msufA3OutlineLane
+    if lane then x, y = A3.ResolveOutlineLaneOffset(frame, lane, x, y, 1) end
     local baseX, baseY = AnchorBase(anchor, frame)
     local localX, localY = AnchorOffset(anchor, laneW, laneH)
     group:ClearAllPoints()
