@@ -13954,6 +13954,17 @@
       ]
     },
     {
+      "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_StutterMonitor.lua",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "Mists",
+        "TBC"
+      ],
+      "after": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua"
+    },
+    {
       "path": "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dropdowns.lua",
       "clients": [
         "Mainline",

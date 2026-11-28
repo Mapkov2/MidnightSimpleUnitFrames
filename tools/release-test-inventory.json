@@ -13,14 +13,6 @@
       ]
     },
     {
-      "test": "tools/tests/retail_health_background_mask_smoke.lua",
-      "phase": "runtime",
-      "clients": [
-        "Mainline",
-        "Forever"
-      ]
-    },
-    {
       "test": "tools/tests/group_raid_manager_visibility_smoke.lua",
       "phase": "runtime",
       "clients": [
@@ -102,6 +94,15 @@
       ]
     },
     {
+      "test": "tools/tests/menu_unit_tooltip_suite_link_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/unitframe_appearance_menu_smoke.lua",
       "phase": "runtime",
       "clients": [
@@ -146,6 +147,17 @@
       ]
     },
     {
+      "test": "tools/tests/castbar_player_pickup_icon_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/castbar_player_options_smoke.lua",
       "phase": "runtime",
       "clients": [
@@ -158,6 +170,17 @@
     },
     {
       "test": "tools/tests/taint_report_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/stutter_monitor_smoke.lua",
       "phase": "runtime",
       "clients": [
         "Mainline",
@@ -283,6 +306,17 @@
       ]
     },
     {
+      "test": "tools/tests/classpower_pip_layout_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
       "test": "tools/tests/classpower_auxiliary_preview_smoke.lua",
       "phase": "menu",
       "clients": [
@@ -324,6 +358,36 @@
         "Vanilla",
         "TBC",
         "Mists"
+      ]
+    },
+    {
+      "test": "tools/tests/unit_inline_target_position_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
+      "test": "tools/tests/combat_timer_chat_anchor_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever",
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ]
+    },
+    {
+      "test": "tools/tests/group_raid_manager_visibility_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Forever"
       ]
     },
     {
@@ -433,6 +497,21 @@
     },
     {
       "test": "tools/tests/bars_material_preview_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}"
+      ]
+    },
+    {
+      "test": "tools/tests/frame_outline_class_color_smoke.lua",
       "phase": "menu",
       "clients": [
         "Mainline",
@@ -819,10 +898,21 @@
       "phase": "runtime"
     },
     {
+      "test": "tools/tests/aura_externals_appearance_smoke.lua",
+      "phase": "runtime"
+    },
+    {
       "test": "tools/tests/forever_weakened_soul_spell_icons_smoke.lua",
       "phase": "runtime",
       "clients": [
         "Mainline",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/forever_riptide_spell_indicator_smoke.lua",
+      "phase": "runtime",
+      "clients": [
         "Forever"
       ]
     },
@@ -867,6 +957,17 @@
     {
       "test": "tools/tests/menu_crosshair_geometry.lua",
       "phase": "menu"
+    },
+    {
+      "test": "tools/tests/combat_timer_format_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/release_menu_smoke.lua",
@@ -1403,6 +1504,14 @@
     {
       "test": "tools/tests/castbar_gcd_spell_attribution.lua",
       "phase": "runtime"
+    },
+    {
+      "test": "tools/tests/aura_physical_grid_smoke.lua",
+      "phase": "menu",
+      "clients": [
+        "Mainline",
+        "Forever"
+      ]
     },
     {
       "test": "tools/tests/preview_aura_geometry_smoke.lua",
@@ -3138,6 +3247,42 @@
         "TBC",
         "Mists",
         "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/group_health_background_edge_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/health_background_fill_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Mainline",
+        "Vanilla",
+        "TBC",
+        "Mists",
+        "Forever"
+      ]
+    },
+    {
+      "test": "tools/tests/health_background_fill_smoke.lua",
+      "phase": "runtime",
+      "clients": [
+        "Vanilla",
+        "TBC",
+        "Mists"
+      ],
+      "arguments": [
+        "{root}",
+        "{client}",
+        "absolute"
       ]
     },
     {

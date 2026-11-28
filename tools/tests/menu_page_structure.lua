@@ -73,9 +73,9 @@ end
 -- Both current generated indexes retain all 8 relocated action identities below.
 -- 7.0.3: 28 Mainline and 27 Classic additions; all 7.021 identities retained.
 local indexes = {
-    -- Beta 3 adds appearance motion and combat timer controls. Existing identities are retained.
-    { "", 4947, 4091604847 },
-    { "_Classic", 4288, 1425320156 },
+    -- Beta 5 preserves every Beta 4 search identity and adds a Mainline row.
+    { "", 4948, 567043437 },
+    { "_Classic", 4288, 3666908998 },
 }
 local moved = {
     { "opt_colors", "workbench_accessibility", "accessibility", "preview review" },
