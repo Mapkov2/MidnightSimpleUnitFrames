@@ -205,6 +205,10 @@ local function AddTooltip(widget, title, body, opts)
         end
         if resolvedBody and resolvedBody ~= "" then GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86,
             bodyColor[3] or 1.00, true) end
+        -- A dropdown value cut short in its field is shown in full here.
+        local overflowValue
+        if Widgets and Widgets.DropdownOverflowText then overflowValue = select(2, Widgets.DropdownOverflowText(widget)) end
+        if overflowValue then GameTooltip:AddLine(overflowValue, 1, 1, 1, true) end
         if reason then GameTooltip:AddLine(reason, 1, 0.82, 0.35, true) end
         GameTooltip:Show()
     end
@@ -1229,7 +1233,7 @@ M.Noop = M.Noop or M.Fallbacks.Noop
 function M.OnOffBadge(enabled, onText, offText)
     return {
         text = enabled and (onText or "Shown") or (offText or "Hidden"),
-        kind = enabled and "ok" or "muted",
+        kind = enabled and "ok" or "disabled",
     }
 end
 function M.BadgeNumber(value)

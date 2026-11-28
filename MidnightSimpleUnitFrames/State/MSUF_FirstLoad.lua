@@ -366,6 +366,7 @@ function FirstLoad.SettleSavedVariables(loadedNow)
     if loadedNow then
         MSUF_DB = nil
         FirstLoad.ArmProfileCheck()
+        FirstLoad.ArmFirstOpen()
     end
 end
 function FirstLoad.GetLegacyProfileDB()
@@ -465,6 +466,31 @@ function FirstLoad.ArmProfileCheck()
     -- After the login screen settles, like the other one-time login prompts.
     MSUF.EventBus:Register("PLAYER_ENTERING_WORLD", PROFILE_CHECK_KEY, function()
         MSUF.Scheduler.ScheduleAfter(PROFILE_CHECK_KEY, 2, ShowProfileCheck)
+    end, nil, true)
+    return true
+end
+
+-- A fresh install opens the menu once by itself, on its one-time welcome: the
+-- chat line alone gave a new player no first step, and an installed Suite holds
+-- its own installer until that welcome is answered. The open is recorded, so
+-- closing the menu without a choice keeps the welcome for the next /msuf and
+-- nothing opens by itself again. Upgrades and clients without onboarding
+-- scenes never get it.
+local FIRST_OPEN_KEY = "MSUF_FIRST_OPEN_70"
+local function ShowFirstOpen()
+    if state.firstOpenAt or state.installKind ~= "fresh" or not FirstLoad:ShouldShowDashboard() then return false end
+    if MSUF.Util.InCombat() then
+        MSUF.EventBus:Register("PLAYER_REGEN_ENABLED", FIRST_OPEN_KEY, ShowFirstOpen, nil, true)
+        return false
+    end
+    state.firstOpenAt = Now()
+    return MSUF.OpenOptionsFromLauncher()
+end
+
+function FirstLoad.ArmFirstOpen()
+    if state.firstOpenAt or state.installKind ~= "fresh" or state.status ~= "pending" then return false end
+    MSUF.EventBus:Register("PLAYER_ENTERING_WORLD", FIRST_OPEN_KEY, function()
+        MSUF.Scheduler.ScheduleAfter(FIRST_OPEN_KEY, 2, ShowFirstOpen)
     end, nil, true)
     return true
 end

@@ -726,11 +726,12 @@ local function ToggleEditMode()
         RefreshDashboardFrameStatus()
         return
     end
-    MSUF.Require("MSUF_SetMSUFEditModeDirect", FILE)(not active)
+    MSUF.Require("MSUF_SetMSUFEditModeDirect", FILE)(not active, not active and M.ActiveEditUnitKey() or nil)
     RefreshMenuFramePrioritySafe()
     C_Timer.After(0, RefreshMenuFramePrioritySafe)
     RefreshDashboardEditModeButtonSafe()
     RefreshDashboardFrameStatus()
+    if not active then M.ParkMenuForEditMode() end
 end
 local function SetSliderValueSafe(slider, value)
     if not (slider and slider.SetValue) then return end
@@ -1188,7 +1189,7 @@ function Dashboard.BuildScalingCard(state, ctx)
             state.scalePills[2] = Pill(scaleHead, "", 104, -11, 76)._msuf2Label
         end
         if standalone then
-            local button = CreateFrame("Button", nil, frames)
+            local button = PixelLayoutRegion(CreateFrame("Button", nil, frames))
             button:SetAllPoints(frames)
             button:SetScript("OnClick", function()
                 local target = DashboardMeta("scaling.msuf_frames.percent", "setting")
