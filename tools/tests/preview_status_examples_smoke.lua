@@ -712,7 +712,11 @@ do
             helpfulAuras[unit] = { otherAura }
             mw.world:FireEvent("UNIT_AURA", unit, { isFullUpdate = false, addedAuras = { otherAura } })
             CheckText(nil)
-            check(consumptionReads == before, unit .. " unrelated aura delta read the aura list")
+            check(consumptionReads == before + 1, unit .. " first readable delta did not reseed after a secret aura list")
+            before = consumptionReads
+            mw.world:FireEvent("UNIT_AURA", unit, { isFullUpdate = false, updatedAuraInstanceIDs = { 12 } })
+            CheckText(nil)
+            check(consumptionReads == before, unit .. " known unrelated aura delta read the full aura list")
 
             local drink = { spellId = 430, auraInstanceID = 13 }
             helpfulAuras[unit] = { otherAura, drink }

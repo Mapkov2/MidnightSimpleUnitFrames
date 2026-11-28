@@ -158,7 +158,7 @@ local function NewStickyRecord(section, opts, ctx, entry)
     section._msuf2GuidedNoScroll = true
     local builder = opts.builder
     if builder and not section._msuf2PageHeaderFlowReleased then
-        local flowGap = max(0, tonumber(opts.flowGap) or 12)
+        local flowGap = max(0, tonumber(opts.flowGap) or section._msuf2SectionFlowGap or 12)
         -- The original first panel starts at PageBuilder's -12 inset.  That
         -- inset now belongs to the fixed header, so release it from the new
         -- ScrollFrame flow as well; otherwise top padding is counted twice.
@@ -298,7 +298,7 @@ function W.FixedPreviewSection(ctx, builder, spec)
         left = spec.left,
         top = spec.top,
         gap = spec.gap == nil and 8 or spec.gap,
-        flowGap = spec.flowGap or 12,
+        flowGap = spec.flowGap,
         frameLevelOffset = spec.frameLevelOffset,
         dynamicHeight = true,
         heightResolver = function()

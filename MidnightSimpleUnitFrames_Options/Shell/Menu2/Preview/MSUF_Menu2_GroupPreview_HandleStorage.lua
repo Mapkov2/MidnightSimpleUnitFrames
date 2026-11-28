@@ -104,10 +104,14 @@ function Stage.BindSelection(st)
             conf.spellIndicators = { enabled = true, spec = "auto", specs = {}, layer = 9 }
         end
         local si = conf.spellIndicators
+        if not create then
+            local entries = si.specs and si.specs[specKey]
+            return entries and entries[auraName]
+        end
         si.specs = si.specs or {}
         si.specs[specKey] = si.specs[specKey] or {}
         local entries = si.specs[specKey]
-        if create and type(entries[auraName]) ~= "table" then
+        if type(entries[auraName]) ~= "table" then
             -- Preview items may exist only as merged SpecDefaults. Writing
             -- through them must materialize the saved entry with its
             -- default shape, or the write is lost / the icon shape resets.

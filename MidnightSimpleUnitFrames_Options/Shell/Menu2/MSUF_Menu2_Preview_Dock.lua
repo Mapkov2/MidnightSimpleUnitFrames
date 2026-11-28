@@ -25,19 +25,30 @@ local function LayerButtonOnFor(owner, key, opts)
     return LayerButtonOn(owner, key)
 end
 local LAYER_CHIP_SELECTED_TEXT = { 0.96, 0.98, 1.00 }
-local LAYER_CHIP_DIM_FILL = { 0.010, 0.018, 0.030 }
 local layerChipOnFill = { 0, 0, 0 }
 -- The tinted fill of an "on" chip: its layer color at 12 percent, in a scratch triple.
 local function LayerChipOnFill(c)
     layerChipOnFill[1], layerChipOnFill[2], layerChipOnFill[3] = c[1] * 0.12, c[2] * 0.12, c[3] * 0.12
     return layerChipOnFill
 end
--- Paints one chip state: the fill, the layer color bar, the label and (when given) the OFF tag.
-local function PaintLayerChip(widgets, btn, c, fill, fillAlpha, barAlpha, text, textAlpha, off, offAlpha)
+local function PaintLayerChip(widgets, btn, c, fill, fillAlpha, barAlpha, text, textAlpha)
     widgets.SetLayerColor(btn, btn.bg, fill[1], fill[2], fill[3], fillAlpha)
     widgets.SetLayerColor(btn, btn.bar, c[1], c[2], c[3], barAlpha)
     btn.fs:SetTextColor(text[1], text[2], text[3], textAlpha)
-    if btn.off and off then btn.off:SetTextColor(off[1], off[2], off[3], offAlpha) end
+end
+
+local function Gray(color)
+    return color[1] * 0.2126 + color[2] * 0.7152 + color[3] * 0.0722
+end
+
+local function PaintInactiveLayerChip(widgets, btn, background, label, available, emphasized)
+    local fill, text = Gray(background), Gray(label)
+    local fillAlpha = emphasized and 0.86 or (available and 0.54 or 0.32)
+    local alpha = available and (emphasized and 1 or 0.85) or 0.92
+    widgets.SetLayerColor(btn, btn.bg, fill, fill, fill, fillAlpha)
+    widgets.SetLayerColor(btn, btn.bar, text, text, text, available and 0.70 or 0.45)
+    btn.fs:SetTextColor(text, text, text, alpha)
+    if btn.off then btn.off:SetTextColor(text, text, text, alpha) end
 end
 function H.RefreshLayerButton(btn, owner, opts)
     if not btn then return end
@@ -53,42 +64,27 @@ function H.RefreshLayerButton(btn, owner, opts)
     local c = btn.color or LAYER_BUTTON_FALLBACK_COLOR
     local textOn = opts.textOn or { 0.82, 0.88, 1.00, 0.98 }
     local textOff = opts.textOff or { 0.54, 0.61, 0.72, 0.78 }
-    local textDisabled = opts.textDisabled or { 0.42, 0.48, 0.58, 0.62 }
     if btn.off then
         btn.off:SetText(opts.offText or "OFF")
         btn.off:SetShown((opts.showOffText == true) and ((not available) or not on))
     end
-    local quiet = opts.quiet == true
     local quietBase = opts.quietBase or PREVIEW_CHROME_FALLBACK.rowBase
     local colors = (opts.T or M.Theme).colors
+    local textDisabled = opts.textDisabled or colors.disabled or colors.dim or textOff
     local selectedBg = opts.selectedBg or colors.pillActive or LAYER_BUTTON_SELECTED_BG
     if MSUF.MenuSkin.IsActive() then
         quietBase = colors.coreSurface or colors.panel
-        textOn, textOff, textDisabled = colors.text, colors.muted, colors.dim
+        textOn, textOff, textDisabled = colors.text, colors.muted, colors.disabled or colors.dim
         selectedBg = colors.pillActive
     end
-    -- PaintLayerChip(fill, fill alpha, bar alpha, label color, label alpha, OFF tag color, OFF alpha)
-    if hover and available and not on and not selected then
-        local hoverColor = colors.coreRaised or opts.quietHover or PREVIEW_CHROME_FALLBACK.rowHover
-        PaintLayerChip(widgets, btn, c, hoverColor, quiet and 0.42 or 0.58, quiet and 0.90 or 1, textOn, textOn[4] or 1)
-    elseif not available and quiet then
-        PaintLayerChip(widgets, btn, c, quietBase, 0.10, 0.20, textDisabled, textDisabled[4] or 0.62, textDisabled, 0.62)
-    elseif selected and quiet then
-        PaintLayerChip(widgets, btn, c, selectedBg, selectedBg[4] or 0.88, on and 1.00 or 0.38, LAYER_CHIP_SELECTED_TEXT, 1.00,
-            textOff, on and 0 or 0.78)
-    elseif on and quiet then
-        PaintLayerChip(widgets, btn, c, LayerChipOnFill(c), 0.54, 0.94, textOn, textOn[4] or 0.96, textOff, 0.0)
-    elseif quiet then
-        PaintLayerChip(widgets, btn, c, quietBase, 0.08, 0.26, textOff, textOff[4] or 0.74, textOff, 0.72)
-    elseif not available then
-        PaintLayerChip(widgets, btn, c, LAYER_CHIP_DIM_FILL, 0.32, 0.30, textDisabled, textDisabled[4] or 0.62, textDisabled, 0.72)
+    if not available or not on then
+        local emphasized = hover or selected
+        local fill = emphasized and (colors.coreRaised or opts.quietHover or PREVIEW_CHROME_FALLBACK.rowHover) or quietBase
+        PaintInactiveLayerChip(widgets, btn, fill, available and textOff or textDisabled, available, emphasized)
     elseif selected then
-        PaintLayerChip(widgets, btn, c, selectedBg, selectedBg[4] or 0.88, on and 1.00 or 0.42, LAYER_CHIP_SELECTED_TEXT, 1.00,
-            textOff, on and 0 or 0.78)
-    elseif on then
-        PaintLayerChip(widgets, btn, c, LayerChipOnFill(c), 0.54, 0.94, textOn, textOn[4] or 0.98, textOff, 0.0)
+        PaintLayerChip(widgets, btn, c, selectedBg, selectedBg[4] or 0.88, 1, LAYER_CHIP_SELECTED_TEXT, 1)
     else
-        PaintLayerChip(widgets, btn, c, LAYER_CHIP_DIM_FILL, 0.26, 0.42, textOff, textOff[4] or 0.78, textOff, 0.78)
+        PaintLayerChip(widgets, btn, c, LayerChipOnFill(c), 0.54, 0.94, textOn, textOn[4] or 0.98)
     end
     widgets.FinishControlMotion(motion)
     btn._msuf2LayerPaintingMotion = nil
@@ -305,9 +301,9 @@ local function LayerChipSelected(owner, key) return owner and owner._msuf2Select
 function H.LayerChipButtonOpts(Tr, colors, chrome, opts)
     local active = colors.pillTextActive or colors.text or { 0.92, 0.96, 1.00, 1.00 }
     local muted = colors.muted or { 0.62, 0.70, 0.82, 0.90 }
-    local disabled = colors.dim or { 0.36, 0.46, 0.60, 0.82 }
+    local disabled = colors.disabled or colors.dim or { 0.63, 0.63, 0.63, 1 }
     opts.Tr, opts.layout, opts.height, opts.rowHeight, opts.topOffset = Tr, "chip", 20, 20, 23
-    opts.showOffText, opts.quiet, opts.quietBase, opts.quietHover = false, true, chrome.rowBase, chrome.rowHover
+    opts.showOffText, opts.quietBase, opts.quietHover = false, chrome.rowBase, chrome.rowHover
     opts.textOn = { active[1], active[2], active[3], 1.00 }
     opts.textOff = { muted[1], muted[2], muted[3], 0.72 }
     opts.textDisabled = { disabled[1], disabled[2], disabled[3], 0.64 }

@@ -11,6 +11,13 @@ local mw = MenuWorld.Open(root, flavor, { page = 'uf_player', clientScriptBindin
         world.env.IsShiftKeyDown = function() return false end
         world.env.IsControlKeyDown = function() return false end
         world.env.GetCurrentKeyBoardFocus = function() return nil end
+        if arg[4] then
+            local load = world.LoadFile
+            function world:LoadFile(path, addon, ns)
+                if path:match('/MSUF_Menu2_Preview_Dock%.lua$') then path = arg[4] end
+                return load(self, path, addon, ns)
+            end
+        end
     end })
 local M, U = mw.M, mw.core.UFPreview
 local failures, checks = {}, 0
@@ -19,6 +26,47 @@ local function check(condition, label)
     if not condition then failures[#failures + 1] = label; print('FAIL ' .. label) end
 end
 local function settle() mw:RunTimers(20000); M.Theme.StopAllMenuAnimations() end
+local function gray(color) return color and color[1] == color[2] and color[2] == color[3] end
+local function exerciseDisabledPaint()
+    local H, T = M.PreviewHelpers, M.Theme
+    local parent = mw.env.CreateFrame('Frame', nil, mw.env.UIParent)
+    local owner = { layerAvailable = { clock = false }, layerVisibility = { clock = true } }
+    local opened = 0
+    local opts = H.LayerChipButtonOpts(M.Tr, T.colors, H.PreviewChromePalette(T), {
+        IsOn = function() return owner.layerVisibility.clock end,
+        OnEnter = function() end,
+        OnClick = function()
+            if not owner.layerAvailable.clock then opened = opened + 1 end
+        end,
+    })
+    local button = H.CreateLayerButton(parent, owner, { key = 'clock', label = 'Clock', color = { .2, .6, 1 } }, 1, 95, opts)
+    owner.layerButtons = { button }
+    local function checkGray(label)
+        check(gray(button.bg.vertexColor) and gray(button.bar.vertexColor) and gray(button.fs.textColor), label)
+    end
+    checkGray('disabled preview layer removes all accent colors even with a visible sample')
+    button:GetScript('OnEnter')(button)
+    H.RefreshSelectedLayerButtons(owner, { _previewLayerKey = 'clock' })
+    checkGray('hover on a disabled layer does not restore the accent')
+    button:Click('LeftButton')
+    check(opened == 1, 'disabled preview layer keeps its settings action')
+    owner.layerAvailable.clock, owner.layerVisibility.clock = true, false
+    button:Refresh(); settle()
+    checkGray('a preview-only hidden layer remains gray while hovered')
+    owner.layerVisibility.clock = true
+    button:Refresh(); settle()
+    check(not gray(button.bar.vertexColor), 'enabled preview layer restores its accent')
+    local action = T.Button(parent, 'Open settings', 120, 24)
+    action:SetActive(true)
+    action:SetEnabled(false)
+    check(gray(action._msuf2Label.textColor), 'disabled action uses the neutral label color')
+    local switch = M.Widgets.SwitchAt(parent, 'Enable', 16, -40, 100)
+    switch:SetChecked(true)
+    M.Widgets.SetControlEnabled(switch, false)
+    check(switch:GetChecked() and gray(switch._msuf2SwitchFill.vertexColor) and gray(switch._msuf2SwitchEdge.vertexColor),
+        'a disabled checked switch keeps its value and loses the accent')
+    check(M.OnOffBadge(false).kind == 'disabled' and M.OnOffBadge(true).kind == 'ok', 'off status uses the disabled badge style')
+end
 local function shown(region)
     if not region or region:IsShown() ~= true then return false end
     if region.GetAlpha and region:GetAlpha() <= 0 then return false end
@@ -36,6 +84,56 @@ local function unitSetup()
     db.bars.showClassPower = true
     U.active:RequestRefresh('SETTINGS'); settle()
     return U.active, db.player
+end
+local function checkTargetAuraPadding()
+    local model = mw.core.MSUF_Auras3.MenuModel
+    local db = M.EnsureDB()
+    db.target.hlOverride = false
+    model.SetUnitEnabled('target', true)
+    for _, kind in ipairs({ 'buff', 'debuff' }) do
+        model.SetGroupShown('target', kind, true)
+        model.WriteNumber('target', kind .. 'GroupOffsetX', -4, -4096, 4096)
+        model.WriteNumber('target', kind .. 'GroupOffsetY', 29, -4096, 4096)
+        model.WriteValue('target', kind .. 'Anchor', kind == 'buff' and 'TOPLEFT' or 'TOPRIGHT')
+    end
+    assert(mw:Select('uf_target') ~= false)
+    settle()
+    local box = assert(U.active)
+    box._manualZoom = 4
+    box.layerVisibility.buff, box.layerVisibility.debuff = true, true
+    for _, case in ipairs({ {0, 0}, {2, 0}, {0, 3}, {2, 3} }) do
+        local thickness, padding = case[1], case[2]
+        db.bars.showBarBorder, db.bars.barOutlineThickness = true, thickness
+        model.WriteNumber('target', 'buffStylePadding', padding, 0, 16)
+        model.WriteNumber('target', 'debuffStylePadding', padding, 0, 16)
+        mw.core.UF.Config.RefreshUnit('target')
+        U.Refresh(box, 'SETTINGS')
+        local body = box.mock._body
+        local outline = body.MSUFSpec.border
+        local label = ' at outline ' .. thickness .. ', padding ' .. padding
+        check((outline.enabled == true) == (thickness > 0) and (thickness == 0 or outline.thickness == thickness),
+            'preview uses the requested outline' .. label)
+        local seen = {}
+        for _, icon in ipairs(body._msufGFFrameAuraPreviews or {}) do
+            local kind = icon._sceneAuraKind
+            local host = body._msufGFFrameAuraPreviewHosts and body._msufGFFrameAuraPreviewHosts[kind]
+            if shown(icon) and host == icon._sceneAuraLayoutHost and icon._sceneAuraIndex == 1 then
+                local lane = icon._sceneAuraLane
+                local padX, padY = mw.core.MSUF_Auras3.PaddingInset(lane.initialAnchor, padding)
+                local _, relative, _, x, y = icon:GetPoint(1)
+                local _, owner, _, anchorX, anchorY = host:GetPoint(1)
+                local reflow = icon._msufPreviewAuraReflow
+                check(lane.padding == padding and relative == host and x == padX and y == padY,
+                    kind .. ' preview applies padding once' .. label)
+                check(reflow and reflow.x == padX and reflow.y == padY,
+                    kind .. ' reflow uses the same inset' .. label)
+                check(owner == body and anchorX == -4 and anchorY == 29,
+                    kind .. ' preview retains profile offsets' .. label)
+                seen[kind] = true
+            end
+        end
+        check(seen.buff and seen.debuff, 'target buff and debuff samples exist' .. label)
+    end
 end
 local function groupSetup()
     assert(mw:Select('gf_layout') ~= false); settle()
@@ -127,10 +225,12 @@ local function exerciseLayers(box, buttons, visible, available, keyOf, refresh, 
 end
 settle()
 if mode == 'unit_layers' then
+    exerciseDisabledPaint()
     local box = unitSetup()
     U.SetStatusPreviewMode('all'); settle()
     exerciseLayers(box, box.layerButtons, box.layerVisibility, box.layerAvailable,
         function(b) return b.key end, function(reason) box:RequestRefresh(reason) end, unitRegions, U.RefreshAnimation)
+    if mw.core.Client.IsRetail then checkTargetAuraPadding() end
 elseif mode == 'group_layers' then
     local box = groupSetup()
     M.SetMenuStateValue('gfStatusPreviewMode', 'all'); box:Refresh('SETTINGS'); settle()

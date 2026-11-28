@@ -160,12 +160,18 @@ function Stage.BindDrag(st)
     local ConfigCombatLocked, RefreshHandleSelection, SaveHandlePosition = st.ConfigCombatLocked, st.RefreshHandleSelection, st.SaveHandlePosition
     local ApplyTextRegionDrag, ReleaseTextDragRegions = st.ApplyTextRegionDrag, st.ReleaseTextDragRegions
     local StopPan, UpdateHint, WriteTextHandleOffsets = st.StopPan, st.UpdateHint, st.WriteTextHandleOffsets
+    local UpdateHandleDrag
     local function StopHandleDrag(handle, button, allowOpenSettings)
         if box._stage and box._stage._msufGFPreviewPanning then StopPan(box._stage) end
         if button and button ~= "LeftButton" then return end
         handle = handle or (box._dragFrame and box._dragFrame._handle)
         local wasDragging = handle and handle._dragging == true
         local textDrag = handle and handle._cfgText
+        local snap = box._msufPreviewSnap
+        if wasDragging and button == "LeftButton" and snap and snap.active and not ConfigCombatLocked() then
+            UpdateHandleDrag(box._dragFrame, nil, true)
+        end
+        if wasDragging and PreviewHelpers.EndPreviewSnap then PreviewHelpers.EndPreviewSnap(box) end
         local didMove = handle and handle._didDragMove == true
         if didMove and PreviewHelpers.NotePreviewElementMoved then PreviewHelpers.NotePreviewElementMoved() end
         local openSettingsOnRelease = handle and allowOpenSettings == true
@@ -209,27 +215,32 @@ function Stage.BindDrag(st)
             ReleaseTextDragRegions(handle)
             box._dragFrozenScale = nil
         end
-        if openSettingsOnRelease then st.OpenHandleSettings(handle) end
+        if openSettingsOnRelease then
+            local selection = st.M.PreviewSelectionBar
+            if not (selection and selection.HasQuickControls and selection.HasQuickControls(box, handle)) then
+                st.OpenHandleSettings(handle)
+            end
+        end
     end
     box._dragFrame:SetScript("OnMouseUp", function(_, button)
         StopHandleDrag(nil, button, true)
     end)
-    local function UpdateHandleDrag(df)
+    UpdateHandleDrag = function(df, _, final)
         local handle = df and df._handle
         if not (handle and handle._dragging) then return end
         if ConfigCombatLocked() then
             StopHandleDrag(handle, "LeftButton")
             return
         end
-        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+        if not final and IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
             StopHandleDrag(handle, "LeftButton", true)
             return
         end
         local cx, cy = GetCursorPosition()
         if not (cx and cy) then return end
         local cursorX, cursorY = handle._dragCursorX or cx, handle._dragCursorY or cy
+        local cursorDX, cursorDY = cx - cursorX, cy - cursorY
         if handle._didDragMove ~= true then
-            local cursorDX, cursorDY = cx - cursorX, cy - cursorY
             if cursorDX * cursorDX + cursorDY * cursorDY < HANDLE_CLICK_DRAG_THRESHOLD * HANDLE_CLICK_DRAG_THRESHOLD then
                 return
             end
@@ -248,8 +259,9 @@ function Stage.BindDrag(st)
             startX, startY, scale, previewScale = handle._dragStartX, handle._dragStartY, handle._dragScale or 1, 1
             if scale <= 0 then scale = 1 end
         end
-        local nextX = Round((startX or 0) + (cx - cursorX) / scale / previewScale)
-        local nextY = Round((startY or 0) + (cy - cursorY) / scale / previewScale)
+        if PreviewHelpers.ApplyPreviewSnap then cursorDX, cursorDY = PreviewHelpers.ApplyPreviewSnap(box, cursorDX, cursorDY) end
+        local nextX = Round((startX or 0) + cursorDX / scale / previewScale)
+        local nextY = Round((startY or 0) + cursorDY / scale / previewScale)
         if handle._lastDragX == nextX and handle._lastDragY == nextY then return end
         handle._lastDragX = nextX
         handle._lastDragY = nextY
@@ -274,7 +286,8 @@ function Stage.BindDragStart(st)
     local function StartHandleDrag(handle, button)
         if ConfigCombatLocked() then return end
         if button and button ~= "LeftButton" then return end
-        if handle then handle._didDragMove = nil end
+        if not handle or handle._dragging then return end
+        handle._didDragMove = nil
         if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPan(box._stage, box, button) then
             handle._suppressNextClick = true
             handle._suppressSettingsOnRelease = true
@@ -282,7 +295,7 @@ function Stage.BindDragStart(st)
         end
         SelectHandle(handle)
         if PreviewHelpers.ShowPreviewMoveCue then PreviewHelpers.ShowPreviewMoveCue(box, handle) end
-        if not handle or handle._locked then return end
+        if handle._locked then return end
         local point, relativeTo, relativePoint, xOfs, yOfs = handle:GetPoint(1)
         local cx, cy = GetCursorPosition()
         if not (point and cx and cy) then return end
@@ -319,6 +332,9 @@ function Stage.BindDragStart(st)
         handle._dragScale = (rel and rel.GetEffectiveScale and rel:GetEffectiveScale())
             or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
             or 1
+        if PreviewHelpers.BeginPreviewSnap then
+            PreviewHelpers.BeginPreviewSnap(box, handle, box._stage, box._mock, box._handleList)
+        end
         box._dragFrame._handle = handle
         if box._dragFrame.SetAllPoints then box._dragFrame:SetAllPoints(box._stage or box) end
         box._dragFrame:SetScript("OnUpdate", UpdateHandleDrag)

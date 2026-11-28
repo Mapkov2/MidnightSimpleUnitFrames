@@ -95,6 +95,11 @@ end
 -- Per-drag state a handle carries between press and release.
 local HANDLE_DRAG_STATE = { "_dragging", "_lastDragX", "_lastDragY", "_dragPoint", "_dragRelTo", "_dragRelPoint",
     "_dragOffsetX", "_dragOffsetY", "_didDragMove" }
+local function MovesWithUnitHandle(box, dragged, candidate)
+    return dragged == box.handleCastbar and (candidate == box.handleCastbarIcon or candidate == box.handleCastbarText
+        or candidate == box.handleCastbarTarget or candidate == box.handleCastbarTime)
+end
+
 local function StartHandleDrag(self, button)
     local preview = self._preview
     if button and button ~= "LeftButton" then return end
@@ -119,6 +124,9 @@ local function StartHandleDrag(self, button)
     local cx, cy = GetCursorPosition()
     self._cursorX, self._cursorY = cx, cy
     self._dragPoint, self._dragRelTo, self._dragRelPoint, self._dragOffsetX, self._dragOffsetY = self:GetPoint(1)
+    if PreviewHelpers.BeginPreviewSnap then
+        PreviewHelpers.BeginPreviewSnap(preview, self, preview.canvas, preview.mock, preview.handles, MovesWithUnitHandle)
+    end
     preview.dragFrame._handle = self
     if preview.dragFrame.SetAllPoints then preview.dragFrame:SetAllPoints(preview.canvas) end
     preview.dragFrame:SetScript("OnUpdate", preview._onDragUpdate)
@@ -126,12 +134,18 @@ local function StartHandleDrag(self, button)
     preview.dragFrame:Show()
     RefreshHandleSelectionVisuals(preview)
 end
+local HandleDragUpdate
 local function StopHandleDrag(self, button, allowOpenSettings)
     local preview = self._preview
     if StopPreviewPan and preview.canvas and preview.canvas._msufPreviewPanning then StopPreviewPan(preview.canvas) end
     if button and button ~= "LeftButton" then return end
     local wasDragging = self._dragging == true or preview.dragFrame._handle == self
     if not wasDragging then return end
+    local snap = preview._msufPreviewSnap
+    if button == "LeftButton" and snap and snap.active and not M2.IsConfigCombatLocked() then
+        HandleDragUpdate(preview.dragFrame, nil, true)
+    end
+    if PreviewHelpers.EndPreviewSnap then PreviewHelpers.EndPreviewSnap(preview) end
     local didMove = self._didDragMove == true
     if didMove and PreviewHelpers.NotePreviewElementMoved then PreviewHelpers.NotePreviewElementMoved() end
     local openSettingsOnRelease = allowOpenSettings == true
@@ -160,7 +174,7 @@ local function StopHandleDrag(self, button, allowOpenSettings)
     if openSettingsOnRelease then OpenPreviewHandleSettings(self, "click") end
 end
 local function HandleOnMouseUp(self, button) StopHandleDrag(self, button, true) end
-local function HandleOnDragStop(self, button) StopHandleDrag(self, button, false) end
+local function HandleOnDragStop(self, button) StopHandleDrag(self, button or "LeftButton", false) end
 local function HandleOnHide(self) StopHandleDrag(self, nil, false) end
 local HANDLE_SCRIPTS = {
     OnEnter = HandleOnEnter, OnLeave = HandleOnLeave, OnClick = HandleOnClick,
@@ -247,10 +261,10 @@ local function MakeHandle(preview, key, fields, label, color)
     return h
 end
 --- While a handle is dragged this runs every frame on the drag frame; it only writes when the rounded position changed.
-local function HandleDragUpdate(df)
+HandleDragUpdate = function(df, _, final)
     local h = df._handle
     if not h then return end
-    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+    if not final and IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
         local stop = h.GetScript and h:GetScript("OnMouseUp")
         if stop then stop(h, "LeftButton") end
         return
@@ -262,9 +276,12 @@ local function HandleDragUpdate(df)
         or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
         or 1
     if uiScale <= 0 then uiScale = 1 end
-    local dx = (((cx or 0) - (h._cursorX or 0)) / uiScale) / scale
-    local dy = (((cy or 0) - (h._cursorY or 0)) / uiScale) / scale
-    dx, dy = Preview.ActiveHandleDelta(h, dx, dy)
+    local dx = (cx or 0) - (h._cursorX or 0)
+    local dy = (cy or 0) - (h._cursorY or 0)
+    if (dx ~= 0 or dy ~= 0 or h._didDragMove) and PreviewHelpers.ApplyPreviewSnap then
+        dx, dy = PreviewHelpers.ApplyPreviewSnap(box, dx, dy)
+    end
+    dx, dy = Preview.ActiveHandleDelta(h, dx / uiScale / scale, dy / uiScale / scale)
     local nextX = RoundOffset((h._startX or 0) + dx)
     local nextY = RoundOffset((h._startY or 0) + dy)
     if nextX ~= h._startX or nextY ~= h._startY then h._didDragMove = true end

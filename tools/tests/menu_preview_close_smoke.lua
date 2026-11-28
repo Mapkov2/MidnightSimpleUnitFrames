@@ -73,8 +73,18 @@ local function Descends(frame, parent)
         frame = frame:GetParent()
     end
 end
+-- Like the client, Show() on a hidden frame under a visible parent runs its OnShow:
+-- a dropdown field paints once, and its bar sample builds from the lane's OnShow.
+local Methods = mw.world.widgets.Methods
+local methodShow = Methods.Show
+function Methods.Show(self, ...)
+    local wasShown = self:IsShown()
+    methodShow(self, ...)
+    if not wasShown and self:IsVisible() then MW.FireScript(self, "OnShow") end
+end
 assert(M.Open("opt_bars"))
 Settle()
+Methods.Show = methodShow
 local choices = {}
 for _, frame in ipairs(mw.world.widgets.frames) do
     if frame._msuf2BarPreview and frame.RefreshPreview and Descends(frame, mw.win) then

@@ -31,6 +31,19 @@ local mw = MW.Open(root, flavor, { page = "home", beforeCore = function(world)
             end
             registerUnitEvent(self, event, unit, ...)
         end
+        -- PlayerModel: the stubs have no model widget; record the bound unit.
+        local createFrame = world.env.CreateFrame
+        world.env.CreateFrame = function(kind, ...)
+            local frame = createFrame(kind, ...)
+            if kind == "PlayerModel" then
+                function frame:SetUnit(unit) self.modelUnit = unit end
+                for _, name in ipairs({ "SetKeepModelOnHide", "SetPortraitZoom", "SetCamDistanceScale",
+                    "SetViewTranslation", "SetFacing" }) do
+                    frame[name] = function() end
+                end
+            end
+            return frame
+        end
         world.env.UnitExists = function(unit) return liveUnits[unit] == true end
         world.env.UnitIsPlayer = function(unit) return unit == "player" end
         world.env.SetPortraitTexture = function(texture, unit, unmasked)
@@ -205,9 +218,47 @@ player.portraitRender, player.portraitClassStyle = "CLASS", "RONDO_COLOR"
 mw.core.UF.Config.Refresh()
 Preview.Refresh(playerBox, "TEST_CLASS")
 assert(portrait.nativePortraitUnit == nil and portrait:GetTexture() ~= "RTPortrait1", "class mode painted a live portrait")
+-- 3D draws the model over a hidden image, and reopening the page (which runs
+-- the preview's portrait normalizer) must keep the saved render.
+player.portraitRender = "3D"
+mw.core.UF.Config.Refresh()
+Preview.Refresh(playerBox, "TEST_3D")
+local model3D = playerFrame.MSUFPortraitHolder.model3D
+assert(model3D and model3D:IsShown() and not portrait:IsShown(), "3D preview did not show the model")
+assert(model3D.modelUnit == "player", "3D preview did not bind the live player")
+assert(M.Open("uf_player") ~= false)
+mw:RunTimers()
+assert(env.MSUF_DB.player.portraitRender == "3D", "opening the preview rewrote the 3D render")
+playerBox = assert(Preview.active)
+playerFrame = playerBox._unitScene:Frame()
+portrait = assert(playerFrame.portrait)
+model3D = playerFrame.MSUFPortraitHolder.model3D
+assert(model3D and model3D:IsShown() and not portrait:IsShown(), "reopened 3D preview lost the model")
+-- The 3D backdrop: class tint at the unit's own opacity, painted under the model.
+player.portraitBgEnabled, player.portraitBgColorMode, player.portraitBgAlpha = true, "CLASS", 40
+mw.core.UF.Config.Refresh()
+Preview.Refresh(playerBox, "TEST_3D_BG")
+local bgSpec = playerFrame.MSUFSpec.portrait.bg
+assert(bgSpec.enabled and bgSpec.mode == "CLASS" and bgSpec.dynamic == true and math.abs(bgSpec.a - 0.4) < 1e-9,
+    "background mode or opacity did not compile")
+local bg = playerFrame.MSUFPortraitHolder.bg
+local sampleClass = playerFrame._msufPortraitSampleClass
+local classColor = sampleClass and env.RAID_CLASS_COLORS and env.RAID_CLASS_COLORS[sampleClass]
+assert(bg:IsShown() and model3D:IsShown(), "3D background or model missing")
+if classColor then
+    assert(bg._msufVertexR == classColor.r and bg._msufVertexB == classColor.b and math.abs(bg._msufVertexA - 0.4) < 1e-9,
+        "3D background did not take the sample's class colour")
+end
+player.portraitBgColorMode = "BOGUS"
+mw.core.UF.Config.Refresh()
+Preview.Refresh(playerBox, "TEST_3D_BG_BOGUS")
+assert(playerFrame.MSUFSpec.portrait.bg.mode == "CUSTOM", "unknown background mode did not fall back to custom")
+player.portraitBgEnabled, player.portraitBgColorMode, player.portraitBgAlpha = nil, nil, nil
 player.portraitRender = "2D"
 mw.core.UF.Config.Refresh()
 Preview.Refresh(playerBox, "TEST_2D")
+assert(not model3D:IsShown(), "2D preview kept the model")
+assert(not bg:IsShown(), "disabled background stayed on the preview")
 CheckLivePortrait()
 
 mw.world:EnterCombat()

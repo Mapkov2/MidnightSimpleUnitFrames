@@ -71,6 +71,7 @@ local SPELL_HANDLE = { slot = "spellHandle", key = "si", section = "si", color =
 local HANDLE_BUNDLE_KEYS = {
     "buffHandle", "trackedBuffHandle", "debuffHandle", "externalHandle", "powerBarHandle", "portraitHandle", "dispelSymbolHandle",
     "statusHandles", "spellHandle", "SelectHandle", "NudgeHandlePosition", "StopHandleDrag",
+    "SpellPlacedForHandle", "RefreshGroupPreviewAfterMove",
 }
 
 local function InteractionLevel(ns, mock, extra)
@@ -170,7 +171,7 @@ function Stage.BindHandleFactory(st)
         end
     end
     local function OnMouseUp(self, button) StopHandleDrag(self, button, true) end
-    local function OnDragStop(self, button) StopHandleDrag(self, button, false) end
+    local function OnDragStop(self, button) StopHandleDrag(self, button or "LeftButton", false) end
     local function OnHide(self)
         StopHandleDrag(self, nil, false)
         if box._selectedHandle == self then SelectHandle(nil) end

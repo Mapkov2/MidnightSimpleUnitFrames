@@ -61,4 +61,32 @@ assert(icon.CooldownText:GetText() ~= animated, "native Edit Mode clock stopped 
 c.PreviewAnimation.enabled = false
 EM.RefreshUnit("target")
 assert(icon.CooldownText:GetText() == static, "native animation stop left animated pixels")
+-- The real HUD mover resolves its current owner and writes only its displayed position.
+local cfg = assert(A3.ResolveUnitFrameConfig("target"))
+local source = assert(cfg.lanes.buff)
+local savedX, savedY = source.x, source.y
+local resolve, metrics = A3.ResolveOutlineLaneOffset, A3.OutlineLaneMetrics
+local owner, resolved = nil, 0
+A3.ResolveOutlineLaneOffset = function(frame, lane, x, y, zoom)
+    if lane ~= source then return resolve(frame, lane, x, y, zoom) end
+    assert(zoom == 1 and x == savedX and y == savedY, "HUD used a menu zoom or projected offsets twice")
+    owner, resolved = frame, resolved + 1
+    return x + 0.25, y - 0.25, true
+end
+A3.OutlineLaneMetrics = function(frame, lane, zoom)
+    if lane == source then return 17, 19, 0, 2, 43, 19 end
+    return metrics(frame, lane, zoom)
+end
+group._msufA3RefreshSignature = nil
+EM.RefreshUnit("target")
+local _, rel, _, appliedX, appliedY = group:GetPoint()
+local bx, by = A3.AnchorOffset(source.anchor, rel:GetWidth(), rel:GetHeight())
+local ax, ay = A3.AnchorOffset(source.anchor, 43, 19)
+assert(resolved == 1 and owner == rel and appliedX == bx + savedX + 0.25 - ax
+    and appliedY == by + savedY - 0.25 - ay, "HUD mover missed the snapped frame edge")
+assert(icon:GetWidth() == 17 and icon:GetHeight() == 19 and group.Body:GetWidth() == 43,
+    "HUD aura sample ignored the projected grid")
+EM.RefreshUnit("target")
+assert(resolved == 1 and source.x == savedX and source.y == savedY, "HUD warm repaint changed placement")
+A3.ResolveOutlineLaneOffset, A3.OutlineLaneMetrics = resolve, metrics
 print("PASS editmode_preview_budget_smoke")

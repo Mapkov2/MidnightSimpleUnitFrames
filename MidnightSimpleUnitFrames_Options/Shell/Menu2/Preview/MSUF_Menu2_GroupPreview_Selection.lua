@@ -365,7 +365,55 @@ GroupSelection.OffsetRows = {
         "The shared Preview Y field is pinned to the Party Portrait handle for this exact Search route.",
         "gf_party.portraitOffsetY" },
 }
-function GroupSelection.Create(box, stage, selectHandle)
+local QUICK_NAME = { size = "nameFontSize", anchor = "nameAnchor", min = 6, max = 48,
+    defaultSize = 12, defaultAnchor = "LEFT", label = "Font size", domain = "font", anchors = "ANCHORS" }
+local QUICK_DISPEL = { size = "dispelSymbolSize", anchor = "dispelSymbolAnchor", min = 4, max = 48,
+    defaultSize = 12, defaultAnchor = "TOPRIGHT", label = "Symbol size", anchors = "STATUS_ICON_ANCHORS" }
+local QUICK_SPELL = { size = "size", anchor = "anchor", min = 1, max = 48,
+    defaultSize = 18, defaultAnchor = "TOPLEFT", label = "Size", anchors = "STATUS_ICON_ANCHORS" }
+local QUICK_SPELL_BAR = { size = "size", anchor = "anchor", min = 1, max = 48,
+    defaultSize = 18, defaultAnchor = "TOPLEFT", label = "Height", anchors = "STATUS_ICON_ANCHORS" }
+
+local function QuickIdentity(_, handle)
+    local spell = handle._cfgSpellItem
+    return CurrentScope(), spell and spell.specKey, spell and spell.auraName
+end
+
+local function ReadQuick(handles, handle)
+    local kind, gp = CurrentScope(), M.GroupPage
+    local row
+    if handle._cfgDispelSymbol then
+        row = QUICK_DISPEL
+    elseif handle._cfgTextKind == "name" and (kind == "raid" or kind == "mythicraid") then
+        row = QUICK_NAME
+    elseif handle._cfgSpellItem then
+        local placed = handles.SpellPlacedForHandle(handle, false)
+        local visual = placed and (placed.spellIndicatorSlot and placed.visual or placed.type)
+        if not visual or visual == "none" or placed.hiddenVisual then return end
+        row = visual == "bar" and QUICK_SPELL_BAR or QUICK_SPELL
+        return row, tonumber(placed.size) or row.defaultSize, placed.anchor or row.defaultAnchor, gp[row.anchors]
+    else
+        return
+    end
+    return row, gp.Num(kind, row.size, row.defaultSize), gp.Val(kind, row.anchor, row.defaultAnchor), gp[row.anchors]
+end
+
+local function WriteQuick(handles, handle, row, key, value)
+    if not handle._cfgSpellItem then
+        return M.GroupPage.Set(CurrentScope(), key, value, row.domain or "visual")
+    end
+    local kind, spec, aura = QuickIdentity(nil, handle)
+    local historyKey = "group-preview-spell:" .. kind .. ":" .. tostring(spec) .. ":" .. tostring(aura) .. ":" .. key
+    return M.RunWithHistory(Tr(row.label), historyKey, function()
+        local placed = handles.SpellPlacedForHandle(handle, true)
+        if not placed then return false end
+        placed[key] = value
+        handles.RefreshGroupPreviewAfterMove(handle)
+        return true
+    end)
+end
+
+function GroupSelection.Create(box, stage, handles)
     local selectionAPI = M.PreviewSelectionBar
     selectionAPI.Create(box, {
         Tr = Tr,
@@ -381,7 +429,11 @@ function GroupSelection.Create(box, stage, selectHandle)
         NudgeDelta = GroupSelection.NudgeDelta,
         DefaultOffsets = GroupSelection.DefaultOffsets,
         OpenSettings = GroupSelection.OpenSettings,
-        SelectHandle = function(_, handle) return selectHandle(handle) end,
+        SelectHandle = function(_, handle) return handles.SelectHandle(handle) end,
+        Snap = true,
+        QuickIdentity = QuickIdentity,
+        ReadQuick = function(_, handle) return ReadQuick(handles, handle) end,
+        WriteQuick = function(_, handle, row, key, value) return WriteQuick(handles, handle, row, key, value) end,
         UpdateHint = UpdateHint,
     })
     selectionAPI.CreatePicker(box, stage)

@@ -54,6 +54,50 @@ end
 Check(mw:Select("opt_colors") ~= false, "Colors did not open")
 Settle()
 if mode == "resize" then
+    local preview = mw.world.core.UFPreview
+    local refresh = preview.Refresh
+    local db = mw.world.core.UF.Config.GetDB()
+    db.general.unitPreviewGuidesEnabled = true
+    local function ReopenColors(lateChange)
+        Check(mw:Select("home") ~= false, "Colors could not return to the dashboard")
+        Settle()
+        local calls, host, originalWidth, detached = {}, nil, nil, false
+        preview.Refresh = function(box, reason)
+            if box._msuf2ColorPainterUnitKey then
+                calls[box] = (calls[box] or 0) + 1
+                if lateChange == "width" and not host then
+                    host = box:GetParent()
+                    originalWidth = host:GetWidth()
+                    host:SetWidth(originalWidth + 4)
+                end
+            end
+            local result = refresh(box, reason)
+            if lateChange == "attachment" and not detached and box._msuf2ColorPainterUnitKey == "target" then
+                detached = true
+                M.ReleasePinnedPreviews("COLORS_SETTLE_FIXTURE", nil, "opt_colors")
+            end
+            return result
+        end
+        Check(mw:Select("opt_colors") ~= false, "Colors did not reopen")
+        Settle()
+        preview.Refresh = refresh
+        if host then host:SetWidth(originalWidth) end
+        local boxes = 0
+        for box, count in pairs(calls) do
+            Check(box.layerVisibility.guides == true, "settlement overwrote the rendered guide state")
+            boxes = boxes + 1
+            if lateChange then
+                Check(count >= 2, "settlement skipped the render after a late " .. lateChange .. " change")
+            else
+                Check(count == 1, "settlement redrew an already rendered preview")
+            end
+            Check(box:IsShown(), "settlement left a preview hidden")
+        end
+        Check(boxes == 2, "reopening Colors lost either unit preview")
+    end
+    ReopenColors()
+    ReopenColors("width")
+    ReopenColors("attachment")
     Category("auras")
     width = 1500
     mw.win.maximizeButton:Click()

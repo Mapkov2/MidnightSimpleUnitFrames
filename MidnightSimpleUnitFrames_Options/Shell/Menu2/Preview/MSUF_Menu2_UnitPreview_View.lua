@@ -305,6 +305,7 @@ function BoxBuild.Selection(box, s)
             Theme = MenuTheme,
             ApplyBackdrop = ApplyPreviewBackdrop,
             Round = RoundOffset,
+            Snap = true,
             HandleList = function(owner) return owner.handles end,
             HandleLabel = function(handle) return handle._label or handle._key end,
             ReadOffsets = Preview.ReadSelectionCoordinates,

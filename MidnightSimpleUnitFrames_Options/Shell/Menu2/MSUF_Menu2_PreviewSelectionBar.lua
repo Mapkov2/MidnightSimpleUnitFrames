@@ -203,6 +203,39 @@ end
 -- Selection bar
 --------------------------------------------------------------------------
 
+function SB.HasQuickControls(box, handle)
+    local bar = box._msuf2SelectionBar
+    return handle and bar and bar.quick and bar:IsVisible() and Call(box, "ReadQuick", box, handle) ~= nil
+end
+
+local function RefreshQuick(box, quick, handle)
+    if not quick then return end
+    local row, size, anchor, anchors
+    if handle then row, size, anchor, anchors = Call(box, "ReadQuick", box, handle) end
+    if row ~= quick.row then
+        quick.row = row
+        quick:SetShown(row ~= nil)
+        if row then quick.label:SetText(row.label) end
+    end
+    if not row then return end
+    if size ~= quick.shownSize and not quick.size:HasFocus() then
+        quick.shownSize = size
+        quick.size:SetText(tostring(size))
+    end
+    if anchor ~= quick.shownAnchor or anchors ~= quick.shownAnchors then
+        quick.shownAnchor, quick.shownAnchors = anchor, anchors
+        quick.anchor:SetText(M.OptionText(anchors, anchor))
+    end
+    local enabled = not ConfigLocked()
+    if enabled ~= quick.enabled then
+        quick.enabled = enabled
+        quick.minus:SetEnabled(enabled)
+        quick.plus:SetEnabled(enabled)
+        quick.size:SetEnabled(enabled)
+        quick.anchor:SetEnabled(enabled)
+    end
+end
+
 function SB.Refresh(box)
     local bar = box and box._msuf2SelectionBar
     if not bar then return end
@@ -227,6 +260,7 @@ function SB.Refresh(box)
         end
     end
     bar:MSUF2SetEnabled(handle ~= nil and not ConfigLocked())
+    RefreshQuick(box, bar.quick, handle)
     bar:MSUF2SetSelected(handle ~= nil)
     if handle and handle ~= bar._msuf2AttentionHandle then bar:MSUF2PulseAxes() end
     bar._msuf2AttentionHandle = handle
@@ -293,6 +327,8 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
         btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
         btn.fs:SetText(glyph)
+        -- Same control role as the axis value and checkbox labels.
+        if T and T.ApplyMenuFont then T.ApplyMenuFont(btn.fs, 0, "control") end
         btn:SetScript("OnClick", function() StepAxis(box, axis, delta) end)
         return btn
     end
@@ -313,7 +349,11 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("RIGHT")
     edit:SetMaxLetters(6)
+    -- Slim insets keep a signed/fractional offset ("-123.5") inside the 44 box.
+    if edit.SetTextInsets then edit:SetTextInsets(2, 3, 0, 0) end
     if T and T.SkinEditBox then T.SkinEditBox(edit) end
+    -- Compact 18/22 axis keeps its height; the value uses the checkbox role.
+    if T and T.ApplyMenuFont then T.ApplyMenuFont(edit, 0, "control") end
     edit:SetScript("OnEditFocusGained", function(self) self._msuf2Focused = true end)
     edit:SetScript("OnEscapePressed", function(self)
         self._msuf2Focused = nil
@@ -391,6 +431,130 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
     return edit, controls
 end
 
+local function QuickButton(box, parent, text, width)
+    local theme = Theme(box)
+    local button = theme.Button(parent, text, width, 20, { noSearch = true, history = false })
+    theme.CenterButtonLabel(button)
+    return button
+end
+
+local function WriteQuickSize(box, handle, row, current, raw)
+    local size = tonumber(raw)
+    if not (row and size) or ConfigLocked() then return end
+    size = math.max(row.min, math.min(row.max, Round(box, size)))
+    if size ~= current then Call(box, "WriteQuick", box, handle, row, row.size, size) end
+end
+
+local function StepQuickSize(box, step)
+    local handle = SelectedHandle(box)
+    if not handle then return end
+    local row, size = Call(box, "ReadQuick", box, handle)
+    if size then WriteQuickSize(box, handle, row, size, size + step) end
+    SB.Refresh(box)
+end
+
+local function MatchesQuickTarget(box, handle, scope, spec, spell)
+    if not handle or handle ~= SelectedHandle(box) then return false end
+    local newScope, newSpec, newSpell = Call(box, "QuickIdentity", box, handle)
+    return scope == newScope and spec == newSpec and spell == newSpell
+end
+
+local function BindQuickSize(box, edit)
+    edit:SetScript("OnEditFocusGained", function(self)
+        local handle = SelectedHandle(box)
+        self.handle = handle
+        if handle then self.scope, self.spec, self.spell = Call(box, "QuickIdentity", box, handle) end
+    end)
+    edit:SetScript("OnEscapePressed", function(self)
+        self.handle = nil
+        self:ClearFocus()
+    end)
+    edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    edit:SetScript("OnEditFocusLost", function(self)
+        local handle = self.handle
+        self.handle = nil
+        self:GetParent().shownSize = nil
+        if MatchesQuickTarget(box, handle, self.scope, self.spec, self.spell) then
+            local row, size = Call(box, "ReadQuick", box, handle)
+            WriteQuickSize(box, handle, row, size, self:GetText())
+        end
+        SB.Refresh(box)
+    end)
+end
+
+local function OpenQuickAnchor(box, button)
+    local handle = SelectedHandle(box)
+    if not handle or ConfigLocked() then return end
+    local row, _, anchor, values = Call(box, "ReadQuick", box, handle)
+    if not (row and values) then return end
+    local scope, spec, spell = Call(box, "QuickIdentity", box, handle)
+    M.Widgets.OpenDropdown(button, values, anchor, function(value)
+        if ConfigLocked() or not MatchesQuickTarget(box, handle, scope, spec, spell) then return end
+        local currentRow, _, currentAnchor = Call(box, "ReadQuick", box, handle)
+        if row == currentRow and value ~= currentAnchor then
+            Call(box, "WriteQuick", box, handle, row, row.anchor, value)
+            SB.Refresh(box)
+        end
+    end)
+end
+
+local function CreateQuickControls(box, bar)
+    local theme = Theme(box)
+    local quick = PixelLayoutRegion(CreateFrame("Frame", nil, bar))
+    quick:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 10, 2)
+    quick:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -8, 2)
+    quick:SetHeight(22)
+    local label = theme.Font(quick, "GameFontHighlightSmall", "", theme.colors.muted)
+    label:SetPoint("LEFT", quick, "LEFT", 0, 0)
+    label:SetWidth(132)
+    label:SetJustifyH("LEFT")
+    local minus = QuickButton(box, quick, "-", 24)
+    minus:SetPoint("LEFT", label, "RIGHT", 0, 0)
+    minus:SetScript("OnClick", function() StepQuickSize(box, -1) end)
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, quick, "InputBoxTemplate"))
+    edit:SetSize(42, 20)
+    edit:SetPoint("LEFT", minus, "RIGHT", 3, 0)
+    edit:SetAutoFocus(false)
+    edit:SetNumeric(true)
+    edit:SetMaxLetters(3)
+    edit:SetJustifyH("CENTER")
+    theme.SkinEditBox(edit)
+    BindQuickSize(box, edit)
+    local plus = QuickButton(box, quick, "+", 24)
+    plus:SetPoint("LEFT", edit, "RIGHT", 3, 0)
+    plus:SetScript("OnClick", function() StepQuickSize(box, 1) end)
+    local anchorLabel = theme.Font(quick, "GameFontHighlightSmall", "Anchor", theme.colors.muted)
+    anchorLabel:SetPoint("LEFT", plus, "RIGHT", 12, 0)
+    local anchor = QuickButton(box, quick, "", 104)
+    anchor:SetPoint("LEFT", anchorLabel, "RIGHT", 6, 0)
+    anchor:SetScript("OnClick", function(self) OpenQuickAnchor(box, self) end)
+    quick.label, quick.size, quick.minus, quick.plus, quick.anchor = label, edit, minus, plus, anchor
+    quick:Hide()
+    return quick
+end
+
+local function CreateSnapToggle(box, bar, helpers)
+    local toggle = QuickButton(box, bar, "", 96)
+    toggle:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", -8, 10)
+    toggle:SetFrameLevel(bar:GetFrameLevel() + 100)
+    function toggle:RefreshSnap()
+        local enabled = helpers.PreviewSnapEnabled()
+        if enabled == self._msufSnapEnabled then return end
+        self._msufSnapEnabled = enabled
+        self:SetText(enabled and "EM_SNAP_ON" or "EM_SNAP_OFF")
+        self:SetActive(enabled)
+    end
+    toggle:RefreshSnap()
+    toggle:SetScript("OnShow", toggle.RefreshSnap)
+    toggle:HookScript("OnEnter", toggle.RefreshSnap)
+    toggle:SetScript("OnClick", function(self)
+        helpers.TogglePreviewSnap()
+        self:RefreshSnap()
+    end)
+    if M.AddTooltip then M.AddTooltip(toggle, "Grid & Snap", "Hold Alt to place freely.", { hook = true }) end
+    return toggle
+end
+
 function SB.Create(box, deps)
     if not box then return nil end
     box._msuf2SelectionDeps = deps or box._msuf2SelectionDeps or {}
@@ -398,11 +562,12 @@ function SB.Create(box, deps)
     local T = Theme(box)
     local colors = (T and T.colors) or {}
     local bar = PixelLayoutRegion(CreateFrame("Frame", nil, box, "BackdropTemplate"))
-    bar:SetHeight(24)
+    local withQuick = DepFn(box, "ReadQuick") ~= nil
+    bar:SetHeight(withQuick and 48 or 24)
     Chrome(box, bar, "sidebar")
     local swatch = PixelLayoutRegion(bar:CreateTexture(nil, "ARTWORK"))
     swatch:SetSize(8, 8)
-    swatch:SetPoint("LEFT", bar, "LEFT", 10, 0)
+    swatch:SetPoint("TOPLEFT", bar, "TOPLEFT", 10, -8)
     bar.swatch = swatch
     local label = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     label:SetPoint("LEFT", swatch, "RIGHT", 7, 0)
@@ -423,7 +588,7 @@ function SB.Create(box, deps)
         return btn
     end
     local openBtn = BarButton("Open settings", 110)
-    openBtn:SetPoint("RIGHT", bar, "RIGHT", -8, 0)
+    openBtn:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -8, -3)
     openBtn:SetScript("OnClick", function()
         local handle = SelectedHandle(box)
         if handle then Call(box, "OpenSettings", box, handle, "selectionbar") end
@@ -479,6 +644,9 @@ function SB.Create(box, deps)
         self.axisY:MSUF2Pulse()
     end
 
+    if withQuick then bar.quick = CreateQuickControls(box, bar) end
+    local helpers = M.PreviewHelpers
+    if deps and deps.Snap and helpers and helpers.PreviewSnapEnabled then bar.snap = CreateSnapToggle(box, bar, helpers) end
     box._msuf2SelectionBar = bar
     SB.Refresh(box)
     return bar

@@ -60,7 +60,7 @@ function NativeBuild.Handles(state)
     Deps.RegisterPreviewControl = state.RegisterPreviewControl
     local handles = M.GroupPreviewHandles.Install(box, Deps)
     state.handles = handles
-    if M.PreviewSelectionBar then GroupSelection.Create(box, state.stage, handles.SelectHandle) end
+    if M.PreviewSelectionBar then GroupSelection.Create(box, state.stage, handles) end
 end
 function NativeBuild.Render(state)
     local box, handles = state.box, state.handles

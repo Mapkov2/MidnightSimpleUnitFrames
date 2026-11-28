@@ -280,7 +280,7 @@ local NAVIGATE_ONLY_SECTIONS = {
     colors_class_power = "Opens the Resources colors below - pick the Class Resource there, then set its colors.",
 }
 
-local function FocusUnitPreview(box, category, noRender)
+local function FocusUnitPreview(box, category)
     if not (box and type(box.layerVisibility) == "table") then return end
     SwitchColorPreviewCamera(box, category)
     -- A color sample must remain inspectable even when the corresponding live
@@ -298,7 +298,7 @@ local function FocusUnitPreview(box, category, noRender)
         local button = box.layerButtons[i]
         if button and type(button.refresh) == "function" then button:refresh() end
     end
-    if not noRender then RequestPreview(box, "MSUF2_COLOR_PAINTER_FOCUS") end
+    RequestPreview(box, "MSUF2_COLOR_PAINTER_FOCUS")
 end
 
 local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey, result)
@@ -1199,7 +1199,7 @@ function PainterBuild.Category(state)
                 local unitBox = boxes[i]
                 HidePreviewEditorChrome(unitBox, unitBox.canvas, unitBox.sidebar, unitBox.zoomBar, unitBox.animateCombatButton)
                 DisableUnitPreviewEditing(unitBox)
-                FocusUnitPreview(unitBox, key, noRender)
+                if not noRender then FocusUnitPreview(unitBox, key) end
             end
         end
         if groupBox and key == "group" then
@@ -1243,7 +1243,7 @@ function PainterBuild.Lifecycle(state)
         end
     end
     local initialRefreshSerial = 0
-    local function RefreshVisiblePreview(reason, skipRender)
+    local function RefreshVisiblePreview(reason, skipRender, layout, settle)
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
         if ctx and ctx.wrapper and ctx.wrapper.IsVisible and not ctx.wrapper:IsVisible() then return end
         if section.IsVisible and not section:IsVisible() then return end
@@ -1254,26 +1254,40 @@ function PainterBuild.Lifecycle(state)
         -- released (hidden) host.
         if host.Show then host:Show() end
         EnsurePreviewAttachment()
-        ShowCategory(Current(), skipRender)
-        if not skipRender then RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE") end
+        local category = Current()
+        local width, height, scale = host:GetWidth(), host:GetHeight(), host:GetEffectiveScale()
+        local level, parent = host:GetFrameLevel(), section:GetParent()
+        local attachment = host._msuf2PinnedPreviewRecord
+        local fixedHeight = section._msuf2FixedPreviewActiveHeight or section._msuf2FixedPreviewHeight
+        local locked = M.IsConfigCombatLocked and M.IsConfigCombatLocked()
+        if settle then
+            skipRender = layout.width and layout.width > 0 and layout.height and layout.height > 0 and not locked
+                and layout.width == width and layout.height == height and layout.scale == scale and layout.level == level
+                and layout.category == category and layout.parent == parent and layout.attachment == attachment
+                and layout.fixedHeight == fixedHeight and layout.boxCount == state.BoxCount() and layout.resources == state.resourcesStrip
+        end
+        ShowCategory(category, skipRender)
+        if not skipRender then
+            RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE")
+            layout.width, layout.height, layout.scale, layout.level = not locked and width or nil, height, scale, level
+            layout.category, layout.parent, layout.attachment, layout.fixedHeight = category, parent, attachment, fixedHeight
+            layout.boxCount, layout.resources = state.BoxCount(), state.resourcesStrip
+        end
         return true
     end
     local function QueueVisiblePreviewRefresh(reason)
         initialRefreshSerial = initialRefreshSerial + 1
         local serial = initialRefreshSerial
-        local rendered = RefreshVisiblePreview(reason) == true
+        local layout = {}
+        local rendered = RefreshVisiblePreview(reason, false, layout)
         local timer = C_Timer
         if timer and timer.After then
             timer.After(0, function()
-                if serial ~= initialRefreshSerial then return end
-                -- The next-frame pass reasserts host/attachment/category state;
-                -- the expensive preview render repeats here only when the
-                -- immediate pass was blocked by the visibility guards. The
-                -- 0.05s settle pass below stays a full render.
-                if RefreshVisiblePreview(reason, rendered) == true then rendered = true end
+                if serial == initialRefreshSerial then RefreshVisiblePreview(reason, rendered, layout) end
             end)
             timer.After(0.05, function()
-                if serial == initialRefreshSerial then RefreshVisiblePreview(reason) end
+                -- Reassert the attachment even when the earlier render request still applies.
+                if serial == initialRefreshSerial then RefreshVisiblePreview(reason, false, layout, true) end
             end)
         end
     end

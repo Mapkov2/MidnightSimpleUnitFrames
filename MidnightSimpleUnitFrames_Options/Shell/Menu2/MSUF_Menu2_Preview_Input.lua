@@ -212,6 +212,7 @@ local function RegionScaleRatio(region, parentScale)
 end
 function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     if not (handle and parent and parent.GetLeft and regions) then return false end
+    handle._msufPreviewSnapInsetX, handle._msufPreviewSnapInsetY = nil, nil
     opts = opts or {}
     pad = tonumber(pad) or 3
     local min, max = math.min, math.max
@@ -290,6 +291,8 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     local naturalHeight = top - bottom + pad * 2
     local handleWidth = max(18, naturalWidth)
     local handleHeight = max(18, naturalHeight)
+    handle._msufPreviewSnapInsetX = (handleWidth - (right - left)) / 2
+    handle._msufPreviewSnapInsetY = (handleHeight - (top - bottom)) / 2
     handle:ClearAllPoints()
     handle:SetSize(handleWidth, handleHeight)
     -- A minimum hit area must grow equally around the rendered region. Growing
@@ -320,4 +323,152 @@ function H.ApplyTextFocus(box, parent, mock, opts)
     local color = (opts.Color and opts.Color(focus.kind)) or H.TextFocusColor(focus.kind, opts.colors)
     H.PaintTextFocusFrame(frame, color, focus.active == true)
     if not (opts.Place and opts.Place(frame, parent, regions, focus.active and 5 or 4, focus.kind, focus.slot)) then frame:Hide() end
+end
+
+
+-- Alignment uses cursor-space bounds so the tolerance stays constant as the preview zooms.
+local SNAP_TOLERANCE = 8
+local abs = math.abs
+local Secret = MSUF.Util and MSUF.Util.IsSecret
+
+function H.PreviewSnapEnabled()
+    return M.GetPersistentMenuStateTable("previewSnap").off ~= true
+end
+
+function H.TogglePreviewSnap()
+    local state = M.GetPersistentMenuStateTable("previewSnap")
+    state.off = not state.off or nil
+end
+
+local function SnapRect(region)
+    if not (region and region.GetRect and region:IsVisible()) then return end
+    local x, y, width, height = region:GetRect()
+    local scale = region:GetEffectiveScale()
+    if Secret and (Secret(x) or Secret(y) or Secret(width) or Secret(height) or Secret(scale)) then return end
+    if not (x and y and width and height and scale and width > 0 and height > 0 and scale > 0) then return end
+    local insetX, insetY = region._msufPreviewSnapInsetX or 0, region._msufPreviewSnapInsetY or 0
+    return (x + insetX) * scale, (y + insetY) * scale, (x + width - insetX) * scale, (y + height - insetY) * scale
+end
+
+local function AddEdges(axis, low, high)
+    local n = #axis
+    axis[n + 1], axis[n + 2], axis[n + 3] = low, (low + high) / 2, high
+end
+
+local function AddTarget(snap, region)
+    local left, bottom, right, top = SnapRect(region)
+    if not left then return end
+    AddEdges(snap.x, left, right)
+    AddEdges(snap.y, bottom, top)
+end
+
+local function MakeGuides(surface)
+    local overlay = CreateFrame("Frame", nil, surface)
+    overlay:SetAllPoints(surface)
+    local vertical = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY"))
+    local horizontal = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY"))
+    vertical:Hide()
+    horizontal:Hide()
+    return { x = {}, y = {}, overlay = overlay, vertical = vertical, horizontal = horizontal }
+end
+
+function H.EndPreviewSnap(box)
+    local snap = box._msufPreviewSnap
+    if snap and snap.active then
+        snap.active = nil
+        snap.vertical:Hide()
+        snap.horizontal:Hide()
+        snap.guideX, snap.guideY = nil, nil
+    end
+end
+
+function H.BeginPreviewSnap(box, handle, surface, mock, handles, movesWith)
+    H.EndPreviewSnap(box)
+    if not (surface and H.PreviewSnapEnabled()) or box._msuf2ColorPainterHideSelectionChrome then return end
+    local left, bottom, right, top = SnapRect(handle)
+    local originX, originY = SnapRect(surface)
+    if not (left and originX) then return end
+    local snap = box._msufPreviewSnap or MakeGuides(surface)
+    box._msufPreviewSnap = snap
+    snap.left, snap.bottom, snap.right, snap.top = left, bottom, right, top
+    snap.originX, snap.originY = originX, originY
+    snap.scale = surface:GetEffectiveScale()
+    snap.pixel = MSUF.Require("MSUF_GetPhysicalPixelSize", FILE)(snap.overlay)
+    snap.overlay:SetFrameLevel(surface:GetFrameLevel() + 95)
+    local accent = M.Theme.colors.accent or M.Theme.colors.text
+    snap.vertical:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
+    snap.horizontal:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
+    wipe(snap.x)
+    wipe(snap.y)
+    AddTarget(snap, mock)
+    for i = 1, #(handles or {}) do
+        local other = handles[i]
+        local sameDispelRow = handle._cfgDispelSymbol and other._cfgDispelSymbol
+        if other ~= handle and not sameDispelRow and not (movesWith and movesWith(box, handle, other)) then
+            AddTarget(snap, other)
+        end
+    end
+    snap.lastDX, snap.lastDY, snap.started = nil, nil, nil
+    snap.active = true
+end
+
+local function NearestEdge(axis, low, high)
+    local center = (low + high) / 2
+    local best, shift, line = SNAP_TOLERANCE + 0.001, 0, nil
+    for i = 1, #axis do
+        local target = axis[i]
+        local delta = target - low
+        if abs(delta) < best then best, shift, line = abs(delta), delta, target end
+        delta = target - center
+        if abs(delta) < best then best, shift, line = abs(delta), delta, target end
+        delta = target - high
+        if abs(delta) < best then best, shift, line = abs(delta), delta, target end
+    end
+    return shift, line
+end
+
+local function ShowGuide(snap, line, vertical)
+    local guide = vertical and snap.vertical or snap.horizontal
+    if not line then
+        guide:Hide()
+        return
+    end
+    guide:ClearAllPoints()
+    if vertical then
+        local x = (line - snap.originX) / snap.scale
+        guide:SetPoint("TOPLEFT", snap.overlay, "TOPLEFT", x, 0)
+        guide:SetPoint("BOTTOMLEFT", snap.overlay, "BOTTOMLEFT", x, 0)
+        guide:SetWidth(snap.pixel)
+    else
+        local y = (line - snap.originY) / snap.scale
+        guide:SetPoint("BOTTOMLEFT", snap.overlay, "BOTTOMLEFT", 0, y)
+        guide:SetPoint("BOTTOMRIGHT", snap.overlay, "BOTTOMRIGHT", 0, y)
+        guide:SetHeight(snap.pixel)
+    end
+    guide:Show()
+end
+
+function H.ApplyPreviewSnap(box, dx, dy)
+    local snap = box._msufPreviewSnap
+    if not (snap and snap.active) then return dx, dy end
+    if not snap.started then
+        if dx * dx + dy * dy < 9 then return dx, dy end
+        snap.started = true
+    end
+    local shiftX, shiftY, lineX, lineY = 0, 0
+    if not (IsAltKeyDown and IsAltKeyDown()) then
+        if dx ~= snap.lastDX then
+            snap.lastDX = dx
+            snap.shiftX, snap.lineX = NearestEdge(snap.x, snap.left + dx, snap.right + dx)
+        end
+        if dy ~= snap.lastDY then
+            snap.lastDY = dy
+            snap.shiftY, snap.lineY = NearestEdge(snap.y, snap.bottom + dy, snap.top + dy)
+        end
+        shiftX, shiftY, lineX, lineY = snap.shiftX, snap.shiftY, snap.lineX, snap.lineY
+    end
+    if snap.guideX ~= lineX then ShowGuide(snap, lineX, true) end
+    if snap.guideY ~= lineY then ShowGuide(snap, lineY, false) end
+    snap.guideX, snap.guideY = lineX, lineY
+    return dx + shiftX, dy + shiftY
 end
