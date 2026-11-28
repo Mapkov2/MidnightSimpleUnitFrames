@@ -609,6 +609,8 @@ function ImportTx.Stage(plan, base)
     if type(gf) == "table" and type(gf.RepairGroupDB) == "function" then gf.RepairGroupDB(candidate) end
     if MSUF.ProfileMigrations then MSUF.ProfileMigrations.CompleteImportedGroupFontOwnership(candidate) end
     if type(auras) == "table" and type(auras.NormalizeProfileDB) == "function" then auras.NormalizeProfileDB(candidate) end
+    --- After normalizing: the imported aura layout lands as the import carried it.
+    AuraTransfer.FollowLayout(plan, candidate)
     if plan.foreignAura and plan.auraVariants and candidate.profileVariants ~= nil then
         local clean, why = Variants.ValidateForProfile(candidate, candidate.profileVariants)
         if not clean then return nil, why end

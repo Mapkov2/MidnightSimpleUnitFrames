@@ -768,6 +768,167 @@ function AuraTransfer.RestorePartial(plan, candidate, base)
     end
 end
 
+-- Aura layout follows an imported profile from another client; what selects
+-- auras (switches, filters, lists, corner indicators) stays with each client.
+-- Mirrors MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION (State/MSUF_ProfileNormalize.lua).
+local UNIT_AURA_MODEL_REVISION = 1
+-- Mirrors MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION (GF_AURA_PROFILE_MODEL_REVISION in GroupFrames).
+local GROUP_AURA_MODEL_REVISION = 1
+local NO_KEYS = {}
+local UNIT_LAYOUT_FLAGS = { "overrideLayout", "overrideSharedLayout", "overrideStyle" }
+local APPEARANCE_TABLES = { "appearanceIconShapes", "appearanceIconStyles" }
+local GROUP_ROOT_LAYOUT = {
+    "dynamicScale", "iconZoom", "showTooltip", "blizzardContainerAnchor", "blizzardContainerX", "blizzardContainerY",
+    "blizzardIconSize", "blizzardOrganizationType", "blizzardShowCooldownText", "blizzardDispelBorder",
+}
+local GROUP_LANES = { "buff", "debuff", "externals" }
+local GROUP_LANE_LAYOUT = {
+    "anchor", "growth", "x", "y", "size", "spacing", "perRow", "max", "layer", "strata", "trackedStrata", "iconScale",
+    "iconZoom", "iconShape", "behindBar", "behindBarAlpha", "showTooltip", "showCooldown", "showCooldownSwipe",
+    "cooldownSwipeReverse", "sortMethod", "sortReverse", "showDurationBar", "durationBarHeight", "durationBarDisplay",
+    "durationBarPosition", "durationBarDirection", "showAuraBars", "auraBarFill", "auraBarStyle", "showStacks",
+    "cooldownSize", "cooldownAnchor", "cooldownX", "cooldownY", "cooldownDecimalSeconds", "stackSize", "stackAnchor",
+    "stackX", "stackY", "dispelBorderMode",
+}
+local PRIVATE_AURA_LAYOUT = { "anchor", "direction", "layer", "max", "showCountdown", "showNumbers", "size", "spacing", "x", "y" }
+local SPELL_INDICATOR_LAYOUT = { "iconScale", "iconZoom", "layer", "strata", "style" }
+
+-- Absence follows too. A value of another type is malformed: the receiver keeps its own.
+local function FollowValue(target, source, key)
+    local value, current = source[key], target[key]
+    if value ~= nil and current ~= nil and type(value) ~= type(current) then return end
+    target[key] = MSUF_DeepCopy(value)
+end
+
+local function FollowList(target, source, keys)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    for _, key in ipairs(keys) do FollowValue(target, source, key) end
+end
+
+local function FollowSchema(target, source, keys, kept)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+    for key in pairs(keys) do
+        if not kept[key] then FollowValue(target, source, key) end
+    end
+end
+
+-- A lane owner the import's unit does not have stays as it is.
+local function FollowLaneOwner(target, source, name, keys, kept)
+    local from = source[name]
+    if type(from) ~= "table" then return end
+    if target[name] == nil then target[name] = {} end
+    FollowSchema(target[name], from, keys, kept)
+end
+
+-- A managed unit this client lacks is added only for layout the import has.
+local function HasUnitLayout(conf)
+    if type(conf.layout) == "table" or type(conf.layoutShared) == "table" then return true end
+    for _, key in ipairs(UNIT_LAYOUT_FLAGS) do
+        if conf[key] ~= nil then return true end
+    end
+    return false
+end
+
+local function FollowUnitLayout(target, source, schema)
+    local kept = {}
+    for _, spec in pairs(schema.LANE_SPECS) do kept[spec.showKey] = true end
+    FollowSchema(target.shared, source.shared, schema.LAYOUT_KEYS, kept)
+    FollowSchema(target.shared, source.shared, schema.SHARED_LAYOUT_KEYS, kept)
+    -- A fresh client already receives the portable style; a configured one must not get less.
+    FollowList(target.shared, source.shared, PORTABLE_STYLE)
+    if type(target.shared) == "table" and type(source.shared) == "table" then
+        -- Appearance is keyed by kind: a kind only this client has stays.
+        for _, name in ipairs(APPEARANCE_TABLES) do
+            local own, from = target.shared[name], source.shared[name]
+            if type(own) == "table" and type(from) == "table" then
+                for kind in pairs(from) do FollowValue(own, from, kind) end
+            end
+        end
+    end
+    local units, from = target.perUnit, source.perUnit
+    if type(units) ~= "table" or type(from) ~= "table" then return end
+    for unit, conf in pairs(from) do
+        if type(conf) == "table" and units[unit] == nil and schema.MANAGED_UNITS[unit] and HasUnitLayout(conf) then
+            units[unit] = {}
+        end
+        local own = units[unit]
+        if type(conf) == "table" and type(own) == "table" then
+            FollowList(own, conf, UNIT_LAYOUT_FLAGS)
+            FollowLaneOwner(own, conf, "layout", schema.LAYOUT_KEYS, NO_KEYS)
+            FollowLaneOwner(own, conf, "layoutShared", schema.SHARED_LAYOUT_KEYS, kept)
+        end
+    end
+end
+
+local function FollowGroupLayout(target, source)
+    local own, from = target.auras, source.auras
+    FollowList(own, from, GROUP_ROOT_LAYOUT)
+    if type(own) == "table" and type(from) == "table" then
+        for _, lane in ipairs(GROUP_LANES) do FollowList(own[lane], from[lane], GROUP_LANE_LAYOUT) end
+    end
+    FollowList(target.privateAuras, source.privateAuras, PRIVATE_AURA_LAYOUT)
+    FollowList(target.spellIndicators, source.spellIndicators, SPELL_INDICATOR_LAYOUT)
+end
+
+-- The same layout pass a same-client import runs over current-model aura data
+-- (MSUF_ProfileIO_NormalizeProfileAuras), including its override-flag repair.
+local function NormalizeUnitLayoutOwners(unitAuras)
+    local spec = StateHelpers.ProfileIOSpec
+    StateHelpers.NormalizeAuraLayoutTable(unitAuras.shared, spec)
+    if type(unitAuras.perUnit) ~= "table" then return end
+    for _, conf in pairs(unitAuras.perUnit) do
+        if type(conf) == "table" then
+            StateHelpers.NormalizeAuraLayoutTable(conf.layout, spec)
+            StateHelpers.NormalizeAuraLayoutTable(conf.layoutShared, spec)
+            if StateHelpers.TableHasAnyValue(conf.layout) and conf.overrideLayout == nil then conf.overrideLayout = true end
+            if StateHelpers.TableHasAnyValue(conf.layoutShared) and conf.overrideSharedLayout == nil then
+                conf.overrideSharedLayout = true
+            end
+        end
+    end
+end
+
+-- A detached copy of the imported section in this client's form. Only parts in
+-- the current models qualify. The normalizers seed what is missing, so the
+-- caller reads only the parts recorded here.
+local function ForeignLayoutSource(section, gf, auras)
+    local copy, groups = {}, {}
+    local unit = section.auras3
+    local unitQualifies = type(unit) == "table" and (tonumber(unit.profileModelRevision) or 0) >= UNIT_AURA_MODEL_REVISION
+    for key in pairs(GROUP_SCOPES) do
+        local scope = section[key]
+        if type(scope) == "table" and type(scope.auras) == "table"
+            and tonumber(scope.auras.profileModelRevision) == GROUP_AURA_MODEL_REVISION then
+            copy[key] = MSUF_DeepCopy(scope)
+            groups[key] = true
+        end
+    end
+    if not unitQualifies and not next(groups) then return nil end
+    if unitQualifies then
+        copy.auras3 = MSUF_DeepCopy(unit)
+        NormalizeUnitLayoutOwners(copy.auras3)
+    end
+    gf.RepairGroupDB(copy)
+    if unitQualifies then auras.NormalizeProfileDB(copy) end
+    return copy, unitQualifies, groups
+end
+
+-- Runs on the normalized candidate of a full import and normalizes nothing
+-- itself, so staging a plan again gives the same result.
+function AuraTransfer.FollowLayout(plan, candidate)
+    if not plan.foreignAura then return end
+    -- Group frames and Auras3 load after this file.
+    local gf, auras = MSUF.GF, MSUF.MSUF_Auras3
+    local schema = auras and auras.LaneKeySchema
+    if not gf or not schema then return end
+    local source, unitQualifies, groups = ForeignLayoutSource(plan.foreignAura, gf, auras)
+    if not source then return end
+    if unitQualifies and type(candidate.auras3) == "table" then FollowUnitLayout(candidate.auras3, source.auras3, schema) end
+    for key in pairs(groups) do
+        if type(candidate[key]) == "table" then FollowGroupLayout(candidate[key], source[key]) end
+    end
+end
+
 function AuraTransfer.ReviewChanges(changes, before, after)
     local fields = MSUF.ProfileFields
     before, after = CarriedAuraSections(before), CarriedAuraSections(after)
