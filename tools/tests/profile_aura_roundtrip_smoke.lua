@@ -464,12 +464,13 @@ do
 
     -- No default profile stores the flat style keys: the sender sets all of them,
     -- the receiver some. showWeaponEnchants selects auras and stays.
-    local STYLE = { iconShape = "CIRCLE", styleBorderEnabled = true, styleBorderStyle = "GLOW", styleBorderThickness = 3,
+    local STYLE = { animateNewIcons = true, iconShape = "CIRCLE", styleBorderEnabled = true, styleBorderStyle = "GLOW", styleBorderThickness = 3,
         styleBorderColor = { 1, 0, 0, 1 }, styleShadowEnabled = true, styleShadowSize = 6, styleShadowColor = { 0, 0, 1, 0.5 } }
     local function ReceiverStyle(w)
         local shared = DB(w).auras3.shared
         shared.iconShape, shared.styleBorderThickness, shared.styleShadowColor = "RECTANGLE", 2, { 0.2, 0.2, 0.2, 0.9 }
         shared.showWeaponEnchants = false
+        shared.animateNewIcons = false
     end
 
     -- A: every stored layout value differs from the receiver's; the receiver has its own rules.

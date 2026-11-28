@@ -488,6 +488,7 @@ local GROUP_AURA_FIELDS = {
 }
 local NO_CARRIED = {}
 local PORTABLE_STYLE = {
+    "animateNewIcons",
     "iconSize", "spacing", "iconZoom", "iconHeightPercent", "iconShape", "buffGroupIconSize", "debuffGroupIconSize",
     "buffSpacing", "debuffSpacing", "styleBorderEnabled", "styleBorderStyle", "styleBorderThickness", "styleBorderColor",
     "styleShadowEnabled", "styleShadowSize", "styleShadowColor",

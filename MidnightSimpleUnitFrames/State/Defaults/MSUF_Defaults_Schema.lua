@@ -584,7 +584,7 @@ local values = {
             durationBarDisplay = "BAR_ONLY", durationBarHeight = 2, durationBarPosition = "BOTTOM", growth = "RIGHT", maxBuffs = 12,
             maxDebuffs = 12, perRow = 12, showBuffs = true, showCooldownSwipe = true, showCooldownText = true, showDebuffs = true,
             showDurationBar = false, showStackCount = true, showTooltip = true, spacing = 2, stackTextSize = 14,
-            useDebuffTypeBorders = false, animateNewIcons = false,
+            useDebuffTypeBorders = false,
             buffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
             buffFrameEffectLayer = 0, buffFrameEffectPriority = 5, buffFrameEffectStrata = "AUTO", buffFrameEffectThickness = 2,
             debuffFrameEffectType = "none",
