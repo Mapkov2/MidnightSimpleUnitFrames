@@ -584,7 +584,7 @@ local values = {
             durationBarDisplay = "BAR_ONLY", durationBarHeight = 2, durationBarPosition = "BOTTOM", growth = "RIGHT", maxBuffs = 12,
             maxDebuffs = 12, perRow = 12, showBuffs = true, showCooldownSwipe = true, showCooldownText = true, showDebuffs = true,
             showDurationBar = false, showStackCount = true, showTooltip = true, spacing = 2, stackTextSize = 14,
-            useDebuffTypeBorders = false,
+            useDebuffTypeBorders = false, animateNewIcons = false,
             buffFrameEffectColor = { 0.69, 0.50, 0.88, 0.80 },
             buffFrameEffectLayer = 0, buffFrameEffectPriority = 5, buffFrameEffectStrata = "AUTO", buffFrameEffectThickness = 2,
             debuffFrameEffectType = "none",
@@ -979,7 +979,7 @@ Schema.ReadDefaults = {
     gameplay = {
         combatFontSize = 24, combatOffsetX = 0, combatOffsetY = -200, combatStateDuration = 1.5, combatStateEnterText = "+Combat",
         combatStateFontSize = 24, combatStateLeaveText = "-Combat", combatStateOffsetX = 0, combatStateOffsetY = 80,
-        combatTimerAnchor = "none", combatTimerBrackets = false, combatTimerClickThrough = false, crosshairSize = 40, crosshairThickness = 3,
+        combatTimerAnchor = "none", combatTimerBrackets = "none", combatTimerClickThrough = false, crosshairSize = 40, crosshairThickness = 3,
         enableCombatCrosshair = false, enableCombatCrosshairMeleeRangeColor = false, enableCombatStateText = false,
         enableCombatTimer = false, enablePlayerTotems = false, lockCombatState = false, lockCombatTimer = false,
         meleeSpellPerClass = false, meleeSpellPerSpec = false, playerTotemsAnchorFrom = "TOPLEFT", playerTotemsAnchorTo = "BOTTOMLEFT",

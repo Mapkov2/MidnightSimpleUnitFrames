@@ -183,4 +183,17 @@ do
     probe:GetScript("OnEvent")(probe, "DISPLAY_SIZE_CHANGED")
     assert(dash[1]:GetHeight() == pixel and square[1]:GetHeight() == pixel,
         "caption bars kept the stale pixel after a display size change")
+
+    parent:Hide()
+    -- The offline widgets do not propagate visibility callbacks from parents.
+    if probe:GetScript("OnHide") then probe:GetScript("OnHide")(probe) end
+    assert(not probe:IsEventRegistered("DISPLAY_SIZE_CHANGED") and not probe:GetScript("OnSizeChanged"),
+        "closed caption kept its display and scale callbacks")
+    UIParent:SetScale((oldScale or 1) * 0.6)
+    assert(dash[1]:GetHeight() == pixel, "hidden caption relaid out")
+    parent:Show()
+    probe:GetScript("OnShow")(probe)
+    assert(probe:IsEventRegistered("DISPLAY_SIZE_CHANGED") and dash[1]:GetHeight() == shrunk,
+        "reopened caption did not resubscribe and catch up to the new scale")
+    UIParent:SetScale(oldScale)
 end

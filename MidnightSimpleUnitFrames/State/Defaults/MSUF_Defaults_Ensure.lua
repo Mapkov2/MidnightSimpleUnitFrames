@@ -43,6 +43,119 @@ local MSUF_Defaults_Stage_SeedStatusIndicatorDefaults = Parts.MSUF_Defaults_Stag
 local MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall = Parts.MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall
 local StateHelpers = Parts.StateHelpers
 local MSUF_DB_LastHeavyRun
+-- Suite Modern Dark factory-profile repairs; the migration ledger below replays them.
+local SuiteModernDarkRepairs = (function()
+    local function IsSuiteModernDark(profile)
+        local g, player, pet = profile.general, profile.player, profile.pet
+        return type(g) == "table" and g._msufFactoryProfileApplied == true
+            and g.darkBarR == .025 and g.darkBarG == .031 and g.darkBarB == .035
+            and type(player) == "table" and player.width == 340 and player.height == 54
+            and player.portraitPlacement == "OVERLAY" and player.powerBarDetached == true
+            and type(pet) == "table" and pet.anchorToUnitframe == "player" and pet.offsetY == -68
+    end
+    local function RepairSuiteModernDarkCastbar(profile)
+        if not IsSuiteModernDark(profile) or profile.general._msufSuiteModernDarkCastbar_v1 then return end
+        local g = profile.general
+        local auras = type(profile.auras3) == "table" and profile.auras3.perUnit
+        local owner = type(auras) == "table" and auras.player
+        local layout = type(owner) == "table" and owner.layout
+        local shared = type(owner) == "table" and owner.layoutShared
+        if type(layout) ~= "table" or type(shared) ~= "table" or owner.overrideLayout == false
+            or owner.overrideSharedLayout == false or layout.debuffAnchor ~= "TOPLEFT" or layout.debuffGroupOffsetY ~= 80
+            or shared.debuffPerRow ~= 6 or shared.maxDebuffs ~= 6 then return end
+        g._msufSuiteModernDarkCastbar_v1 = true
+        if g.castbarPlayerDetached or (g.castbarPlayerBackend or "MSUF") ~= "MSUF"
+            or (g.castbarPlayerBarHeight or 18) ~= 18 or (g.castbarPlayerOffsetY or -59) ~= -59 then return end
+        -- Modern Dark's debuff row ends 80 UI units below the player top.
+        g.castbarPlayerOffsetY = -104
+    end
+    local function MatchesAuraFields(values, expected)
+        if type(values) ~= "table" then return false end
+        for key, value in pairs(expected) do
+            if values[key] ~= nil and values[key] ~= value then return false end
+        end
+        return true
+    end
+    local function MoveStockAuraRows(owner, row)
+        if type(owner) ~= "table" or owner.overrideLayout == false or owner.overrideSharedLayout == false
+            or not MatchesAuraFields(owner.layout, row.oldLayout) or not MatchesAuraFields(owner.layoutShared, row.oldShared) then return end
+        local layout = owner.layout
+        local old = row.oldLayout
+        if layout.buffAnchor ~= old.buffAnchor or layout.debuffAnchor ~= old.debuffAnchor
+            or layout.buffGroupOffsetY ~= old.buffGroupOffsetY or layout.debuffGroupOffsetY ~= old.debuffGroupOffsetY then return end
+        for key, value in pairs(row.layout) do layout[key] = value end
+        if row.shared then
+            for key, value in pairs(row.shared) do owner.layoutShared[key] = value end
+        end
+    end
+    local regularAuraRows = { buffPerRow = 6, debuffPerRow = 6, maxBuffs = 6, maxDebuffs = 6,
+        buffGrowthX = "RIGHT", debuffGrowthX = "RIGHT", buffGrowthY = "DOWN", debuffGrowthY = "DOWN" }
+    local modernPlayerAuras = {
+        oldLayout = { buffAnchor = "TOPLEFT", buffGroupOffsetX = 0, buffGroupOffsetY = 46,
+            debuffAnchor = "TOPLEFT", debuffGroupOffsetX = 0, debuffGroupOffsetY = 80,
+            buffGroupIconSize = 52, debuffGroupIconSize = 52, debuffIconHeightPercent = 50 },
+        oldShared = regularAuraRows,
+        layout = { buffGroupOffsetY = 50, debuffGroupOffsetY = -59, debuffIconHeightPercent = 42 },
+    }
+    local modernTargetAuras = {
+        oldLayout = { buffAnchor = "TOPLEFT", buffGroupOffsetX = 0, buffGroupOffsetY = 80,
+            debuffAnchor = "TOPLEFT", debuffGroupOffsetX = 0, debuffGroupOffsetY = 46,
+            buffGroupIconSize = 52, debuffGroupIconSize = 52 },
+        oldShared = regularAuraRows,
+        layout = { buffAnchor = "TOPRIGHT", buffGroupOffsetY = 86, debuffAnchor = "TOPRIGHT", debuffGroupOffsetY = 48 },
+        shared = { buffGrowthX = "LEFT", debuffGrowthX = "LEFT" },
+    }
+    local modernBossAuras = {
+        oldLayout = { buffAnchor = "BOTTOMRIGHT", buffGroupOffsetX = -1, buffGroupOffsetY = -3,
+            debuffAnchor = "TOPLEFT", debuffGroupOffsetX = 234, debuffGroupOffsetY = -45,
+            buffGroupIconSize = 52, debuffGroupIconSize = 52, buffSpacing = 4, debuffSpacing = 4,
+            buffIconHeightPercent = 50, debuffIconHeightPercent = 50, buffCooldownTextSize = 12, debuffCooldownTextSize = 12,
+            buffStackTextSize = 11, debuffStackTextSize = 11 },
+        oldShared = { buffPerRow = 12, debuffPerRow = 12, maxBuffs = 12, maxDebuffs = 12,
+            buffGrowthX = "RIGHT", debuffGrowthX = "RIGHT", buffGrowthY = "DOWN", debuffGrowthY = "DOWN" },
+        layout = { buffAnchor = "TOPLEFT", buffGroupOffsetX = 2, buffGroupOffsetY = -48,
+            debuffAnchor = "TOPRIGHT", debuffGroupOffsetX = -2, debuffGroupOffsetY = -48,
+            buffGroupIconSize = 18, debuffGroupIconSize = 18, buffIconHeightPercent = 67, debuffIconHeightPercent = 67,
+            buffSpacing = 2, debuffSpacing = 2, buffCooldownTextSize = 9, debuffCooldownTextSize = 9,
+            buffStackTextSize = 8, debuffStackTextSize = 8 },
+        shared = { buffPerRow = 4, debuffPerRow = 4, buffGrowthX = "RIGHT", debuffGrowthX = "LEFT" },
+    }
+    local function RepairSuiteModernDarkAuraRows(profile)
+        if not IsSuiteModernDark(profile) or profile.general._msufSuiteModernDarkAuraRows_v1 then return end
+        local units = type(profile.auras3) == "table" and profile.auras3.perUnit
+        if type(units) ~= "table" then return end
+        local g = profile.general
+        local castBottom = -(tonumber(g.castbarPlayerOffsetY) or -59)
+        local castTop = castBottom - (tonumber(g.castbarPlayerBarHeight) or 18)
+        if g.castbarPlayerDetached or g.castbarPlayerBackend == "BLIZZARD" or castBottom <= 59 or castTop >= 81 then
+            MoveStockAuraRows(units.player, modernPlayerAuras)
+        end
+        MoveStockAuraRows(units.target, modernTargetAuras)
+        local boss = profile.boss
+        if MatchesAuraFields(boss, { width = 180, height = 30, spacing = -96 }) then
+            for i = 1, 5 do MoveStockAuraRows(units["boss" .. i], modernBossAuras) end
+        end
+        profile.general._msufSuiteModernDarkAuraRows_v1 = true
+    end
+    local function RepairSuiteModernDarkPowerColor(profile)
+        if not IsSuiteModernDark(profile) then return end
+        local general = profile.general
+        if general._msufSuiteModernDarkClassPower_v1 then return end
+        general._msufSuiteModernDarkClassPower_v1 = true
+        if general.powerColorMode == "static" and general.powerBarColorR == .10
+            and general.powerBarColorG == .43 and general.powerBarColorB == .42 then
+            general.powerColorMode = "class"
+        end
+        local colors = general.classPowerColorOverrides
+        local essence = type(colors) == "table" and colors.ESSENCE
+        if general.powerColorMode == "class" and type(essence) == "table"
+            and essence[1] == .2 and essence[2] == 147 / 255 and essence[3] == 127 / 255 then
+            colors.ESSENCE = nil
+        end
+    end
+    return { Castbar = RepairSuiteModernDarkCastbar, AuraRows = RepairSuiteModernDarkAuraRows,
+        PowerColor = RepairSuiteModernDarkPowerColor }
+end)()
 -- State schema is independent of the schema-600 wire/storage contract read by 6.50.
 -- Factory seeding must precede this ledger: a stamp is saved data, never bootstrap.
 MSUF.ProfileMigrations = (function()
@@ -126,6 +239,9 @@ MSUF.ProfileMigrations = (function()
         { revision = 700, replay = true, name = "group_buff_strata", apply = SeedTrackedStrata },
         { revision = 700, replay = true, name = "mana_indicator_defaults", apply = SeedManaIndicators },
         { revision = 700, replay = true, name = "sparse_persistence_defaults", apply = MSUF.DefaultsSchema.FillMenuDefaults },
+        { revision = 700, replay = true, name = "suite_modern_dark_castbar", apply = SuiteModernDarkRepairs.Castbar },
+        { revision = 700, replay = true, name = "suite_modern_dark_auras", apply = SuiteModernDarkRepairs.AuraRows },
+        { revision = 700, replay = true, name = "suite_modern_dark_power_color", apply = SuiteModernDarkRepairs.PowerColor },
     }
     function Migrations.Apply(profile, skipMedia)
         if type(profile) ~= "table" or MSUF.DefaultsSchema.IsQuarantinedProfile(profile)
