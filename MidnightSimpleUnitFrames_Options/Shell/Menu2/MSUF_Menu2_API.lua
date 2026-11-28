@@ -188,6 +188,8 @@ local function RegisterMenuCommand(entry)
     for i = 1, #newWords do byWord[newWords[i]] = existing end
     return true
 end
+-- Later Options files (the stutter monitor) replace their cold entry the same way.
+M.RegisterMenuCommand = RegisterMenuCommand
 
 if type(Commands) == "table" and type(Commands.Register) == "function" then
 RegisterMenuCommand({

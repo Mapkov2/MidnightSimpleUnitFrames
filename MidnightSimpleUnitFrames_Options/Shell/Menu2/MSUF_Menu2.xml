@@ -61,4 +61,5 @@
     <Script file="MSUF_Menu2_Dashboard.lua"/>
     <Script file="MSUF_Menu2_Changelog.lua"/>
     <Script file="MSUF_Menu2_DevChecks.lua"/>
+    <Script file="MSUF_Menu2_StutterMonitor.lua"/>
 </Ui>

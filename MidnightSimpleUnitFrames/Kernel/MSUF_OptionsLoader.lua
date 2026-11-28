@@ -214,6 +214,12 @@ local function RegisterDeferredOptionCommands()
         },
         menu.LocaleCommandDescriptor(),
         {
+            name = "stutter",
+            group = "diagnostics",
+            usage = "/msuf stutter [start/stop/report]",
+            help = "Start or stop the stutter monitor. Add report to open its copyable report.",
+        },
+        {
             name = "versiontest",
             group = "diagnostics",
             dev = true,

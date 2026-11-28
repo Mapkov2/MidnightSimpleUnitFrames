@@ -275,3 +275,14 @@ function Link.SkinAddOnEnabled()
     local client = suite and suite.Client
     return (client and client.AddOnEnabled and client.AddOnEnabled("MSUF_Suite_Skin") == true) or false
 end
+
+------------------------------------------------------------------ diagnostics
+-- The Suite's stutter probe source (MSUFSuite.API.GetStutterProbes, added
+-- 2026-11-28 without a version change), else nil. Only the running stutter
+-- monitor asks for it; an older Suite has none.
+function Link.StutterProbes()
+    local current = API()
+    local get = OptionalFunction(current and current.GetStutterProbes)
+    if get then return get() end
+    return nil
+end

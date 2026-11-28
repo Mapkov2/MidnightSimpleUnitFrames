@@ -408,7 +408,7 @@ MidnightSimpleUnitFrames/State/MSUF_ApplyService.lua
 MidnightSimpleUnitFrames/State/MSUF_HistoryProviders.lua
 MidnightSimpleUnitFrames/State/MSUF_History.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Mainline MidnightSimpleUnitFrames_Options (214 files)
+@ Mainline MidnightSimpleUnitFrames_Options (215 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -476,6 +476,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_StutterMonitor.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Data.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_QueryAliases.lua
@@ -1046,7 +1047,7 @@ MidnightSimpleUnitFrames/State/MSUF_ApplyService.lua
 MidnightSimpleUnitFrames/State/MSUF_HistoryProviders.lua
 MidnightSimpleUnitFrames/State/MSUF_History.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Forever MidnightSimpleUnitFrames_Options (214 files)
+@ Forever MidnightSimpleUnitFrames_Options (215 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -1114,6 +1115,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_StutterMonitor.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Data.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_QueryAliases.lua
@@ -1625,7 +1627,7 @@ MidnightSimpleUnitFrames/State/MSUF_ApplyService.lua
 MidnightSimpleUnitFrames/State/MSUF_HistoryProviders.lua
 MidnightSimpleUnitFrames/State/MSUF_History.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Vanilla MidnightSimpleUnitFrames_Options (213 files)
+@ Vanilla MidnightSimpleUnitFrames_Options (214 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -1692,6 +1694,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_StutterMonitor.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Data.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_QueryAliases.lua
@@ -2201,7 +2204,7 @@ MidnightSimpleUnitFrames/State/MSUF_ApplyService.lua
 MidnightSimpleUnitFrames/State/MSUF_HistoryProviders.lua
 MidnightSimpleUnitFrames/State/MSUF_History.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ Mists MidnightSimpleUnitFrames_Options (213 files)
+@ Mists MidnightSimpleUnitFrames_Options (214 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -2268,6 +2271,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_StutterMonitor.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Data.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_QueryAliases.lua
@@ -2779,7 +2783,7 @@ MidnightSimpleUnitFrames/State/MSUF_ApplyService.lua
 MidnightSimpleUnitFrames/State/MSUF_HistoryProviders.lua
 MidnightSimpleUnitFrames/State/MSUF_History.lua
 MidnightSimpleUnitFrames/Kernel/MSUF_RuntimeContracts.lua
-@ TBC MidnightSimpleUnitFrames_Options (213 files)
+@ TBC MidnightSimpleUnitFrames_Options (214 files)
 MidnightSimpleUnitFrames_Options/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua
 MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua
@@ -2846,6 +2850,7 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_UpgradeHighlights.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Dashboard.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_DevChecks.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_StutterMonitor.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Data.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_QueryAliases.lua
