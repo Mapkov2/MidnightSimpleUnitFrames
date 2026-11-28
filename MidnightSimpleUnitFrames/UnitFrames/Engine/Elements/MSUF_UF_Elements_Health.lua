@@ -728,60 +728,38 @@ else
   end
 end
 
--- hot path: kept whole (perf rule)
-local function UpdateSingleAbsolute(frame, event, unit)
-  unit = unit or frame.MSUFUnitKey
-  local rt = frame and frame._msufHealthSample
-  if rt and rt._dispatchHealthPercentReady == true then
-    rt._dispatchHealthPercent = nil
-    rt._dispatchHealthPercentReady = nil
-  end
-  if not (frame and frame.hpBar and unit) then return end
+-- Both numeric lanes share one painter and allocate their callbacks only at load.
+-- CURRENT-only text consumes the seeded HP without requesting a native percent.
+local function BuildNumericHealthUpdater(currentOnly)
+  -- hot path: kept whole (perf rule)
+  return function(frame, event, unit)
+    unit = unit or frame.MSUFUnitKey
+    local rt = frame and frame._msufHealthSample
+    if rt and rt._dispatchHealthPercentReady == true then
+      rt._dispatchHealthPercent = nil
+      rt._dispatchHealthPercentReady = nil
+    end
+    if not (frame and frame.hpBar and unit) then return end
 
-  local hp, maxHP, percentReady, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and ((event ~= "UNIT_HEALTH" and event ~= "MSUF_DEPENDENT_TARGET_POLL")
-        or RuntimeColorOnHealthEvent(frame, hp, hpSecret, event)) then
-    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+    local hp, maxHP, percentReady, hpSecret = UpdateAbsolute(frame, event, unit)
+    if frame._msufHealthRuntimeColorUpdateEnabled ~= false
+      and ((event ~= "UNIT_HEALTH" and event ~= "MSUF_DEPENDENT_TARGET_POLL")
+          or RuntimeColorOnHealthEvent(frame, hp, hpSecret, event)) then
+      if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+    end
+    local updateTextureState = frame._msufSurfaceHealthUpdate
+    if updateTextureState then
+      UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
+    end
+    if frame._msufUpdateStatusTextIndicator then
+      NotifyHealthState(frame, event, unit, hp, hpSecret)
+    end
+    if currentOnly then return hp, nil, false end
+    return hp, maxHP, percentReady
   end
-  local updateTextureState = frame._msufSurfaceHealthUpdate
-  if updateTextureState then
-    UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
-  end
-  if frame._msufUpdateStatusTextIndicator then
-    NotifyHealthState(frame, event, unit, hp, hpSecret)
-  end
-  return hp, maxHP, percentReady
 end
-
--- hot path: kept whole (perf rule)
-local function UpdateSingleCurrent(frame, event, unit)
-  unit = unit or frame.MSUFUnitKey
-  local rt = frame and frame._msufHealthSample
-  if rt and rt._dispatchHealthPercentReady == true then
-    rt._dispatchHealthPercent = nil
-    rt._dispatchHealthPercentReady = nil
-  end
-  if not (frame and frame.hpBar and unit) then return end
-
-  -- CURRENT-only text can share UnitHealth with the bar. UnitHealthMax is
-  -- retained by the absolute bar path between its own invalidation events, so
-  -- steady health ticks avoid the extra UnitHealthPercent call entirely.
-  local hp, maxHP, _, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and ((event ~= "UNIT_HEALTH" and event ~= "MSUF_DEPENDENT_TARGET_POLL")
-        or RuntimeColorOnHealthEvent(frame, hp, hpSecret, event)) then
-    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-  end
-  local updateTextureState = frame._msufSurfaceHealthUpdate
-  if updateTextureState then
-    UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
-  end
-  if frame._msufUpdateStatusTextIndicator then
-    NotifyHealthState(frame, event, unit, hp, hpSecret)
-  end
-  return hp, nil, false
-end
+local UpdateSingleAbsolute = BuildNumericHealthUpdater(false)
+local UpdateSingleCurrent = BuildNumericHealthUpdater(true)
 
 local function UpdateGroup(frame, event, unit)
   -- Cold/explicit group updates share the generic immediate text handoff.

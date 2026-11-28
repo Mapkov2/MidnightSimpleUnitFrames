@@ -1989,16 +1989,12 @@ function UF.RunLeanIdentity(frame, event)
     EndFrameEvent(frame)
     return false
   end
-  local hp, hpMax, healthPercentReady
-  local power, powerMax, powerType, powerToken, powerMetaChanged
-  if barPath then
-    hp, hpMax, healthPercentReady,
-      power, powerMax, powerType, powerToken, powerMetaChanged = barPath(frame, event, unit)
-  end
-  if path then
-    path(frame, event, unit,
-      hp, hpMax, healthPercentReady,
-      power, powerMax, powerType, powerToken, powerMetaChanged)
+  if barPath and path then
+    path(frame, event, unit, barPath(frame, event, unit))
+  elseif barPath then
+    barPath(frame, event, unit)
+  else
+    path(frame, event, unit)
   end
   EndFrameEvent(frame)
   return true

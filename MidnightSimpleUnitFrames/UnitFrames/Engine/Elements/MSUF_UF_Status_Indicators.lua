@@ -351,8 +351,8 @@ local function SeedHealthDeadOverride(seedHP)
   return seedHP <= 0
 end
 
-local GetConsumptionText
-if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
+local function BuildConsumptionStatus()
+  if not (IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras) then return end
   local GetUnitAuras = C_UnitAuras.GetUnitAuras
   local ReadConsumptionAuras = GetUnitAuras
   local ShouldAurasBeSecret = C_Secrets and C_Secrets.ShouldAurasBeSecret
@@ -440,7 +440,7 @@ if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
     unrelated.unit, unrelated.epoch = unit, scanEpoch
   end
 
-  GetConsumptionText = function(frame, unit, update)
+  return function(frame, unit, update)
     if not ShouldAurasBeSecret or ShouldAurasBeSecret() ~= false then
       frame._msufConsumptionAuras = nil
       return nil
@@ -475,6 +475,7 @@ if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
     return ClassifyConsumption(auras, unrelated)
   end
 end
+local GetConsumptionText = BuildConsumptionStatus()
 
 local function StatusText(frame, cfg, unitState, seedHP)
   local unit = frame.MSUFUnitKey
