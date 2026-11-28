@@ -197,7 +197,7 @@
           1665
         ]
       ],
-      "source_sha256": "4bedef5d61ed48986725882484c13b75fa3292cc52765d7591b3b29bef6902fa",
+      "source_sha256": "c99d90e4913573f7918e07669d108faa85759b7fbd51318efa722ca7e9532136",
       "adapter_exclusions": [
         {
           "name": "HideMeterText",
@@ -362,7 +362,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalFonts.lua",
-          "source_sha256": "e51c79c040d364b018fdeb1ce251a91a11cb657ab300ee6c429466458d33445e",
+          "source_sha256": "0ebe68bce1e32aea612befd81818904d2eec7bdcf62908fd8d8f3384221e59a7",
           "review_note": "2026-11-17: independently reviewed searchIndexed metadata on the existing ephemeral gradient opener; renderer unchanged."
         },
         {
@@ -375,7 +375,7 @@
         },
         {
           "file": "Pages/MSUF_Menu2_UnitSectionShared.lua",
-          "source_sha256": "d38b8d3fba1391be612f89877f3ed7d497c9c091f2cc081414795c30f61643ac"
+          "source_sha256": "4ba82fd7b010190020fbf390da6278ffe48412cbca735b6794fe0741f1d0b692"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
@@ -550,7 +550,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
-          "source_sha256": "9e9253b6bd30861ab1e3f92c98787acc01226416fde993b9def1a3c07a921761"
+          "source_sha256": "2a9d40ee5b8b90d8816c3ec4a1ef3d3aa494282c9de3124ed29ee01e95266c5f"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View.lua",
@@ -583,11 +583,11 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
-          "source_sha256": "0dd3fe0f90a1f109942917ad99e7566b8871d1bcb8aea92bc50eaa587ed10c0c"
+          "source_sha256": "8e4e859f1c6f4f053c277749dd05d33969361e73f165028fe24f26af8727f398"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",
-          "source_sha256": "51202c8cd6c6f4aa64272d3b9cb536772461c00ce1a8829701f6d9f03b2972cd"
+          "source_sha256": "c92c2fa062931010006bd83fab153771f06ed9dfe0f95fd3835de96d40912bda"
         },
         {
           "file": "MSUF_Menu2_PreviewContracts.lua",
@@ -595,7 +595,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Layout.lua",
-          "source_sha256": "a46cda2a14fecc52efd19d3140d9deff3d09a630b06f577536f0fbf26b75c8ad"
+          "source_sha256": "1c30ccb0daba28fa308c5c56116d08712cd60c1cc905c0794ad65909f065c187"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Presentation.lua",
@@ -698,7 +698,7 @@
           1934
         ]
       ],
-      "source_sha256": "e2d06b7e7e1748680923c29350eb57334627cd9fe6e9296f48751200051fc477",
+      "source_sha256": "ebd2e326a42d26d1abe23290fb5721c59f7daa5b5e3f0720f5d132f86afb6934",
       "adapter_exclusions": [
         {
           "name": "CreateRoundedTexturePreview",
@@ -722,11 +722,11 @@
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
-          "source_sha256": "f0cf0f640bb1b38798e4c99b2e831c4e06813373fa54e69998f051734d37c26b"
+          "source_sha256": "35783849f0edbaef0462553a9faadb154da94e8a7093772fbe0ce70cb85e1985"
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Highlights.lua",
-          "source_sha256": "04bb3705bf43586fbb48b3f24098703a8d77747f83c1e13293a6323fcf6e84f4"
+          "source_sha256": "f4ed74eb25e722a8fd1a9acc578bee270387cb1e91be3a9ee721e91451f93c9f"
         }
       ],
       "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned. 2026-11-24: the shape sample still uses NewRuntimeUnitSurface; counts unchanged."
@@ -846,7 +846,7 @@
           1115
         ]
       ],
-      "source_sha256": "743fb4cc9880cfc2e6f3a6ec46913aae4496e5c4d27b16afe4c6bad08e7f2e75",
+      "source_sha256": "85d77d6e0a36bd59bfee8299343d92a4dc7721bb39ad0140da3232c2d7523d75",
       "adapter_exclusions": [
         {
           "name": "PainterBuild.ResourcesStrip",
@@ -887,7 +887,7 @@
           800
         ]
       ],
-      "source_sha256": "3b1127aaf297c40b669dc479a528eaeed204e6855e1b0879336e642bf91fe4fb",
+      "source_sha256": "8f29dc68e0406c9372ea2bb7f7038e74c16cdc79c471d89ac43584faff804385",
       "adapter_exclusions": [
         {
           "name": "AddDropdownBarPreviewLane",
