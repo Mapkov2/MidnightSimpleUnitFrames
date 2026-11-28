@@ -520,7 +520,9 @@ local function SetupWantedHeaders(kind, enteringCombat)
   FinishOwnershipHandoff()
   -- The secure header has finished placing its existing and recycled slots.
   if IS_MAINLINE and not enteringCombat then
-    GF.ForEachFrame(UF.elements.Borders.RefreshPixelGeometry, false)
+    GF.ForEachFrame(function(frame)
+      UF.elements.Borders.RefreshPixelGeometry(frame)
+    end, false)
     UF.elements.Borders.RefreshAttachedUnits()
   end
   return true, success

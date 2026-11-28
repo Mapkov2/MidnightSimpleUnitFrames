@@ -226,9 +226,14 @@ end
 
 local function GetUnitFrameScreenCacheKey(key, unit)
   local k = tostring(key or "")
-  local u = tostring(unit or "")
-  if k == "" then return u ~= "" and u or nil end
-  if (k == "boss" or k == "arena") and u ~= "" then return k .. ":" .. u end
+  if k == "" then
+    local u = tostring(unit or "")
+    return u ~= "" and u or nil
+  end
+  if k == "boss" or k == "arena" then
+    local u = tostring(unit or "")
+    if u ~= "" then return k .. ":" .. u end
+  end
   return k
 end
 
@@ -290,9 +295,13 @@ local function CacheUnitFrameScreenPosition(frame, key, unit, point, allowLocked
   return true
 end
 
-local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
+local function ApplyCachedUnitFrameScreenPosition(frame, key, unit, placement)
   local uiParent = UIParent
-  local bucket = GetUnitFrameScreenCacheBucket()
+  local bucket = placement and placement.screenCache
+  if not bucket then
+    bucket = GetUnitFrameScreenCacheBucket()
+    if placement then placement.screenCache = bucket end
+  end
   local id = GetUnitFrameScreenCacheKey(key, unit)
   local cached = bucket and id and bucket[id]
   if not (frame and uiParent and type(cached) == "table" and (cached.v == 2 or cached.v == 3)) then
@@ -300,14 +309,17 @@ local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
   end
   local x, y = tonumber(cached.x), tonumber(cached.y)
   if not (x and y) then return false end
-  if cached.v == 3 and frame.SetScale and tonumber(cached.scale) then
-    frame:SetScale(tonumber(cached.scale))
-  end
+  local scale = cached.v == 3 and frame.SetScale and tonumber(cached.scale)
+  if scale then frame:SetScale(scale) end
   local point = type(cached.point) == "string" and cached.point ~= "" and cached.point or "CENTER"
   -- Both cache versions store UIParent-space offsets. SetPoint consumes
   -- offsets in the restored frame's coordinate space, after SetScale above.
   local frameScale = frame:GetEffectiveScale()
-  local parentScale = uiParent:GetEffectiveScale()
+  local parentScale = placement and placement.parentScale
+  if not parentScale then
+    parentScale = uiParent:GetEffectiveScale()
+    if placement then placement.parentScale = parentScale end
+  end
   if frameScale <= 0 or parentScale <= 0 then return false end
   local ratio = parentScale / frameScale
   frame:ClearAllPoints()
@@ -316,7 +328,7 @@ local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
   frame._msufHardLockedToUIParent = true
   frame._msufHardLockPoint = point
   frame._msufLoadedFromScreenCache = true
-  return true
+  return true, frameScale
 end
 
 local function RuntimeFrame(frame)
@@ -370,6 +382,7 @@ function UF.SyncRuntimeDriver(changedFrame)
   local frames = UF.frames
   local rebound
   if changedFrame then
+    if not UF.dependentUnitParents[changedFrame.MSUFUnitKey] then return true end
     rebound = UF.RefreshDependentEventAlias(changedFrame)
   else
     UF.RefreshDependentEventAlias(frames.targettarget)

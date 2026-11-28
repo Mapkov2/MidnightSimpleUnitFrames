@@ -317,7 +317,8 @@ local function ResolveConfig(refresh)
   return config
 end
 
-local function ApplyPosition(frame, spec)
+local function ApplyPosition(frame, spec, placement)
+  local viewportPixel = placement and placement.viewportPixel
   if frame._msufDragActive == true then return true end
   if InCombat() then return DeferApply(frame.MSUFUnitKey) end
 
@@ -335,10 +336,11 @@ local function ApplyPosition(frame, spec)
     if not missingCooldownAnchor then
       ScheduleLateAnchorReanchor()
     end
-    if ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey) then
+    local applied, frameScale = ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey, placement)
+    if applied then
       SetFrameUnitExternalAnchorProxy(frame, nil)
       frame._msufStableExternalAnchor = nil
-      if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame) end
+      if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame, nil, viewportPixel, frameScale) end
       return true
     end
     if frame._msufPositionInitialized == true then return true end
@@ -369,10 +371,10 @@ local function ApplyPosition(frame, spec)
       -- otherwise use the safe UIParent fallback and retry on the normal
       -- bounded late-anchor lifecycle.
       externalAnchor = false
-      if ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey) then
+      if ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey, placement) then
         SetFrameUnitExternalAnchorProxy(frame, nil)
         frame._msufStableExternalAnchor = nil
-        if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame) end
+        if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame, nil, viewportPixel) end
         return true
       end
       frame:ClearAllPoints()
@@ -402,7 +404,7 @@ local function ApplyPosition(frame, spec)
     frame._msufLoadedFromScreenCache = nil
   end
   ApplyBossPhysicalBarGeometry(frame)
-  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame) end
+  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame, nil, viewportPixel) end
   frame._msufExternalAnchorFrozen = nil
   return true
 end
@@ -428,7 +430,8 @@ local function IsBossFrame(frame)
   end
   -- Arena frames share the boss stacked-container model, so they inherit the
   -- same physical pixel-snap geometry to keep odd/even stacks phase-identical.
-  return unit:match("^boss%d+$") ~= nil or unit:match("^arena%d+$") ~= nil
+  local family = unit:match("^(%a+)%d+$")
+  return family == "boss" or family == "arena"
 end
 
 -- Boss unitframes are CENTER anchored. At fractional UI scales, odd and even
@@ -670,8 +673,8 @@ local function FinishForcedPosition(ok, frame)
   if not ok then RetryApply(frame.MSUFUnitKey) end
 end
 
-local function ForceFramePosition(frame, spec)
-  local ok, applied = MSUF.RunUnitFrameApply(ApplyPosition, FinishForcedPosition, frame, spec)
+local function ForceFramePosition(frame, spec, placement)
+  local ok, applied = MSUF.RunUnitFrameApply(ApplyPosition, FinishForcedPosition, frame, spec, placement)
   if not ok or applied == false then
     RetryApply(frame.MSUFUnitKey)
     return false
@@ -692,21 +695,22 @@ function Factory.ForceReanchor(unit)
   local units = unit and UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
   if unit and not units then return false end
   local success = true
+  local placement = { viewportPixel = MSUF.Client.IsRetail and UF.GetScreenPixelSize() }
   if units then
     for i = 1, #units do
       local frame = UF.frames[units[i]]
       local spec = frame and config.GetSpec(units[i])
-      if spec and ForceFramePosition(frame, spec) == false then success = false end
+      if spec and ForceFramePosition(frame, spec, placement) == false then success = false end
     end
   else
     for i = 1, #UF.unitOrder do
       local managedUnit = UF.unitOrder[i]
       local frame = UF.frames[managedUnit]
       local spec = frame and config.GetSpec(managedUnit)
-      if spec and ForceFramePosition(frame, spec) == false then success = false end
+      if spec and ForceFramePosition(frame, spec, placement) == false then success = false end
     end
   end
-  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits() end
+  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits(placement.viewportPixel) end
   return success
 end
 
@@ -1256,12 +1260,13 @@ ExportPublic("MSUF_EnsureCooldownWidthObservers", EnsureCooldownWidthObservers)
 -- During combat the request is queued and replayed once after regen.
 local function RunExternalAnchorRefresh(frameName)
   local refreshed
+  local placement = { viewportPixel = MSUF.Client.IsRetail and UF.GetScreenPixelSize() }
   if UF.spawned then
     for i = 1, #UF.unitOrder do
       local frame = UF.frames and UF.frames[UF.unitOrder[i]]
       local spec = frame and frame.MSUFSpec
       if spec and (frame._msufRequestedAnchorName == frameName or spec.anchorFrameName == frameName) then
-        if ApplyPosition(frame, spec) == false then refreshed = false
+        if ApplyPosition(frame, spec, placement) == false then refreshed = false
         elseif refreshed == nil then refreshed = true end
       end
     end
@@ -1295,7 +1300,7 @@ local function RunExternalAnchorRefresh(frameName)
       if refreshed == nil then refreshed = true end
     end
   end
-  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits() end
+  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits(placement.viewportPixel) end
   return refreshed
 end
 

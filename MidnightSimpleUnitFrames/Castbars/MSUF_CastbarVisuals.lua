@@ -33,6 +33,7 @@ local GetCastbarTextColor = Require("MSUF_GetCastbarTextColor", FILE)
 local GetCastbarBackgroundColor = Require("MSUF_GetCastbarBackgroundColor", FILE)
 local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
 local SnapToPixel = Require("MSUF_Snap", FILE)
+local GetPhysicalPixelSize = Require("MSUF_GetPhysicalPixelSize", FILE)
 local ResolveFontShadowMetrics = Require("MSUF_ResolveFontShadowMetrics", FILE)
 local ApplyResolvedFont = Require("MSUF_ApplyResolvedFont", FILE)
 local ResolveFontKeyPath = Require("MSUF_ResolveFontKeyPath", FILE)
@@ -541,10 +542,11 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     local fillExtension = frame._msufRoundedCastbarActive ~= true and frameInset or 0
     local shape = Visuals.IconShape(g, prefix)
     local flatPixelLayout = frame._msufPixelLayoutEnabled and frame._msufRoundedCastbarActive ~= true
+    local step = flatPixelLayout and GetPhysicalPixelSize(frame)
     if flatPixelLayout then
-        barW, barH = SnapToPixel(frame, barW), SnapToPixel(frame, barH)
-        size, spacing = SnapToPixel(frame, size), SnapToPixel(frame, spacing)
-        x, y = SnapToPixel(frame, x), SnapToPixel(frame, y)
+        barW, barH = SnapToPixel(frame, barW, step), SnapToPixel(frame, barH, step)
+        size, spacing = SnapToPixel(frame, size, step), SnapToPixel(frame, spacing, step)
+        x, y = SnapToPixel(frame, x, step), SnapToPixel(frame, y, step)
     end
     local layoutKey = KeyPart(unit) .. "|" .. shape .. "|"
         .. BoolKey(icon ~= nil) .. "|"
@@ -579,7 +581,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
             if flatPixelLayout then
                 local edge = (position == "RIGHT" or position == "INSIDE_RIGHT") and "BOTTOMRIGHT" or "BOTTOMLEFT"
                 local inset = position == "INSIDE_LEFT" and spacing or position == "INSIDE_RIGHT" and -spacing or 0
-                host:SetPoint(edge, frame, edge, x + inset, SnapToPixel(frame, (barH - size) * 0.5) + y)
+                host:SetPoint(edge, frame, edge, x + inset, SnapToPixel(frame, (barH - size) * 0.5, step) + y)
             elseif position == "RIGHT" then
                 host:SetPoint("RIGHT", frame, "RIGHT", x, y)
             elseif position == "INSIDE_RIGHT" then

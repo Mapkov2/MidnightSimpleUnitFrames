@@ -1116,11 +1116,11 @@ do
     end
     ExportPublic("MSUF_PixelLayoutRegion", PixelLayoutRegion)
 
-    local function MSUF_Snap(frame, v)
+    local function MSUF_Snap(frame, v, step)
         if type(v) ~= "number" then
             return v
         end
-        local step = GetStepFor(frame)
+        step = step or GetStepFor(frame)
         return RoundToGrid(v, step)
     end
 
@@ -1248,9 +1248,14 @@ ExportPublic("MSUF_ForceShowUIPanelButtonPieces", ForceShowUIPanelButtonPieces)
 
 local function GetProfileScopedCache(rootKey)
     if type(rootKey) ~= "string" or rootKey == "" then return nil end
-    ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
     local gdb = _G.MSUF_GlobalDB
-    gdb[rootKey] = type(gdb[rootKey]) == "table" and gdb[rootKey] or {}
+    if type(gdb) ~= "table" then gdb = ExportPublic("MSUF_GlobalDB", {}) end
+    if MSUF.PublicGlobals.MSUF_GlobalDB ~= gdb then ExportPublic("MSUF_GlobalDB", gdb) end
+    local root = gdb[rootKey]
+    if type(root) ~= "table" then
+        root = {}
+        gdb[rootKey] = root
+    end
 
     local charKey = "global"
     local charFn = MSUF.PublicGlobals.MSUF_GetCharKey
@@ -1270,10 +1275,10 @@ local function GetProfileScopedCache(rootKey)
         profile = "Default"
     end
 
-    local byChar = gdb[rootKey][charKey]
+    local byChar = root[charKey]
     if type(byChar) ~= "table" then
         byChar = {}
-        gdb[rootKey][charKey] = byChar
+        root[charKey] = byChar
     end
 
     local bucket = byChar[profile]

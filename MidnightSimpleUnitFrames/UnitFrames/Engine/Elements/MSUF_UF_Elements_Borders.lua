@@ -1,13 +1,13 @@
 -- UF border element: applies border, outline, and dispel visuals from compiled specs.
 -- Live updates must avoid secret payload comparisons and keep expensive scans outside hotpaths.
 local _, MSUF = ...
-local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "MSUF_UF_Elements_Borders.lua")
 local ExportPublic = MSUF.ExportPublic
 local PublicGlobals = MSUF.PublicGlobals
 local MODERN_OUTLINE = MSUF.Client.IsRetail == true
 local SetRoundLayout = MSUF.Require("MSUF_SetRoundLayoutToNearestPixel", "MSUF_UF_Elements_Borders.lua")
 local GetPhysicalScreenSize, GetScreenHeight = GetPhysicalScreenSize, GetScreenHeight
 local InCombat = MSUF.Util.InCombat
+local PreparePixelLayoutLeaf = MSUF.Util.PreparePixelLayoutLeaf
 local IS_CLASSIC = MSUF.Client.IsClassic == true
 
 local Visuals = MSUF.UFVisuals or {}
@@ -26,6 +26,7 @@ local type = Visuals.type or type
 local IsNil = Visuals.IsNil
 local NotSecretValue = Visuals.NotSecretValue
 local IsSecretValue = issecretvalue
+local floor, max = math.floor, math.max
 local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = Visuals.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 local GROUP_THREAT_EVENTS = UF.Metadata.GroupThreatEvents
@@ -147,7 +148,7 @@ local function EnsureBorderOverlay(parent)
   local overlay = parent.MSUFBorderOverlay
   if not overlay then
     -- The carrier needs the fractional offset that cancels the owner's screen phase.
-    overlay = PixelLayoutRegion(CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent), MODERN_OUTLINE)
+    overlay = PreparePixelLayoutLeaf(CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent), MODERN_OUTLINE)
     if MODERN_OUTLINE then SetRoundLayout(overlay, false) end
     overlay:SetAllPoints(parent)
     overlay:EnableMouse(false)
@@ -200,7 +201,7 @@ end
 
 local function EnsureEdge(parent, key)
   parent.MSUFBorderEdges = parent.MSUFBorderEdges or {}
-  local overlay = EnsureBorderOverlay(parent)
+  local overlay = parent.MSUFBorderOverlay
   local edge = parent.MSUFBorderEdges[key]
   if edge and edge.GetParent and edge:GetParent() ~= overlay then
     edge:Hide()
@@ -210,7 +211,7 @@ local function EnsureEdge(parent, key)
   if edge then
     return edge
   end
-  edge = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY"), MODERN_OUTLINE)
+  edge = PreparePixelLayoutLeaf(overlay:CreateTexture(nil, "OVERLAY"), MODERN_OUTLINE)
   if MODERN_OUTLINE then SetRoundLayout(edge, false) end
   edge:SetColorTexture(0, 0, 0, 1)
   -- A rebuilt edge starts as a plain color texture; drop the applied-texture
@@ -367,8 +368,8 @@ end
 -- sample animation painters never read screen coordinates.
 local function PixelBand(size, step, zoom)
   if not step then return size end
-  local pixels = math.max(1, math.floor(size / (step * zoom) + 0.5))
-  return math.max(1, math.floor(pixels * zoom + 0.5)) * step
+  local pixels = max(1, floor(size / (step * zoom) + 0.5))
+  return max(1, floor(pixels * zoom + 0.5)) * step
 end
 
 local function NotifyCastbarOutline(frame)
@@ -389,6 +390,8 @@ local function UpdateBandSizes(frame, overlay, step)
     and overlay._msufBorderHighlight == highlight and overlay._msufBorderMedia == textureKey then return end
   local bands = overlay._msufBorderBands or {}
   local oldOutset = overlay._msufNormalOutset
+  local thickness = frame._msufBorderThickness
+  local oldBand = thickness and (bands[thickness] or thickness)
   local normalOutset = normal
   wipe(bands)
   bands[1], bands[normal], bands[highlight] = PixelBand(1, step, zoom), PixelBand(normal, step, zoom), PixelBand(highlight, step, zoom)
@@ -407,8 +410,10 @@ local function UpdateBandSizes(frame, overlay, step)
     or overlay._msufNormalOutset
   if oldOutset and oldOutset ~= overlay._msufNormalOutset then NotifyCastbarOutline(frame) end
   overlay._msufBorderPixel, overlay._msufBorderNormal, overlay._msufBorderHighlight = step, normal, highlight
-  frame._msufBorderLayoutReady = nil
-  if frame._msufBorderThickness then LayoutBorder(frame, frame._msufBorderThickness) end
+  if thickness and (bands[thickness] or thickness) ~= oldBand then
+    frame._msufBorderLayoutReady = nil
+    LayoutBorder(frame, thickness)
+  end
   if textureKey and frame._msufBorderTextureThickness and frame.MSUFBorderTexturePieces then
     local edge = BorderStyles.EdgeSize(textureKey, frame._msufBorderTextureThickness)
     BorderStyles.AnchorFramePieces(frame.MSUFBorderTexturePieces, overlay, edge, edge * 0.5)
@@ -416,7 +421,7 @@ local function UpdateBandSizes(frame, overlay, step)
 end
 
 local function PixelOffset(coord, step)
-  return math.floor(coord / step + 0.5) * step - coord
+  return floor(coord / step + 0.5) * step - coord
 end
 
 local function PublicRect(region)
@@ -430,16 +435,18 @@ local function BossPaintedRect(frame, scale)
   -- Read the resulting bar edges, including any native rounding of its offsets.
   local hp = frame.hpBar
   local l, b, w, h = PublicRect(hp)
+  if not l then return end
   local s = hp:GetEffectiveScale()
-  if not l or IsSecretValue(s) or not s or s <= 0 then return end
+  if IsSecretValue(s) or not s or s <= 0 then return end
   s = s / scale
   local bottom = b * s
   local power = frame.MSUFSpec and frame.MSUFSpec.power
   if power and power.enabled and not power.detached and power.embed ~= false
     and not frame._msufPowerResourceMissing and frame.targetPowerBar then
     local pl, pb = PublicRect(frame.targetPowerBar)
+    if not pl then return end
     local ps = frame.targetPowerBar:GetEffectiveScale()
-    if not pl or IsSecretValue(ps) or not ps or ps <= 0 then return end
+    if IsSecretValue(ps) or not ps or ps <= 0 then return end
     bottom = pb * ps / scale
   end
   return l * s, bottom, (l + w) * s, (b + h) * s
@@ -497,18 +504,40 @@ local function SyncNormalBounds(frame, step, width, height, left, bottom, right,
   if auras and auras.RefreshOutlineLaneAnchors then auras.RefreshOutlineLaneAnchors(frame) end
 end
 
-function Borders.RefreshPixelGeometry(frame, disabled)
+local function RememberScreenFallback(frame, left, bottom, width, height, step, disabled)
+  frame._msufFallbackOutlineX, frame._msufFallbackOutlineY = left, bottom
+  frame._msufFallbackOutlineW, frame._msufFallbackOutlineH = width, height
+  frame._msufFallbackOutlineStep = step
+  frame._msufFallbackOutlineSpec = frame.MSUFSpec
+  frame._msufFallbackOutlineSuppressed = frame._msufRUFModernBorderSuppressed
+  frame._msufFallbackOutlinePowerMissing = frame._msufPowerResourceMissing
+  frame._msufFallbackOutlineDisabled = disabled
+end
+
+function Borders.RefreshPixelGeometry(frame, disabled, viewportPixel, fallbackScale)
   local overlay = frame.MSUFBorderOverlay
   if not MODERN_OUTLINE or not (overlay or frame.MSUFNormalOutlineBounds) or InCombat() then return end
-  local scale = frame:GetEffectiveScale()
-  local step
-  if not IsSecretValue(scale) and type(scale) == "number" and scale > 0 and GetPhysicalScreenSize then
-    local pixel = ScreenPixelSize()
-    if pixel then step = pixel / scale end
+  local scale, step
+  if fallbackScale and viewportPixel then
+    scale, step = fallbackScale, viewportPixel / fallbackScale
+  else
+    scale = fallbackScale or frame:GetEffectiveScale()
+    if not IsSecretValue(scale) and type(scale) == "number" and scale > 0 and GetPhysicalScreenSize then
+      local pixel = viewportPixel or ScreenPixelSize()
+      if pixel then step = pixel / scale end
+    end
   end
-  if overlay then UpdateBandSizes(frame, overlay, step) end
   local left, bottom, width, height = PublicRect(frame)
+  if fallbackScale and step and left and frame._msufFallbackOutlineStep == step
+    and frame._msufFallbackOutlineX == left and frame._msufFallbackOutlineY == bottom
+    and frame._msufFallbackOutlineW == width and frame._msufFallbackOutlineH == height
+    and frame._msufFallbackOutlineSpec == frame.MSUFSpec
+    and frame._msufFallbackOutlineSuppressed == frame._msufRUFModernBorderSuppressed
+    and frame._msufFallbackOutlinePowerMissing == frame._msufPowerResourceMissing
+    and frame._msufFallbackOutlineDisabled == disabled then return end
+  if overlay then UpdateBandSizes(frame, overlay, step) end
   if not step or not left then
+    frame._msufFallbackOutlineX = nil
     SyncNormalBounds(frame)
     if overlay and overlay._msufBorderLeft ~= nil then
       overlay:ClearAllPoints()
@@ -518,13 +547,15 @@ function Borders.RefreshPixelGeometry(frame, disabled)
     return
   end
   local right, top = left + width, bottom + height
-  local x, y = PixelOffset(left, step), PixelOffset(bottom, step)
-  local dx, dy = PixelOffset(right, step), PixelOffset(top, step)
-  -- The secure header can recenter or reflow a live child in lockdown.
-  -- Its painted bar and whole-pixel bands must follow the same native anchors.
-  if frame._msufIsGroupFrameShell and not frame._msufGFPreviewScene then
-    x, y, dx, dy = 0, 0, 0, 0
-  elseif frame._msufBossPhysicalGeometryApplied then
+  -- A live secure header can recenter or reflow its child in lockdown.
+  -- Keep the painted bar and whole-pixel bands on the same native anchors.
+  local x, y, dx, dy = 0, 0, 0, 0
+  local liveGroup = frame._msufIsGroupFrameShell and not frame._msufGFPreviewScene
+  if not liveGroup then
+    x, y = PixelOffset(left, step), PixelOffset(bottom, step)
+    dx, dy = PixelOffset(right, step), PixelOffset(top, step)
+  end
+  if not liveGroup and frame._msufBossPhysicalGeometryApplied then
     local l, b, r, t = BossPaintedRect(frame, scale)
     if l then
       x, y = l - left + PixelOffset(l, step), b - bottom + PixelOffset(b, step)
@@ -543,24 +574,30 @@ function Borders.RefreshPixelGeometry(frame, disabled)
     end
     SyncNormalBounds(frame, step, width, height, x - band, y - band, dx + band, dy + band, runtimeBand, scale)
   end
-  if not overlay then return end
-  if overlay._msufBorderLeft == x and overlay._msufBorderBottom == y
-    and overlay._msufBorderRight == dx and overlay._msufBorderTop == dy then return end
-  overlay:ClearAllPoints()
-  overlay:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", x, y)
-  overlay:SetPoint("TOPRIGHT", frame, "TOPRIGHT", dx, dy)
-  overlay._msufBorderLeft, overlay._msufBorderBottom = x, y
-  overlay._msufBorderRight, overlay._msufBorderTop = dx, dy
+  if overlay and (overlay._msufBorderLeft ~= x or overlay._msufBorderBottom ~= y
+    or overlay._msufBorderRight ~= dx or overlay._msufBorderTop ~= dy) then
+    overlay:ClearAllPoints()
+    overlay:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", x, y)
+    overlay:SetPoint("TOPRIGHT", frame, "TOPRIGHT", dx, dy)
+    overlay._msufBorderLeft, overlay._msufBorderBottom = x, y
+    overlay._msufBorderRight, overlay._msufBorderTop = dx, dy
+  end
+  if frame._msufLoadedFromScreenCache then
+    RememberScreenFallback(frame, left, bottom, width, height, step, disabled)
+  else
+    frame._msufFallbackOutlineX = nil
+  end
 end
 
 -- Moving a parent can move Target of Target (or another user-anchored unit)
 -- without applying its spec. Read the final rectangles after the layout batch.
-function Borders.RefreshAttachedUnits()
+function Borders.RefreshAttachedUnits(viewportPixel)
   if not MODERN_OUTLINE then return end
+  viewportPixel = viewportPixel or ScreenPixelSize()
   for i = 1, #UF.unitOrder do
     local frame = UF.frames[UF.unitOrder[i]]
     if frame and (frame.MSUFBorderOverlay or frame.MSUFNormalOutlineBounds) and frame._msufAnchor and frame._msufAnchor ~= UIParent then
-      Borders.RefreshPixelGeometry(frame)
+      Borders.RefreshPixelGeometry(frame, nil, viewportPixel)
     end
   end
 end
@@ -1170,10 +1207,14 @@ function Borders.Create(frame)
   EnsureTexturedBorderPieces(frame)
 end
 
+local ApplyBossPhysicalBarGeometry
 function Borders.Apply(frame, spec)
-  -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
-  -- after the elements; a spec applies only once the core has loaded.
-  MSUF.Require("ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua", MSUF.UF.Factory)(frame)
+  -- The factory loads later, before any live or preview spec is applied.
+  if not ApplyBossPhysicalBarGeometry then
+    ApplyBossPhysicalBarGeometry = MSUF.Require("ApplyBossPhysicalBarGeometry",
+      "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua", MSUF.UF.Factory)
+  end
+  ApplyBossPhysicalBarGeometry(frame)
   local wasSuppressed = frame._msufRUFModernBorderSuppressed
   if MODERN_OUTLINE then Borders.RefreshPixelGeometry(frame) end
   local cfg = spec and spec.border
