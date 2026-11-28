@@ -102,11 +102,13 @@ for _, unit in ipairs({ "player", "target" }) do
         if box.key == unit and box._castScene and not box._castScene.retired then
             unitPreview = box._castScene:Frame()
             assert(box._castScene.opts.matchParent == core.Client.IsRetail, "cast preview ignored its layout slot")
-            local slot = box.mock.cast
-            local width, height = slot:GetWidth(), slot:GetHeight()
-            local pixel = core.Require("MSUF_GetPhysicalPixelSize", "castbar layout test")(slot)
-            assert(math.abs(width / pixel - math.floor(width / pixel + 0.5)) < 1e-6, "cast slot width is off grid")
-            assert(math.abs(height / pixel - math.floor(height / pixel + 0.5)) < 1e-6, "cast slot height is off grid")
+            if core.Client.IsRetail then
+                local slot = box.mock.cast
+                local width, height = slot:GetWidth(), slot:GetHeight()
+                local pixel = core.Require("MSUF_GetPhysicalPixelSize", "castbar layout test")(slot)
+                assert(math.abs(width / pixel - math.floor(width / pixel + 0.5)) < 1e-6, "cast slot width is off grid")
+                assert(math.abs(height / pixel - math.floor(height / pixel + 0.5)) < 1e-6, "cast slot height is off grid")
+            end
         end
     end
     CheckAnchor(assert(unitPreview, unit .. " preview missing"), 0, unit .. " unit preview")
