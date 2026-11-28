@@ -212,10 +212,12 @@ end
 
 local function ScaledValue(sourceFrame, targetFrame, value)
     value = tonumber(value) or 0
+    if value == 0 or sourceFrame == targetFrame then return value end
     local sourceScale = (sourceFrame and sourceFrame.GetEffectiveScale and sourceFrame:GetEffectiveScale()) or 1
     local targetScale = (targetFrame and targetFrame.GetEffectiveScale and targetFrame:GetEffectiveScale()) or 1
-    if sourceScale <= 0 then sourceScale = 1 end
-    if targetScale <= 0 then targetScale = 1 end
+    local isSecret = MSUF.Util.IsSecret
+    if isSecret(sourceScale) or type(sourceScale) ~= "number" or sourceScale <= 0 then sourceScale = 1 end
+    if isSecret(targetScale) or type(targetScale) ~= "number" or targetScale <= 0 then targetScale = 1 end
     return value * sourceScale / targetScale
 end
 

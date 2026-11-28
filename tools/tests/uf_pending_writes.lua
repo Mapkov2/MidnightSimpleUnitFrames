@@ -100,6 +100,10 @@ Case("castbar-source-timer-regen", function()
         cb.Backend.Set(unit, "MSUF", db.general)
         local key = unit == "target" and "castbarTargetMatchWidth" or "castbarFocusMatchWidth"
         db.general[key] = "unitframe"
+        -- Attached Retail bars derive their width from two native anchors.
+        -- Detach these bars to exercise the numeric writer and replay path.
+        local detached = unit == "target" and "castbarTargetDetached" or "castbarFocusDetached"
+        db.general[detached] = true
         local bar = h.env.CreateFrame("Frame")
         bar:SetSize(200, 18)
         cb.Frames[unit], bars[unit] = bar, bar
