@@ -1,5 +1,20 @@
 # Midnight Simple Unit Frames Changelog
 
+## 7.0.5-beta5 - 2026-11-28
+
+### Unit frames and auras
+
+- Missing-health backgrounds now use the native bar fill on all supported clients. Flat party and raid backgrounds keep clean edges, and Retail health bars keep their first visible pixel beside the frame outline.
+- Rectangular outlines and attached auras align to the physical pixel grid. Aura previews now follow the in-game spacing and keep the final countdown visible before fading expired icons.
+- On Forever, dependent unit frames use direct health and power events when available and keep their fallback for other targets. Riptide ranks are recognized by the group spell indicator.
+
+### Castbars and options
+
+- Castbars and icons align with painted frame outlines. The Options and Edit Mode previews use the same placement rules, and Boss castbars retain their existing profile positioning.
+- Spell names and timer text use the available space on the selected text line. Centered spell names retain their offset beside a side-aligned timer.
+- Updated the Modern Dark preset and improved the layout of narrow Options windows.
+- Added an on-demand stutter monitor. Use `/msuf stutter` to start or stop it and `/msuf stutter report` to view a copyable report.
+
 ## 7.0.5-beta4 - 2026-11-27
 
 ### Castbars

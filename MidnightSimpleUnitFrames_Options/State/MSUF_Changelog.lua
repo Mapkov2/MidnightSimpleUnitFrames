@@ -8,21 +8,31 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A0E63A5150C96A922D05FD1E2638DBF66C168727D6F9530040B85B0523916CD1",
-    currentVersion = "7.0.5-beta4",
+    sourceSha256 = "9D622578374135B7505935CECB33AA65968012B74ED75A012506F0B73718772B",
+    currentVersion = "7.0.5-beta5",
     historyFromVersion = "7.021",
-    previousVersion = "7.0.5-beta3",
-    rangeLabel = "7.0.5-beta3 -> 7.0.5-beta4",
+    previousVersion = "7.0.4",
+    rangeLabel = "7.0.4 -> 7.0.5-beta5",
     entries = {
         {
-            version = "7.0.5-beta4",
-            date = "2026-11-27",
+            version = "7.0.5-beta5",
+            date = "2026-11-28",
             sections = {
                 {
-                    title = "Castbars",
+                    title = "Unit frames and auras",
                     bullets = {
-                        "Centered spell names keep their configured position when the cast timer is on either side. The timer still limits the available name width in Auto fit and Manual width modes.",
-                        "Player and Target castbars preserve these settings when you copy a profile or rebuild it from an export.",
+                        "Missing-health backgrounds now use the native bar fill on all supported clients. Flat party and raid backgrounds keep clean edges, and Retail health bars keep their first visible pixel beside the frame outline.",
+                        "Rectangular outlines and attached auras align to the physical pixel grid. Aura previews now follow the in-game spacing and keep the final countdown visible before fading expired icons.",
+                        "On Forever, dependent unit frames use direct health and power events when available and keep their fallback for other targets. Riptide ranks are recognized by the group spell indicator.",
+                    },
+                },
+                {
+                    title = "Castbars and options",
+                    bullets = {
+                        "Castbars and icons align with painted frame outlines. The Options and Edit Mode previews use the same placement rules, and Boss castbars retain their existing profile positioning.",
+                        "Spell names and timer text use the available space on the selected text line. Centered spell names retain their offset beside a side-aligned timer.",
+                        "Updated the Modern Dark preset and improved the layout of narrow Options windows.",
+                        "Added an on-demand stutter monitor. Use /msuf stutter to start or stop it and /msuf stutter report to view a copyable report.",
                     },
                 },
             },
