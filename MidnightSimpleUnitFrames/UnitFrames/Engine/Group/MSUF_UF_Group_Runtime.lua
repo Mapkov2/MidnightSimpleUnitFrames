@@ -518,11 +518,9 @@ local function SetupWantedHeaders(kind, enteringCombat)
   local _, prioritySuccess = SetupWantedPriority()
   if prioritySuccess == false then success = false end
   FinishOwnershipHandoff()
-  -- The secure header has finished placing its existing and recycled slots.
+  -- Secure group outlines follow their own relative anchors. Only unit
+  -- frames attached to a moved group owner need their screen phase refreshed.
   if IS_MAINLINE and not enteringCombat then
-    GF.ForEachFrame(function(frame)
-      UF.elements.Borders.RefreshPixelGeometry(frame)
-    end, false)
     UF.elements.Borders.RefreshAttachedUnits()
   end
   return true, success

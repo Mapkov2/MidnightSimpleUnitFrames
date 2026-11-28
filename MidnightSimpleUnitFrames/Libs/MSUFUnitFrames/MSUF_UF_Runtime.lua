@@ -380,20 +380,22 @@ end
 
 function UF.SyncRuntimeDriver(changedFrame)
   local frames = UF.frames
+  local targetFrame, focusFrame, petFrame = frames.targettarget, frames.focustarget, frames.pettarget
+  local driver = UF.driver
+  if not (targetFrame or focusFrame or petFrame or driver) then return true end
   local rebound
   if changedFrame then
     if not UF.dependentUnitParents[changedFrame.MSUFUnitKey] then return true end
     rebound = UF.RefreshDependentEventAlias(changedFrame)
   else
-    UF.RefreshDependentEventAlias(frames.targettarget)
-    UF.RefreshDependentEventAlias(frames.focustarget)
-    UF.RefreshDependentEventAlias(frames.pettarget)
+    if targetFrame then UF.RefreshDependentEventAlias(targetFrame) end
+    if focusFrame then UF.RefreshDependentEventAlias(focusFrame) end
+    if petFrame then UF.RefreshDependentEventAlias(petFrame) end
   end
 
-  local targetTarget = NeedsVitalsFallback(frames.targettarget)
-  local petTarget = NeedsVitalsFallback(frames.pettarget)
+  local targetTarget = NeedsVitalsFallback(targetFrame)
+  local petTarget = NeedsVitalsFallback(petFrame)
   local active = targetTarget ~= nil or petTarget ~= nil
-  local driver = UF.driver
   if not driver then
     if not active then return true, rebound end
     driver = {}

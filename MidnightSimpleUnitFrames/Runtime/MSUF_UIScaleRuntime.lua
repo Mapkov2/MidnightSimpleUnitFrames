@@ -118,10 +118,18 @@ local function GetSavedMsufScale()
     local g = EnsureGeneral()
     return Clamp(tonumber(g.msufUiScale) or tonumber(g.uiScale) or 1, 0.25, 2.0)
 end
+local function RefreshGroupOutlineAfterScale(frame, _, _, viewportPixel)
+    MSUF.UF.elements.Borders.RefreshPixelGeometry(frame, nil, viewportPixel)
+end
 local function RefreshGroupFrameGeometryAfterScale()
     local gf = MSUF and MSUF.GF
     if gf and type(gf.RefreshHeaderLayout) == "function" then
         gf.RefreshHeaderLayout()
+        -- A real scale change can alter the physical band thickness even
+        -- when the secure header retains each child's relative anchors.
+        if MSUF.Client.IsRetail and gf.frameList and gf.frameList[1] and not MSUF.Util.InCombat() then
+            gf.ForEachFrame(RefreshGroupOutlineAfterScale, false, MSUF.UF.GetScreenPixelSize())
+        end
     end
 end
 local function FlushUnitframeReanchorAfterScale()
