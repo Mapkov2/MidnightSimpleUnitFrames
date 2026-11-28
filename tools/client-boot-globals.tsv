@@ -64,6 +64,7 @@ GetPowerRegenForPowerType	*	api	Blizzard client API the harness does not model
 GetRaidRosterInfo	*	api	Blizzard client API the harness does not model
 GetRaidTargetIndex	*	api	Blizzard client API the harness does not model
 GetReadyCheckStatus	*	api	Blizzard client API the harness does not model
+GetScreenHeight	*	api	Blizzard screen API used to resolve the logical viewport for pixel-aligned outlines
 GetRuneCooldown	*	api	Blizzard client API the harness does not model
 GetShapeshiftForm	*	api	Blizzard client API the harness does not model
 GetShapeshiftFormID	*	api	Blizzard client API the harness does not model
