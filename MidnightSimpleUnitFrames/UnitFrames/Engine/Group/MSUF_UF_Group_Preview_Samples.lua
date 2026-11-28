@@ -391,16 +391,6 @@ local function SetPreviewClass(frame, class, sample)
   return classPinned
 end
 
-local function SetPreviewClass(frame, class, sample)
-  local classPinned = sample and sample.class and frame._msufPortraitSampleClass ~= class
-  if classPinned then frame._msufPortraitSampleClass = class end
-  if frame._msufGFPreviewClass ~= class then
-    frame._msufGFPreviewClass = class
-    if frame._msufBorderRuntimeClassColor then MSUF.UF.elements.Borders.RefreshClassColor(frame) end
-  end
-  return classPinned
-end
-
 local function PaintSampleAuras(frame, kind, index, scene, sample, animation)
   if not GF.PreviewFrameAuras then return end
   GF.PreviewFrameAuras(frame, kind, index, nil, nil, scene, sample)

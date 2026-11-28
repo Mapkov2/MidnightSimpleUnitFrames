@@ -583,7 +583,7 @@
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Preview_Samples.lua",
-          "source_sha256": "8e4e859f1c6f4f053c277749dd05d33969361e73f165028fe24f26af8727f398"
+          "source_sha256": "c45e6fbc863861ee49d120f49d31c698ce2eeeaefd30588b1a1e4c8169f0b2f1"
         },
         {
           "file": "../../../MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_MockAuraPainter.lua",

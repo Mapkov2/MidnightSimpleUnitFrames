@@ -88,6 +88,7 @@ local function HideFrameAuraPreview(visual)
 end
 
 local function FrameAuraPreviewOffset(lane, slot, host)
+  if slot == 0 then return 0, 0 end
   local step = tonumber(lane.stepX or lane.step) or ((tonumber(lane.size) or 1) + (tonumber(lane.spacing) or 0))
   local stepY = lane.stepY or step
   if host._msufPreviewAuraWidth then
@@ -119,9 +120,18 @@ end
 
 local function PlaceFrameAuraPreview(visual, lane, host, anchor, x, y, alpha)
   local size = max(1, tonumber(lane.size) or 18)
-  visual:ClearAllPoints()
-  visual:SetSize(host._msufPreviewAuraWidth or lane.buttonWidth or size, host._msufPreviewAuraHeight or lane.buttonHeight or size)
-  visual:SetPoint(anchor, host, anchor, x, y)
+  local width = host._msufPreviewAuraWidth or lane.buttonWidth or size
+  local height = host._msufPreviewAuraHeight or lane.buttonHeight or size
+  if visual._msufSceneAuraWidth ~= width or visual._msufSceneAuraHeight ~= height then
+    visual:SetSize(width, height)
+    visual._msufSceneAuraWidth, visual._msufSceneAuraHeight = width, height
+  end
+  -- Flow owns the current point through expiry and restores it at the next cycle.
+  local flow = visual._msufPreviewAuraReflow
+  if not flow or flow.host ~= host or flow.anchor ~= anchor or flow.currentX ~= x or flow.currentY ~= y then
+    visual:ClearAllPoints()
+    visual:SetPoint(anchor, host, anchor, x, y)
+  end
   visual._sceneAuraLayoutHost = host
   if visual.SetFrameLevel and host.GetFrameLevel then visual:SetFrameLevel((host:GetFrameLevel() or 0) + 1) end
   if visual.SetAlpha then visual:SetAlpha(alpha) end
@@ -339,19 +349,24 @@ local function PreparePreviewLanePixels(frame, host, lane)
 end
 
 local function PlaceFrameAuraHost(frame, host, lane, width, height, alpha)
-  local anchor = tostring(lane.anchor or "CENTER"):upper()
-  if not VALID_POINTS[anchor] then anchor = "CENTER" end
+  local anchor = lane.anchor
+  if not VALID_POINTS[anchor] then
+    anchor = tostring(anchor or "CENTER"):upper()
+    if not VALID_POINTS[anchor] then anchor = "CENTER" end
+  end
   host:ClearAllPoints()
   local parent = frame
   if lane.anchorTarget == "portrait" then
     parent = Auras.ResolvePreviewLaneParent and Auras.ResolvePreviewLaneParent(frame, lane)
       or frame.MSUFPortraitHolder or frame
   end
-  local x, y = tonumber(lane.x) or 0, tonumber(lane.y) or 0
+  local x, y
   if MSUF.Client.IsRetail then
     PreparePreviewLanePixels(frame, host, lane)
     x, y = host._msufPreviewAuraX, host._msufPreviewAuraY
     width, height = host._msufPreviewHostWidth or width, host._msufPreviewHostHeight or height
+  else
+    x, y = tonumber(lane.x) or 0, tonumber(lane.y) or 0
   end
   host:SetPoint(anchor, parent, anchor, x, y)
   host:SetSize(max(1, width or lane.size or 1), max(1, height or lane.size or 1))

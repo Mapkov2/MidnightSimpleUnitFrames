@@ -113,12 +113,13 @@ end
 -- the current client graph: every row matches. Dropdown search metadata now
 -- retains semantic labels instead of the selected value and its stale anchor.
 -- 7.0.5 adds 3D Render, rotation and portrait background settings.
+-- Beta 5 receipts cover the revised menu sizing and control geometry.
 local expectedReceipts = {
-    Mainline = { 54, 3420032951 },
-    Vanilla = { 30, 479858721 },
-    TBC = { 48, 3959261312 },
-    Mists = { 54, 630543257 },
-    Forever = { 48, 2231166673 },
+    Mainline = { 54, 1933807585 },
+    Vanilla = { 30, 2955415786 },
+    TBC = { 48, 951879892 },
+    Mists = { 54, 3647689667 },
+    Forever = { 48, 2117986231 },
 }
 local M, builds, receipts = mw.M, 0, {}
 local function InSection(widget, entry)
@@ -276,10 +277,11 @@ if observe then print("GROUP_DRAWING " .. flavor .. " " .. #drawing .. " " .. st
 -- RGB with the default alpha of 1. Warm passes no longer rewrite the
 -- creation-time status labels. Forever also binds its layer status handle.
 -- Beta 3: six first-in-lane sample timers display the actual countdown
--- to the preview expiry. Drawing order, counts and other arguments are unchanged.
+-- to the preview expiry. Beta 5 repaints inactive layer chips in grayscale
+-- and skips redundant OFF-label writes and unchanged aura points.
 local drawingPins = {
-    Mainline = { 1811, 3746005356 }, Vanilla = { 1847, 1429793116 }, TBC = { 1847, 1429793116 },
-    Mists = { 1835, 2674351124 }, Forever = { 1847, 3299883168 },
+    Mainline = { 1747, 1349909906 }, Vanilla = { 1783, 71067025 }, TBC = { 1783, 71067025 },
+    Mists = { 1771, 2574178362 }, Forever = { 1783, 498484695 },
 }
 if not observe then
     local pin = assert(drawingPins[flavor], "missing positional drawing receipt")
