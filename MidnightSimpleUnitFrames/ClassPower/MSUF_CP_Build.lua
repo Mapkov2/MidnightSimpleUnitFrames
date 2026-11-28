@@ -135,7 +135,7 @@ builders.BUILD = function(E)
         -- Only druids need separate alpha for bar art and its text.
         local visual = c
         if E.PLAYER_CLASS == "DRUID" then
-            visual = CreateFrame("Frame", nil, c)
+            visual = PixelLayoutRegion(CreateFrame("Frame", nil, c))
             visual:SetAllPoints(c)
             visual:SetFrameLevel(c:GetFrameLevel())
             CP.druidVisual = visual

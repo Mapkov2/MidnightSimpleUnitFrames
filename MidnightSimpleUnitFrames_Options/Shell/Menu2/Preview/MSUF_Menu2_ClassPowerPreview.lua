@@ -63,7 +63,7 @@ local function RegisterPreviewSetting(ctx, widget, key)
 end
 function Preview.RegisterSearchSettings(ctx, parent)
     for key in pairs(PREVIEW_SETTINGS) do
-        local widget = CreateFrame("Button", nil, parent)
+        local widget = PixelLayoutRegion(CreateFrame("Button", nil, parent))
         widget:Hide()
         RegisterPreviewSetting(ctx, widget, key)
     end

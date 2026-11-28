@@ -17,6 +17,7 @@ local GetPowerBarColor = MSUF.Require("MSUF_GetPowerBarColor", "ClassPower/MSUF_
 local type, tonumber, tostring = type, tonumber, tostring
 local OverrideRGB = CPConst.OverrideRGB
 local CPK = CPConst.CPK
+local playerClass = select(2, UnitClass("player"))
 
 builders.CONTROLLER_COLORS = function()
 --- Bound by CONTROLLER_COLORS: the shared cached config table and the
@@ -65,6 +66,13 @@ local function ResolveClassPowerColor(powerType)
             _cachedColorR, _cachedColorG, _cachedColorB = r, g, b
             return r, g, b
         end
+    end
+
+    local general = _cpDB.general
+    local mode = general and (general.powerColorMode or general.powerBarColorMode)
+    if type(powerType) == "number" and type(mode) == "string" and mode:lower() == "class" then
+        _cachedColorR, _cachedColorG, _cachedColorB = MSUF._colorsAPI.GetClassColor(playerClass)
+        return _cachedColorR, _cachedColorG, _cachedColorB
     end
 
     --- 2. MSUF power bar color override

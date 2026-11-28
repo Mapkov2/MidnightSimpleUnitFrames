@@ -289,7 +289,7 @@ local function Overlay(host)
         if host == E.CP.druidVisual then
             -- BindExtra can move the overlay away from the bar. Keep its
             -- form alpha separate from the overlay's other visibility rules.
-            local visual = CreateFrame("Frame", nil, overlay)
+            local visual = PixelLayoutRegion(CreateFrame("Frame", nil, overlay))
             visual:SetAllPoints(overlay)
             visual:SetAlpha(host:GetAlpha())
             overlay.formVisual, E.CP.druidMarkVisual = visual, visual
