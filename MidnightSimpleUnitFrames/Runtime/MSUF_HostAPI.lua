@@ -27,6 +27,11 @@
 --       Auras3/MSUF_Auras3_IconSkins_Host.lua, with its own version (1).
 --       Added 2026-10-17 without a version change, so callers test for the
 --       function. nil on Classic clients and on a build without icon skins.
+--   MSUF_HostAPI.GetStutterMonitor(load)      -> table | nil
+--       The stutter monitor (MSUF_Menu2_StutterMonitor.lua in the Options
+--       addon, its own version 1): Start(), Stop(), IsRunning(), ShowReport()
+--       and GetReport(). load = true loads the Options addon first. Added
+--       2026-11-28 without a version change, so callers test for the function.
 --
 -- The same table is MSUF.HostAPI, and its functions are on the addon
 -- namespace too. Every owner below loads before this file; they are resolved
@@ -273,11 +278,19 @@ local function NameplateDisplayName(value, unit)
     if names then return names.Compose(unit, value) end
     return value
 end
+local function NameColorRevision()
+    local config = MSUF.UF.Config
+    local cache = config.settingsCache
+    if not config.settingsCacheDirty and cache.dbRef == MSUF_DB and cache.settingsSerial == (config.serial or 0) then
+        return cache.nameColorRevision
+    end
+end
+
 local function GetNameFormatter()
     if not nameFormatter then
         nameFormatter = { version = 1, Resolve = MSUF.UFText.ResolveNameFormat,
             Format = MSUF.UFText.FormatName, Shared = MSUF.UF.Config.ResolveSharedFont, Nameplates = MSUF.UF.Config.ResolveNameplateFont,
-            NameColor = MSUF.UFText.NameTextColor,
+            NameColor = MSUF.UFText.NameTextColor, NameColorRevision = NameColorRevision,
             SampleColor = SampleNameColor, DisplayName = NameplateDisplayName, ApplyScale = MSUF.Require("MSUF_ApplyFontScaleAnimationMode", HOST_API_FILE) }
     end
     return nameFormatter
@@ -295,6 +308,63 @@ local function OpenUnitFrameSetup(freshOnly)
     return opened ~= false
 end
 
+local TOOLTIP_KEYS = {
+    unitTooltipProvider = { GAME = true, MSUF = true },
+    unitTooltipAnchor = { EXTERNAL = true, FIXED = true, CURSOR = true },
+    unitTooltipMode = { ALWAYS = true, OOC = true, MODIFIER = true, NEVER = true },
+    unitTooltipModifier = { ALT = true, CTRL = true, SHIFT = true },
+}
+
+local function GetUnitFrameTooltipSetting(key)
+    if MSUF.Util.IsSecret(key) or type(key) ~= "string" or not TOOLTIP_KEYS[key] then return end
+    return MSUF.Tooltips.GetGeneral()[key]
+end
+
+local function SetUnitFrameTooltipSetting(key, value)
+    if PlayerInCombat() or MSUF.Util.IsSecret(key) or MSUF.Util.IsSecret(value) then return false end
+    if type(key) ~= "string" or type(value) ~= "string" then return false end
+    local allowed = TOOLTIP_KEYS[key]
+    if not allowed or not allowed[value] then return false end
+    local tooltips = MSUF.Tooltips
+    local general = tooltips.GetGeneral()
+    general[key] = value
+    tooltips.Normalize(general)
+    tooltips.Refresh()
+    if key == "unitTooltipProvider" or key == "unitTooltipAnchor" then
+        local auras = MSUF.MSUF_Auras3
+        if auras and auras.RequestApply then auras.RequestApply("shared", "SUITE_UNIT_TOOLTIP") end
+    end
+    return true
+end
+
+local function PartyCastAnchor(unit)
+    if MSUF.Util.IsSecret(unit) or type(unit) ~= "string" or not unit:match("^party[1-4]$") then return end
+    local group = MSUF.GF
+    local frame = group and group.FrameForUnit and group.FrameForUnit(unit)
+    if frame and frame._msufGFKind == "party" then return frame end
+end
+
+local function SetPlayerSpellCastColors(text)
+    local player = MSUF.Castbars and MSUF.Castbars.Player
+    if player and player.SetSpellColors then return player.SetSpellColors(text) end
+    return false
+end
+
+-- The monitor lives in the load-on-demand Options addon; load loads it
+-- (outside combat, through the normal Options loader) when it is absent.
+local function GetStutterMonitor(load)
+    if load == true and not MSUF.StutterMonitor then
+        local ensure = MSUF.PublicGlobals.MSUF_EnsureOptionsLoaded
+        if ensure then ensure("stutter monitor") end
+    end
+    return MSUF.StutterMonitor
+end
+
+local function TargetHealthAnchor()
+    local frame = MSUF.UF.GetFrame("target")
+    return frame and frame.Health
+end
+
 local API = {
     version = 1,
     OpenUnitFrameSetup = OpenUnitFrameSetup,
@@ -305,8 +375,15 @@ local API = {
     GetNameplateSettings = function() return MSUF.NameplateSettings end,
     GetIconSkins = GetIconSkins,
     GetNameFormatter = GetNameFormatter,
+    TargetHealthAnchor = TargetHealthAnchor,
+    PartyCastAnchor = PartyCastAnchor,
+    SetPlayerSpellCastColors = SetPlayerSpellCastColors,
+    GetUnitFrameTooltipSetting = GetUnitFrameTooltipSetting,
+    SetUnitFrameTooltipSetting = SetUnitFrameTooltipSetting,
+    SetUnitFrameTooltipPanelStyler = function(styler) return MSUF.Tooltips.SetPanelStyler(styler) end,
     -- Optional v1 diagnostic shared by the slash command and Suite Dev Mode.
     GetTaintReport = function() return MSUF.TaintReport end,
+    GetStutterMonitor = GetStutterMonitor,
     GetProfileWorkbench = function() return MSUF.ProfileWorkbench end,
     Profiles_BeginImport = function(text, name, legacyRetail)
         return MSUF.ProfileImportReview.BeginImport(text, name, legacyRetail)

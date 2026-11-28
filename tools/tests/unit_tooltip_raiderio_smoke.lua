@@ -172,9 +172,17 @@ local function RunWithRaiderIO(flavor)
 end
 
 local function RunWithoutRaiderIO(flavor)
-    local _, _, Tooltips, _, frame, state = Boot(flavor, false)
+    local world, _, Tooltips, _, frame, state = Boot(flavor, false)
     Check(Tooltips.ShowUnit(frame, "party1") == true, flavor .. ": the hover built no tooltip")
     Check(#state.postCalls == 0, flavor .. ": a post-call was added without Raider.IO")
+    local api, styled = world.core.HostAPI, nil
+    Check(api.SetUnitFrameTooltipPanelStyler(function(panel) styled = panel end), "panel styler registration failed")
+    Check(api.SetUnitFrameTooltipSetting("unitTooltipProvider", "MSUF"), "could not choose the custom tooltip")
+    Check(Tooltips.ShowUnit(frame, "party1") and styled and styled.name and styled.line2,
+        "the custom panel did not offer its own title and body to Suite")
+    Check(api.SetUnitFrameTooltipPanelStyler(nil), "panel styler could not unsubscribe")
+    Check(api.SetUnitFrameTooltipSetting("unitTooltipMode", "NEVER") and Tooltips.hoverInert,
+        "the moved options did not apply to unit hover behavior")
 end
 
 for _, flavor in ipairs(arg[2] and { arg[2] } or { "Mainline", "Forever", "Vanilla" }) do

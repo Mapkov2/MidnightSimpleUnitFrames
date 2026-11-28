@@ -34,7 +34,12 @@ local function MSUF_EnsuredGeneral()
     return db and db.general
 end
 
-local MSUF_PlayerInfoFrame
+local MSUF_PlayerInfoFrame, panelStyler
+local function StyleCustomPanel()
+    if panelStyler and MSUF_PlayerInfoFrame then
+        MSUF.RunHostAPIStep("MSUF unit tooltip appearance", panelStyler, MSUF_PlayerInfoFrame)
+    end
+end
 local function MSUF_GetPlayerInfoFrame()
     if MSUF_PlayerInfoFrame then
          return MSUF_PlayerInfoFrame
@@ -79,10 +84,17 @@ local function MSUF_GetPlayerInfoFrame()
     f.line5 = line5FS
     f:Hide()
     MSUF_PlayerInfoFrame = f
+    StyleCustomPanel()
      return f
 end
 MSUF.Tooltips = MSUF.Tooltips or {}
 local Tooltips = MSUF.Tooltips
+function Tooltips.SetPanelStyler(styler)
+    if MSUF.Util.IsSecret(styler) or (styler ~= nil and type(styler) ~= "function") then return false end
+    panelStyler = styler
+    StyleCustomPanel()
+    return true
+end
 local GetSpecialization = MSUF.Specialization.GetSpecialization
 local GetSpecializationInfo = MSUF.Specialization.GetSpecializationInfo
 
@@ -741,7 +753,7 @@ end
 
 do
     local watcher = CreateFrame and CreateFrame("Frame")
-    if watcher and type(watcher.RegisterEvent) == "function" and type(watcher.SetScript) == "function" then
+    if watcher then
         tooltipModifierWatcher = watcher
         watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
         watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
