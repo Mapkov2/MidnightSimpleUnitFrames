@@ -248,11 +248,18 @@ local function SetCombatTimerText(text)
     end
 end
 
+local COMBAT_TIMER_FORMATS = {
+    none = { "%d:%02d", "%02d:%02d" },
+    square = { "[%d:%02d]", "[%02d:%02d]" },
+    round = { "(%d:%02d)", "(%02d:%02d)" },
+    curly = { "{%d:%02d}", "{%02d:%02d}" },
+    angle = { "<%d:%02d>", "<%02d:%02d>" },
+}
 local function CombatTimerFormat(config)
-    if config.combatTimerBrackets then
-        return config.combatTimerPadMinutes and "[%02d:%02d]" or "[%d:%02d]"
-    end
-    return config.combatTimerPadMinutes and "%02d:%02d" or "%d:%02d"
+    local style = config.combatTimerBrackets
+    if style == true then style = "square" end -- Legacy checkbox.
+    local formats = COMBAT_TIMER_FORMATS[style] or COMBAT_TIMER_FORMATS.none
+    return formats[config.combatTimerPadMinutes and 2 or 1]
 end
 
 local function SetCombatTimerValue(minutes, seconds, format)

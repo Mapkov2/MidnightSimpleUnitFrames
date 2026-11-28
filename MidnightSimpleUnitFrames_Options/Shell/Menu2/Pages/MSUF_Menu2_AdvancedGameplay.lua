@@ -55,12 +55,13 @@ local function MeleeSpecEnabled(g)
     return MeleeRangeEnabled(g) and M.GetGameplayPlayerSpecID() ~= nil
 end
 local function GameplayDeclarations(anchorValues,frameAnchors)
+    local timerFormats = VT("none", "1:23", "square", "[1:23]", "round", "(1:23)", "curly", "{1:23}", "angle", "<1:23>")
     return {
         combatTimerAnchor = { "dropdown", "combatTimerAnchor", nil, { "Anchor", anchorValues } },
         combatFontSize = { "slider", "combatFontSize", nil, { "Timer size", 10, 64, 1 } },
         lockCombatTimer = { "flowToggle", "lockCombatTimer", nil, { "Lock position" } },
         combatTimerClickThrough = { "flowToggle", "combatTimerClickThrough", nil, { "Click-through (ALT to drag when unlocked)" } },
-        combatTimerBrackets = { "flowToggle", "combatTimerBrackets", nil, { "Show timer in brackets" } },
+        combatTimerBrackets = { "dropdown", "combatTimerBrackets", nil, { "Format", timerFormats } },
         combatOffsetX = { "slider", "combatOffsetX", nil, { "X offset", -800, 800, 1 } },
         combatOffsetY = { "slider", "combatOffsetY", nil, { "Y offset", -800, 800, 1 } },
         lockCombatState = { "flowToggle", "lockCombatState", nil, { "Lock position" } },
@@ -93,6 +94,13 @@ local function GameplayRow(declarations,key,layout,apply,defaultApply)
     row.get = function()
         local value = Gameplay()[key]
         if value == nil then return fallback end
+        if key == "combatTimerBrackets" then
+            if value == true then return "square" end -- Legacy checkbox.
+            for _, item in ipairs(row[4][2]) do
+                if item.value == value then return value end
+            end
+            return fallback
+        end
         if row[1] == "slider" then return tonumber(value) or fallback end
         if row[1] == "flowToggle" then return value and true or false end
         return value
@@ -289,29 +297,29 @@ local function SetMeleeSpellID(value)
 end
 
 local TIMER_ROWS = {
-    { "combatTimerAnchor", 2, -84, -40, 220, 220 },
-    { "combatFontSize", 1, -138, -94, nil, 270 },
-    { "lockCombatTimer", 2, -192, -100 },
-    { "combatTimerClickThrough", 2, -224, -132 },
-    { "combatTimerBrackets", 1, -256, -132 },
+    { "combatTimerAnchor", 2, -88, -48, 220, 220 },
+    { "combatFontSize", 1, -148, -94, nil, 270 },
+    { "lockCombatTimer", 2, -274, -110 },
+    { "combatTimerClickThrough", 2, -306, -142 },
+    { "combatTimerBrackets", 1, -214, -156, 220, 220 },
 }
 local TIMER_OFFSET_ROWS = {
-    { "combatOffsetX", 1, -348, -216 },
-    { "combatOffsetY", 2, -418, -216 },
+    { "combatOffsetX", 1, -402, -270 },
+    { "combatOffsetY", 2, -472, -270 },
 }
 local function BuildGameplayTimer(env, controls)
     --- Old order: Combat Timer, Combat Enter/Leave, Class-specific toggles, Combat Crosshair.
-    local timer, stacked = OpenSection(env, "gameplay_timer", "Combat Timer", 602, 430, true)
+    local timer, stacked = OpenSection(env, "gameplay_timer", "Combat Timer", 656, 484, true)
     AttachTextShortcut(timer, "Combat Timer Text Settings", "Combat timer color", "menu:gameplay-timer-color",
         "gameplay_timer", { "gameplay.timer" }, "Combat Timer Color", "Combat Timer text follows the shared Fonts settings.")
     local geo = SectionGeometry(env.ctx, timer, 300)
     local x1, _, w = Columns(stacked, geo)
-    AddCards(timer, geo.cardW, stacked and { -38, 252, -306, 238 } or { -38, 126, -178, 150 })
-    local enable = SwitchAt(env.ctx, timer, "Combat Timer", x1, -40, min(230, w), "enableCombatTimer", env.apply, Meta("timer.enabled"))
+    AddCards(timer, geo.cardW, stacked and { -38, 306, -360, 238 } or { -38, 180, -232, 150 })
+    local enable = SwitchAt(env.ctx, timer, "Combat Timer", x1, -48, min(230, w), "enableCombatTimer", env.apply, Meta("timer.enabled"))
     PlaceRows(env, controls, timer, stacked, geo, TIMER_ROWS)
-    LabelAt(timer, "Timer position (offset)", 30, stacked and -316 or -186, 260, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(timer, "Timer position (offset)", 30, stacked and -370 or -242, 260, "GameFontHighlightSmall", T.colors.muted)
     PlaceRows(env, controls, timer, stacked, geo, TIMER_OFFSET_ROWS)
-    LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, stacked and -524 or -312, min(520, geo.width - 60), "GameFontDisableSmall",
+    LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, stacked and -578 or -366, min(520, geo.width - 60), "GameFontDisableSmall",
         T.colors.muted)
     -- controls[3] is the timer's "Lock position" toggle in both layouts above.
     AddLockTooltip(controls[3], "While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge "
