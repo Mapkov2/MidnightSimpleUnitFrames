@@ -69,24 +69,39 @@ local BUDGETS = {
         -- natives -> 4); the health follower renders a warm protected tick
         -- directly; ReadDeadCached reads UnitIsDeadOrGhost once; the group
         -- gone state resolves a health tick in Health's sink.
+        -- Raid trace 2026-11-23: one secret test per death read, none for
+        -- the gone sink's missing protected seed, and none repeated for the
+        -- glow's already-checked unit (group 8 -> 5 predicates and 391 -> 384
+        -- instructions, unit 4 -> 3 and 316 -> 314).
+        -- Raid trace 2026-11-23 follow-up: a steady protected glow keeps its
+        -- cached plain alpha without the SetOverAbsorbAlpha call (group 384 ->
+        -- 377, unit 314 -> 307 instructions; natives unchanged).
         ["group protected"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1,
-            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 8, k = 399 },
+            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 5, k = 385 },
         ["unit protected"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1,
-            SetValue = 2, SetVertexColor = 1 }, predicates = 4, k = 322 },
+            SetValue = 2, SetVertexColor = 1 }, predicates = 3, k = 313 },
         -- Raid trace 2026-10-07: a frame whose absorb event is queued
         -- leaves its health tick's glow to the queue drain. Per queued frame
         -- (absorb event, health tick, drain) the glow renders once: before
         -- group 19 natives (2 calculator reads, 2 flag writes, 6
         -- UnitHealthPercent) and 783 instructions, unit 18 and 707. The
         -- unqueued protected tick pays 2 instructions for the queue test.
+        -- Queued figures include the drain only through
+        -- uf_prediction_native_budget.lua, which locates the queue driver in
+        -- MSUF_UF_Prediction_Queue.lua; run directly, this file omits it.
+        -- 2026-11-23: the queued group tick shares the death-read and seed
+        -- tests above (drained: 13 -> 11 predicates, 721 -> 717 instructions).
+        -- Follow-up: the drain's steady glow alpha skip above (group 717 ->
+        -- 710, unit 647 -> 640 instructions; natives and predicates unchanged).
+        -- The drain keeps classifying the absorb field after its widget calls.
         ["group protected queued"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1, UnitGetTotalAbsorbs = 1,
-            SetValue = 4, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 13, k = 744 },
+            SetValue = 4, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 11, k = 724 },
         ["unit protected queued"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1, UnitGetTotalAbsorbs = 1,
-            SetValue = 4, SetVertexColor = 1 }, predicates = 9, k = 666 },
+            SetValue = 4, SetVertexColor = 1 }, predicates = 9, k = 652 },
     },
     Vanilla = {},
 }

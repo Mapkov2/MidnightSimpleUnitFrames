@@ -817,7 +817,7 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
             return BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true
         end))
     end
-    M.TrackRefresh(ctx, SyncControls(function()
+    local function RefreshControls()
         local scopedActive = ScopedControls()
         SetControlEnabled(refs.enableAbsorbBar, scopedActive)
         SetControlEnabled(refs.healAbsorbEnabled, scopedActive)
@@ -828,10 +828,16 @@ function GP.BuildAbsorbControls(ctx, positive, negative, heal, leftX, rightX, le
         SetControlEnabled(refs.positiveTest, true)
         SetControlEnabled(refs.negativeTest, true)
         SetControlEnabled(refs.healTest, true)
+    end
+    -- The bound dropdowns already repaint their current previews on a page
+    -- refresh. A direct write also updates sibling previews immediately.
+    M.TrackRefresh(ctx, RefreshControls)
+    SyncControls(function()
+        RefreshControls()
         if refs.absorbAnchorMode.RefreshPreview then refs.absorbAnchorMode:RefreshPreview() end
         if refs.healAbsorbAnchorMode.RefreshPreview then refs.healAbsorbAnchorMode:RefreshPreview() end
         if refs.healPredAnchorMode.RefreshPreview then refs.healPredAnchorMode:RefreshPreview() end
-    end))
+    end)
 end
 
 function GP.BuildAbsorbBindings(ctx, tabFrames, SelectAbsorbTab, Apply)

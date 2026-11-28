@@ -650,12 +650,21 @@ local function ShapePreviewSurface(card, width, height)
     card._msuf2RoundedPreviewSample = surface
     return surface
 end
-local function CreateRoundedTexturePreview(parent, x, y, width)
+local function CreateRoundedTexturePreview(parent, x, y, width, provider)
     width = max(320, floor((tonumber(width) or 560) + .5))
     local card = W.ControlCard(parent, "Preview", nil, x, y, width, ROUNDED_PREVIEW_CARD_HEIGHT)
     if not card then return end
-    local surface = ShapePreviewSurface(card, min(440, max(280, width - 44)), 46)
-    function card:RefreshRoundedPreview() surface:Refresh() end
+    local sampleWidth = min(440, max(280, width - 44))
+    local surface = ShapePreviewSurface(card, sampleWidth, 46)
+    local nameplates = provider and provider.preview(card, sampleWidth, 46)
+    function card:RefreshRoundedPreview()
+        local external = nameplates and M.SelectedBarsExtension() ~= nil
+        if nameplates then
+            surface.root.parent:SetShown(not external)
+            nameplates:SetShown(external == true)
+        end
+        if external then nameplates:Refresh() else surface:Refresh() end
+    end
     card:RefreshRoundedPreview()
     return card
 end

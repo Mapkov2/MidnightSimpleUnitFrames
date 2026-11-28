@@ -356,12 +356,17 @@ if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
   local GetUnitAuras = C_UnitAuras.GetUnitAuras
   local ReadConsumptionAuras = GetUnitAuras
   local ShouldAurasBeSecret = C_Secrets and C_Secrets.ShouldAurasBeSecret
+  local scanEpoch = 0
   local function SkipConsumptionAuras() end
 
   -- The global secrecy predicate can be false while the client refuses a
   -- unit's bulk read. World combat can create a group frame during that window.
   function Runtime.SuspendConsumptionAuraScan(suspended)
-    ReadConsumptionAuras = suspended and SkipConsumptionAuras or GetUnitAuras
+    local reader = suspended and SkipConsumptionAuras or GetUnitAuras
+    if ReadConsumptionAuras ~= reader then
+      ReadConsumptionAuras = reader
+      scanEpoch = scanEpoch + 1
+    end
   end
 
   -- Forever 1.60.1.70862 SpellEffect and SpellInterrupts data. These are the
@@ -384,7 +389,7 @@ if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
     [470369] = true, [1225769] = true, [1225771] = true, [1225772] = true, [1225774] = true,
   }
 
-  local function ClassifyConsumption(auras)
+  local function ClassifyConsumption(auras, unrelated)
     if issecretvalue(auras) or type(auras) ~= "table" then return nil end
     local eating
     for i = 1, #auras do
@@ -393,26 +398,81 @@ if IS_FOREVER and C_UnitAuras and C_UnitAuras.GetUnitAuras then
         local spellID = aura.spellId
         if not issecretvalue(spellID) and type(spellID) == "number" then
           if DRINK_AURAS[spellID] then return "DRINKING" end
-          if FOOD_AURAS[spellID] then eating = "EATING" end
+          if FOOD_AURAS[spellID] then
+            eating = "EATING"
+          elseif unrelated then
+            local instanceID = aura.auraInstanceID
+            if not issecretvalue(instanceID) and type(instanceID) == "number" then unrelated[instanceID] = true end
+          end
         end
       end
     end
     return eating
   end
 
-  GetConsumptionText = function(unit, previous, update)
-    if not ShouldAurasBeSecret or ShouldAurasBeSecret() ~= false then return nil end
-    -- When no consumption aura was visible, a pure addition/removal only
-    -- needs the new auras. Refresh on updates because visibility can change.
-    if not previous and not issecretvalue(update) and type(update) == "table" then
+  local function ForgetRemovedAuras(unrelated, removed)
+    if issecretvalue(removed) then return false end
+    if removed == nil then return true end
+    if type(removed) ~= "table" then return false end
+    for i = 1, #removed do
+      local instanceID = removed[i]
+      if issecretvalue(instanceID) or type(instanceID) ~= "number" then return false end
+      unrelated[instanceID] = nil
+    end
+    return true
+  end
+
+  local function KnownUpdatesOnly(unrelated, updated)
+    if issecretvalue(updated) then return false end
+    if updated == nil then return true end
+    if type(updated) ~= "table" then return false end
+    if #updated == 0 then return true end
+    if not unrelated then return false end
+    for i = 1, #updated do
+      local instanceID = updated[i]
+      if issecretvalue(instanceID) or type(instanceID) ~= "number" or not unrelated[instanceID] then return false end
+    end
+    return true
+  end
+
+  local function ResetUnrelatedAuras(unrelated, unit)
+    for key in pairs(unrelated) do unrelated[key] = nil end
+    unrelated.unit, unrelated.epoch = unit, scanEpoch
+  end
+
+  GetConsumptionText = function(frame, unit, update)
+    if not ShouldAurasBeSecret or ShouldAurasBeSecret() ~= false then
+      frame._msufConsumptionAuras = nil
+      return nil
+    end
+    local unrelated = frame._msufConsumptionAuras
+    if not unrelated then
+      unrelated = {}
+      frame._msufConsumptionAuras = unrelated
+    end
+    if unrelated.unit ~= unit or unrelated.epoch ~= scanEpoch then
+      ResetUnrelatedAuras(unrelated, unit)
+    end
+    -- A refreshed instance keeps its spell ID. Only skip the full read when
+    -- none is displayed and every refreshed instance was seen as unrelated.
+    if not frame._msufConsumptionText and not issecretvalue(update) and type(update) == "table" then
       local full = update.isFullUpdate
-      local updated = update.updatedAuraInstanceIDs
-      if not issecretvalue(full) and full == false and not issecretvalue(updated)
-        and (updated == nil or #updated == 0) then
-        return ClassifyConsumption(update.addedAuras)
+      if not issecretvalue(full) and full == false then
+        local updated = update.updatedAuraInstanceIDs
+        if ReadConsumptionAuras == SkipConsumptionAuras then
+          -- Outdoor combat can refuse bulk access while supplying readable additions.
+          if KnownUpdatesOnly(nil, updated) then return ClassifyConsumption(update.addedAuras) end
+        elseif unrelated.seeded and ForgetRemovedAuras(unrelated, update.removedAuraInstanceIDs)
+          and KnownUpdatesOnly(unrelated, updated) then
+          return ClassifyConsumption(update.addedAuras, unrelated)
+        end
       end
     end
-    return ClassifyConsumption(ReadConsumptionAuras(unit, "HELPFUL"))
+    ResetUnrelatedAuras(unrelated, unit)
+    local auras = ReadConsumptionAuras(unit, "HELPFUL")
+    if issecretvalue(auras) or type(auras) ~= "table" then return nil end
+    unrelated.seeded = true
+    return ClassifyConsumption(auras, unrelated)
   end
 end
 
@@ -537,6 +597,7 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
   local unit = frame.MSUFUnitKey
   if not (cfg and cfg.enabled and fs) then
     frame._msufConsumptionText = nil
+    frame._msufConsumptionAuras = nil
     ClearStatusText(frame, fs)
     return
   end
@@ -560,15 +621,17 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
   end
   if not UnitExistsRuntime(unit, unitState, frame) then
     frame._msufConsumptionText = nil
+    frame._msufConsumptionAuras = nil
     ClearStatusText(frame, fs)
     return
   end
   if event ~= "UNIT_HEALTH" and event ~= "MSUF_AFK_TIMER_TICK" then
     if cfg.showConsumption and GetConsumptionText and not status.testMode then
       local update = event == "UNIT_AURA" and seedHP
-      frame._msufConsumptionText = GetConsumptionText(unit, frame._msufConsumptionText, update)
+      frame._msufConsumptionText = GetConsumptionText(frame, unit, update)
     else
       frame._msufConsumptionText = nil
+      frame._msufConsumptionAuras = nil
     end
   end
   if event == "UNIT_AURA" then seedHP = nil end

@@ -459,7 +459,7 @@ local function FinishOwnershipHandoff()
   return true
 end
 
-local function SetupWantedHeaders(kind)
+local function SetupWantedHeaders(kind, enteringCombat)
   local scope = HeaderScope(kind)
   local raidKind = LiveRaidKind()
   -- "Hide in Housing" retires a block the way a preview does. Remember what this
@@ -518,6 +518,11 @@ local function SetupWantedHeaders(kind)
   local _, prioritySuccess = SetupWantedPriority()
   if prioritySuccess == false then success = false end
   FinishOwnershipHandoff()
+  -- The secure header has finished placing its existing and recycled slots.
+  if IS_MAINLINE and not enteringCombat then
+    GF.ForEachFrame(UF.elements.Borders.RefreshPixelGeometry, false)
+    UF.elements.Borders.RefreshAttachedUnits()
+  end
   return true, success
 end
 
@@ -1114,7 +1119,7 @@ local function RuntimeOnEvent(self, event, unit)
     -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
     -- begins the header could not come back before regen.
     if GF.HidePreviewsForCombat() == true then
-      SetupWantedHeaders()
+      SetupWantedHeaders(nil, true)
     end
     StartGroupRosterCombat()
     -- Frozen headers already have a one-shot name observer. Priority pins keep their own interest.

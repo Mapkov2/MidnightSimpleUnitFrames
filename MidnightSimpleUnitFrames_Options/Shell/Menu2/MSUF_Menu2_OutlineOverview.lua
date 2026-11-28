@@ -1,4 +1,5 @@
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2/OutlineOverview")
 local M = MSUF.MSUF2
 local W, T = M.Widgets, M.Theme
 local providers = {}
@@ -227,7 +228,7 @@ local function BuildPopup()
             RefreshApply(panel)
         end)
     end)
-    panel.matchHost = CreateFrame("Frame", nil, panel)
+    panel.matchHost = PixelLayoutRegion(CreateFrame("Frame", nil, panel))
     panel.matchHost:SetPoint("BOTTOMLEFT", 16, 12)
     panel.matchHost:SetSize(260, 24)
     panel.match = W.SwitchAt(panel.matchHost, "Match tooltip border", 0, -2, 230)
@@ -306,7 +307,7 @@ function M.AttachOutlineOverview(control, focus, placement, describe)
         gear:SetShown(control:IsShown())
     end
     gear:SetFrameLevel(control:GetFrameLevel() + 4)
-    local icon = gear:CreateTexture(nil, "ARTWORK")
+    local icon = PixelLayoutRegion(gear:CreateTexture(nil, "ARTWORK"))
     icon:SetSize(12, 12)
     icon:SetPoint("CENTER")
     icon:SetTexture("Interface\\Buttons\\UI-OptionsButton")

@@ -1530,14 +1530,18 @@ local function ApplyAll()
   end
   local restoreKinds = bulkGF and type(bulkGF.RefreshVisuals) == "function" and {} or nil
   roundedBulkRestoreKinds = restoreKinds
-  ForEachUnitFrame(function(f)
-    if IsGroupFrame(f) then
-      ApplyToGroupFrame(f)
-    else
-      ApplyToUnitFrame(f)
+  local anchors = MSUF.Client.IsRetail and MSUF.Castbars and MSUF.Castbars.Anchors
+  local outlineChanged = anchors and anchors.OnUnitframeOutlineChanged
+  local function ApplyFrameShape(f, group, kind)
+    local wasSuppressed = f._msufRUFModernBorderSuppressed
+    if group then ApplyToGroupFrame(f, kind) else ApplyToUnitFrame(f) end
+    if wasSuppressed ~= f._msufRUFModernBorderSuppressed then
+      if f.MSUFNormalOutlineBounds then MSUF.UF.elements.Borders.RefreshPixelGeometry(f) end
+      if outlineChanged and not group then outlineChanged(f) end
     end
-  end)
-  ForEachGroupFrame(ApplyToGroupFrame)
+  end
+  ForEachUnitFrame(function(f) ApplyFrameShape(f, IsGroupFrame(f)) end)
+  ForEachGroupFrame(function(f, kind) ApplyFrameShape(f, true, kind) end)
   RefreshGroupBlockRoundedBorders(groupIndicatorHotEnabled)
   roundedBulkRestoreKinds = nil
   if restoreKinds and next(restoreKinds) then

@@ -2113,6 +2113,7 @@ local function BuildSettingsCache(db)
       dst.r, dst.g, dst.b = fallback[1], fallback[2], fallback[3]
     end
   end
+  cache.nameColorRevision = (cache.nameColorRevision or 0) + 1
   Config.settingsCacheDirty = nil
   return cache
 end

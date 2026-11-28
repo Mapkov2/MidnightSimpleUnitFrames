@@ -338,6 +338,7 @@ local function ApplyPosition(frame, spec)
     if ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey) then
       SetFrameUnitExternalAnchorProxy(frame, nil)
       frame._msufStableExternalAnchor = nil
+      if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame) end
       return true
     end
     if frame._msufPositionInitialized == true then return true end
@@ -371,6 +372,7 @@ local function ApplyPosition(frame, spec)
       if ApplyCachedUnitFrameScreenPosition(frame, key, frame.MSUFUnitKey) then
         SetFrameUnitExternalAnchorProxy(frame, nil)
         frame._msufStableExternalAnchor = nil
+        if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame) end
         return true
       end
       frame:ClearAllPoints()
@@ -400,6 +402,7 @@ local function ApplyPosition(frame, spec)
     frame._msufLoadedFromScreenCache = nil
   end
   ApplyBossPhysicalBarGeometry(frame)
+  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshPixelGeometry(frame) end
   frame._msufExternalAnchorFrozen = nil
   return true
 end
@@ -602,6 +605,7 @@ end
 local function FlushApplyBatch(state)
   if UF.FlushDeferredRefreshes and UF.FlushDeferredRefreshes() == false then state.applied = false end
   if EnsureCooldownWidthObservers then EnsureCooldownWidthObservers() end
+  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits() end
 end
 
 local function FinishApplyBatch(ok, state)
@@ -702,6 +706,7 @@ function Factory.ForceReanchor(unit)
       if spec and ForceFramePosition(frame, spec) == false then success = false end
     end
   end
+  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits() end
   return success
 end
 
@@ -880,6 +885,7 @@ local function ThawFrozenExternalAnchors()
       end
     end
   end
+  if did and MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits() end
   return did
 end
 
@@ -1289,6 +1295,7 @@ local function RunExternalAnchorRefresh(frameName)
       if refreshed == nil then refreshed = true end
     end
   end
+  if MSUF.Client.IsRetail then UF.elements.Borders.RefreshAttachedUnits() end
   return refreshed
 end
 
@@ -1607,6 +1614,8 @@ do
     UF.RefreshBorders("arena")
     Dep("MSUF_ApplyBossCastbarPositionSetting")(false)
     Dep("MSUF_ApplyArenaCastbarPositionSetting")(false)
+    local auras = MSUF.MSUF_Auras3
+    if auras and auras.RefreshPixelLayout then auras.RefreshPixelLayout() end
   end)
 end
 

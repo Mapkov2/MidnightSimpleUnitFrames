@@ -264,8 +264,10 @@ function PowerSection.Cards(pw)
         local sourceMeta = SettingMeta(ctx, "power.resource_source", unit, "playerPowerSource")
         sourceMeta.label = M.PlayerPowerSourceSearchLabel
         sourceMeta.historySource = "classpower:playerPowerSource"
+        local sourceInset = 5
+        local sourceWidth = pw.cardW - 2 * sourceInset
         local playerPowerSource = ControlRow(ctx, mainCard, { "dropdown", "playerPowerSource", nil, { "Displayed resource",
-            PLAYER_POWER_SOURCE_VALUES, pw.cardW - 72 }, { 16, -132, pw.cardW - 72 },
+            PLAYER_POWER_SOURCE_VALUES, sourceWidth }, { sourceInset, -132, sourceWidth },
             get = function() return NormalizePlayerPowerSource(GetConf(unit).playerPowerSource) end,
             customSetReason = "Executes the existing composite command, conversion or selection-dependent policy.", write = {
                 source = function() return GetConf(unit) end, convert = NormalizePlayerPowerSource,
@@ -274,6 +276,7 @@ function PowerSection.Cards(pw)
             scope = unit, meta = sourceMeta,
             beforeBind = function(widget)
                 widget._msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel
+                widget:UseCompactValueInsets()
             end,
         })
         RegisterControl(playerPowerSource, ctx, "power.resource_source",

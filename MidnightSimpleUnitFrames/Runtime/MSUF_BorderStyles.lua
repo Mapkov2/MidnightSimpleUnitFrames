@@ -29,6 +29,7 @@ local addonName, MSUF = ...
 local FILE = "Runtime/MSUF_BorderStyles.lua"
 local Require, Optional = MSUF.Require, MSUF.Optional
 local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local SetRoundLayout = Require("MSUF_SetRoundLayoutToNearestPixel", FILE)
 MSUF.BorderStyles = MSUF.BorderStyles or {}
 local B = MSUF.BorderStyles
 
@@ -285,11 +286,12 @@ end
 
 --- Create the eight textures for one owner. `layer`/`subLayer` place the whole
 --- border at the requested owner layer; `texture` is the resolved edgeFile.
-function B.Create(owner, layer, subLayer, texture)
+function B.Create(owner, layer, subLayer, texture, framePixelGeometry)
     if not (owner and owner.CreateTexture) then return nil end
     local pieces = {}
     for i = 1, 8 do
-        local tex = PixelLayoutRegion(owner:CreateTexture(nil, layer or "OVERLAY", nil, subLayer or 0))
+        local tex = PixelLayoutRegion(owner:CreateTexture(nil, layer or "OVERLAY", nil, subLayer or 0), framePixelGeometry)
+        if framePixelGeometry then SetRoundLayout(tex, false) end
         if texture then SetPieceTexture(tex, texture, i > 4) end
         pieces[i] = tex
     end
@@ -324,6 +326,30 @@ local function AnchorTopBottomStrips(pieces, edge)
     pieces[6]:SetHeight(edge)
 end
 
+function B.AnchorFramePieces(pieces, target, edge, out)
+    -- Adjacent pieces share coordinates from the same owner so native
+    -- rounding gives them the same seam at each corner.
+    local bands = target._msufBorderBands
+    if bands then edge, out = bands[edge] or edge, bands[out] or out end
+    local inner = edge - out
+    pieces[1]:SetPoint("TOPLEFT", target, "TOPLEFT", -out, out)
+    pieces[1]:SetPoint("BOTTOMRIGHT", target, "TOPLEFT", inner, -inner)
+    pieces[2]:SetPoint("TOPLEFT", target, "TOPRIGHT", -inner, out)
+    pieces[2]:SetPoint("BOTTOMRIGHT", target, "TOPRIGHT", out, -inner)
+    pieces[3]:SetPoint("TOPLEFT", target, "BOTTOMLEFT", -out, inner)
+    pieces[3]:SetPoint("BOTTOMRIGHT", target, "BOTTOMLEFT", inner, -out)
+    pieces[4]:SetPoint("TOPLEFT", target, "BOTTOMRIGHT", -inner, inner)
+    pieces[4]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", out, -out)
+    pieces[5]:SetPoint("TOPLEFT", target, "TOPLEFT", inner, out)
+    pieces[5]:SetPoint("BOTTOMRIGHT", target, "TOPRIGHT", -inner, -inner)
+    pieces[6]:SetPoint("TOPLEFT", target, "BOTTOMLEFT", inner, inner)
+    pieces[6]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", -inner, -out)
+    pieces[7]:SetPoint("TOPLEFT", target, "TOPLEFT", -out, -inner)
+    pieces[7]:SetPoint("BOTTOMRIGHT", target, "BOTTOMLEFT", inner, inner)
+    pieces[8]:SetPoint("TOPLEFT", target, "TOPRIGHT", -inner, -inner)
+    pieces[8]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", out, inner)
+end
+
 --- Lay the border out around `target`, `edge` pixels wide, centred on the
 --- target rect edge -- the placement every edgeFile is authored for.
 ---
@@ -331,7 +357,7 @@ end
 --- `inset` pushes the band inward: 0 (default) straddles the edge, `edge / 2`
 --- puts the band wholly inside the target with its outer boundary exactly on
 --- the target edge, which is what an "inner" style wants.
-function B.Apply(pieces, target, edge, width, height, r, g, b, a, inset)
+function B.Apply(pieces, target, edge, width, height, r, g, b, a, inset, nativeFrameOutline)
     if not (pieces and target) then return end
     width, height = tonumber(width) or 0, tonumber(height) or 0
     -- A band wider than the target is allowed: the corners then overlap and the
@@ -342,21 +368,24 @@ function B.Apply(pieces, target, edge, width, height, r, g, b, a, inset)
 
     for i = 1, 8 do pieces[i]:ClearAllPoints() end
 
-    -- Corners hang `out` pixels past each target corner.
-    pieces[1]:SetPoint("TOPLEFT", target, "TOPLEFT", -out, out)
-    pieces[2]:SetPoint("TOPRIGHT", target, "TOPRIGHT", out, out)
-    pieces[3]:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -out, -out)
-    pieces[4]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", out, -out)
-    for i = 1, 4 do pieces[i]:SetSize(edge, edge) end
+    if nativeFrameOutline then
+        B.AnchorFramePieces(pieces, target, edge, out)
+    else
+        -- Corners hang `out` pixels past each target corner.
+        pieces[1]:SetPoint("TOPLEFT", target, "TOPLEFT", -out, out)
+        pieces[2]:SetPoint("TOPRIGHT", target, "TOPRIGHT", out, out)
+        pieces[3]:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -out, -out)
+        pieces[4]:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", out, -out)
+        for i = 1, 4 do pieces[i]:SetSize(edge, edge) end
 
-    -- Edges span between the corners.
-    AnchorTopBottomStrips(pieces, edge)
-    pieces[7]:SetPoint("TOPLEFT", pieces[1], "BOTTOMLEFT")
-    pieces[7]:SetPoint("BOTTOMLEFT", pieces[3], "TOPLEFT")
-    pieces[7]:SetWidth(edge)
-    pieces[8]:SetPoint("TOPRIGHT", pieces[2], "BOTTOMRIGHT")
-    pieces[8]:SetPoint("BOTTOMRIGHT", pieces[4], "TOPRIGHT")
-    pieces[8]:SetWidth(edge)
+        AnchorTopBottomStrips(pieces, edge)
+        pieces[7]:SetPoint("TOPLEFT", pieces[1], "BOTTOMLEFT")
+        pieces[7]:SetPoint("BOTTOMLEFT", pieces[3], "TOPLEFT")
+        pieces[7]:SetWidth(edge)
+        pieces[8]:SetPoint("TOPRIGHT", pieces[2], "BOTTOMRIGHT")
+        pieces[8]:SetPoint("BOTTOMRIGHT", pieces[4], "TOPRIGHT")
+        pieces[8]:SetWidth(edge)
+    end
 
     -- Repeat coords tile the edge art along its run, following
     -- BackdropTemplateMixin:SetupTextureCoordinates. The effective-scale factor

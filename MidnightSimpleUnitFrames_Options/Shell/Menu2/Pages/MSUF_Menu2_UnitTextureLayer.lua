@@ -591,7 +591,7 @@ local function TextureLayerSetupCard(ctx, s)
     packChevron:SetSize(12, 12)
     packChevron:SetPoint("RIGHT", texturePackPreset, "RIGHT", -8, 0)
     if texturePackPreset._msuf2Label then
-        texturePackPreset._msuf2Label:SetPoint("RIGHT", texturePackPreset, "RIGHT", -22, 0)
+        texturePackPreset._msuf2Label:SetPoint("RIGHT", texturePackPreset, "RIGHT", -26, 0)
     end
     if unit == "player" then
         PresetButton("texture_layer.preset.low_health", "Low HP", 80, 426, function()

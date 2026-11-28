@@ -103,7 +103,10 @@ local function BuildOutlineSection(ctx, b)
 end
 
 local function BuildRoundedSection(ctx, b)
-    local rounded = Rows.Schema.Section(b:CollapsibleSection("bars_rounded", "Rounded Texture", ROUNDED_SECTION_HEIGHT, true), "bars")
+    local provider = M.BarsRoundedProvider and M.BarsRoundedProvider()
+    local extraHeight = provider and 26 or 0
+    local rounded = Rows.Schema.Section(
+        b:CollapsibleSection("bars_rounded", "Rounded Texture", ROUNDED_SECTION_HEIGHT + extraHeight, true), "bars")
     local roundLeftX = 30
     local roundRightX = 330
     local roundW = 250
@@ -213,7 +216,8 @@ local function BuildRoundedSection(ctx, b)
         "Controls how subtle or strong the rounded corners appear. Masks, outlines, highlights, mouseover edges, power bars, enabled class resources, " ..
             "and enabled castbars use the same value.",
         "slider", Meta("rounded.roundedCornerStrength", "setting", { step = 1, min = 1, max = 5 }))
-    roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -214, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
+    local width = max(320, (rounded._msuf2Width or ctx.width or 720) - 60)
+    roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -214 - extraHeight, width, provider)
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
@@ -223,6 +227,15 @@ local function BuildRoundedSection(ctx, b)
     local roundedDependentControls = { roundedControls.roundedUnitFrames, roundedControls.roundedGroupFrames, roundedControls.roundedClassResources,
         roundedControls.roundedPowerBars,
         roundedControls.roundedMouseover, roundedControls.roundedCastbars, roundingSlider }
+    if provider then
+        local nameplates = Rows.Schema.Build(ctx, rounded, {
+            { "toggle", "nameplates", false, { "Nameplates", roundLeftX, -204, roundW },
+                meta = provider.enabledMeta, get = provider.getEnabled, set = provider.setEnabled },
+        }, Rows.Commands).nameplates
+        roundedDependentControls[#roundedDependentControls + 1] = nameplates
+        RegisterRoundedSearch(nameplates, "Nameplates", "rounded nameplates|rounded health bars",
+            nil, "toggle", provider.enabledMeta)
+    end
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
         { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end,
             reason = W.TurnOnReason and W.TurnOnReason("Rounded frame texture") },
@@ -246,14 +259,22 @@ end
 local function SlantedSwitchOn()
     local saved = Bars().slantedBarsEnabled
     if saved ~= nil then return saved == true end
-    return SlantedStylesSelected()
+    local provider = M.BarsSlantedProvider and M.BarsSlantedProvider()
+    return SlantedStylesSelected() or (provider and provider.getEnabled() == true) or false
 end
 
-local function CreateSlantedBarPreview(section, width)
+local function CreateSlantedBarPreview(section, width, provider)
     local card = W.ControlCard(section, "Slanted bar preview", nil, 30, -300, width - 60, 92)
     if not card then return end
-    local surface = ShapePreviewSurface(card, min(440, max(240, width - 110)), 43)
-    function card:RefreshSlantedPreview() surface:Refresh() end
+    local sampleWidth = min(440, max(240, width - 110))
+    local surface = ShapePreviewSurface(card, sampleWidth, 43)
+    local nameplates = provider and provider.preview(card, sampleWidth, 43)
+    function card:RefreshSlantedPreview()
+        local external = nameplates and M.SelectedBarsExtension() ~= nil
+        if nameplates then surface.root.parent:SetShown(not external) end
+        if nameplates then nameplates:SetShown(external == true) end
+        if external then nameplates:Refresh() else surface:Refresh() end
+    end
     card:RefreshSlantedPreview()
     return card
 end
@@ -296,10 +317,51 @@ local function SetSlantedDirectionForScope(value)
     end
     return changed
 end
+-- One click turns slanted bars on for every unit and group frame, and nameplates when offered.
+local function BuildSlantedPresetButton(section, provider, ApplySlantedToAll, RefreshSlanted, Search)
+    local preset = W.Button(section, "Apply slanted bars to all frames", 280)
+    W.MoveWidget(preset, section, 30, -420)
+    preset:SetScript("OnClick", function()
+        local function Write()
+            local bars = Bars()
+            local changed = ApplySlantedToAll()
+            if bars.slantedBarsEnabled ~= true then bars.slantedBarsEnabled, changed = true, true end
+            if bars.slantedUnitFrames ~= true then bars.slantedUnitFrames, changed = true, true end
+            if bars.slantedGroupFrames ~= true then bars.slantedGroupFrames, changed = true, true end
+            if provider and not provider.getEnabled() and provider.setEnabled(true) then changed = true end
+            if not changed then return false end
+            RefreshSlanted("slanted-bar-preset")
+            return true
+        end
+        if type(M.RunWithHistory) == "function" then
+            M.RunWithHistory("Apply slanted bars to all frames", "bars:slanted-preset", Write)
+        else
+            Write()
+        end
+    end)
+    RegisterControl(preset, Meta("slanted.apply_preset", "action"), "Apply slanted bars to all frames", "button")
+    Rows.Schema.Owned(preset, "bars", "bars")
+    Rows.Schema.SetSetting(preset, Rows.Schema.Record({ "bars.slantedBarsEnabled", "bars.slantedUnitFrames", "bars.slantedGroupFrames",
+        "{unit}.frameBarShape", "gf_{scope}.frameBarShape" }))
+    Search(preset, "Apply slanted bars to all frames", "button",
+        { "slanted bars", "slanted preset", "angled health bar", "schraege leiste", "schraege balken" },
+        "Cuts the Health and Power bar edges. Choose frames in Basics or apply this shape everywhere.")
+    return preset
+end
 local function BuildSlantedSection(ctx, b)
     local section = Rows.Schema.Section(b:CollapsibleSection("bars_slanted", "Slanted Bars", 480, true), "bars")
     local width = (section and section._msuf2Width) or b.width or 720
     local SyncSlantedControls = M.RefreshProxy()
+    local provider = M.BarsSlantedProvider and M.BarsSlantedProvider()
+    local function ExtensionSelected() return provider and M.SelectedBarsExtension() ~= nil end
+    local function Direction()
+        if ExtensionSelected() then return provider.getDirection() end
+        return SlantedDirectionForScope()
+    end
+    local function WriteDirection(value)
+        if ExtensionSelected() then return provider.setDirection(value) end
+        return SetSlantedDirectionForScope(value)
+    end
     local function Search(control, label, kind, keywords, help)
         if type(M.RegisterSearchWidget) == "function" then
             M.RegisterSearchWidget(control, { label = label, kind = kind, keywords = keywords, help = help })
@@ -327,7 +389,7 @@ local function BuildSlantedSection(ctx, b)
         { "text", "slantedHint", nil, { "Choose where slanted edges appear. Turning this off keeps your frame choices.",
             30, -40, width - 60, T.colors.muted }, scope = "bars" },
     })
-    local preview = CreateSlantedBarPreview(section, width)
+    local preview = CreateSlantedBarPreview(section, width, provider)
     if preview and type(M.RegisterSearchWidget) == "function" then
         M.RegisterSearchWidget(preview, {
             label = "Slanted bar preview", kind = "preview",
@@ -368,6 +430,13 @@ local function BuildSlantedSection(ctx, b)
     options.register = function(_, control, row)
         Search(control, row[4][1], "toggle", { "slanted", "angled", row.id, "schraege", "ein", "aus" })
     end
+    local directionMeta = provider and Meta("slanted.direction", nil, {
+        searchPrepareKind = "barsScope", searchPrepareValue = "shared", searchPrepareSettingKey = "bars.slantedBarDirection",
+        prepareExactSearchTarget = function()
+            M.SelectBarsExtension(nil)
+            return true
+        end,
+    })
     local controls = Rows.Schema.Build(ctx, section, {
         { "toggle", "slantedUnitFrames", true, { "Unit frames", 30, -116, 250 },
             path = "slanted.units", id = "units", defaultOn = true, skipEqual = true, register = true, presetKeys = SLANTED_PRESET_UNITS,
@@ -384,12 +453,13 @@ local function BuildSlantedSection(ctx, b)
         { "toggle", "slantedCastbars", false, { "Castbars", 330, -154, 250 },
             path = "slanted.castbars", id = "castbars", defaultOn = true, skipEqual = true, register = true },
         { "dropdown", "direction", nil, { "Cut direction", function()
-            return CurrentBarsScope() == "shared" and SLANTED_DIRECTION_VALUES or SLANTED_SCOPED_DIRECTION_VALUES
+            return not ExtensionSelected() and CurrentBarsScope() == "shared"
+                and SLANTED_DIRECTION_VALUES or SLANTED_SCOPED_DIRECTION_VALUES
         end, min(340, width - 60) }, { 30, -248, min(340, width - 60), "LEFT" },
-            path = "slanted.direction", get = SlantedDirectionForScope,
+            path = "slanted.direction", meta = directionMeta, get = Direction,
             writeTargets = Rows.Schema.Family(Rows.keys["slanted.direction"]),
             customSetReason = "Changes preview or editor selection state through its existing owner.", set = function(value)
-            if not SetSlantedDirectionForScope(value) then return end
+            if not WriteDirection(value) then return end
             if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end
             ApplyRoundedRuntime()
             if M.RequestRefresh then M.RequestRefresh(ctx, "slanted-bar-direction") end
@@ -397,35 +467,18 @@ local function BuildSlantedSection(ctx, b)
     }, options)
     local dependent = { controls.slantedUnitFrames, controls.slantedGroupFrames, controls.slantedClassResources,
         controls.slantedPowerBars, controls.slantedMouseover, controls.slantedCastbars }
+    if provider then
+        local nameplates = Rows.Schema.Build(ctx, section, {
+            { "toggle", "nameplates", false, { "Nameplates", 330, -192, 250 },
+                meta = provider.enabledMeta, get = provider.getEnabled, set = provider.setEnabled },
+        }, Rows.Commands).nameplates
+        dependent[#dependent + 1] = nameplates
+        Search(nameplates, "Nameplates", "toggle", { "slanted", "angled", "nameplates", "schraege" })
+    end
     local direction = controls.direction
     Search(direction, "Cut direction", "dropdown", { "slanted", "diagonal", "left", "right", "both", "schraege", "richtung" },
         "Choose the cut direction for the selected scope. Use shared style follows the shared direction.")
-    local preset = W.Button(section, "Apply slanted bars to all frames", 280)
-    W.MoveWidget(preset, section, 30, -420)
-    preset:SetScript("OnClick", function()
-        local function Write()
-            local bars = Bars()
-            local changed = ApplySlantedToAll()
-            if bars.slantedBarsEnabled ~= true then bars.slantedBarsEnabled, changed = true, true end
-            if bars.slantedUnitFrames ~= true then bars.slantedUnitFrames, changed = true, true end
-            if bars.slantedGroupFrames ~= true then bars.slantedGroupFrames, changed = true, true end
-            if not changed then return false end
-            RefreshSlanted("slanted-bar-preset")
-            return true
-        end
-        if type(M.RunWithHistory) == "function" then
-            M.RunWithHistory("Apply slanted bars to all frames", "bars:slanted-preset", Write)
-        else
-            Write()
-        end
-    end)
-    RegisterControl(preset, Meta("slanted.apply_preset", "action"), "Apply slanted bars to all frames", "button")
-    Rows.Schema.Owned(preset, "bars", "bars")
-    Rows.Schema.SetSetting(preset, Rows.Schema.Record({ "bars.slantedBarsEnabled", "bars.slantedUnitFrames", "bars.slantedGroupFrames",
-        "{unit}.frameBarShape", "gf_{scope}.frameBarShape" }))
-    Search(preset, "Apply slanted bars to all frames", "button",
-        { "slanted bars", "slanted preset", "angled health bar", "schraege leiste", "schraege balken" },
-        "Cuts the Health and Power bar edges. Choose frames in Basics or apply this shape everywhere.")
+    local preset = BuildSlantedPresetButton(section, provider, ApplySlantedToAll, RefreshSlanted, Search)
     dependent[#dependent + 1] = direction
     SyncSlantedControls(M.BindGateGroup(ctx, nil, {
         { controls = dependent, on = SlantedSwitchOn, reason = W.TurnOnReason and W.TurnOnReason("Enable slanted bars") },

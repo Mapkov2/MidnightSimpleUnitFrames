@@ -615,22 +615,22 @@ local function SetBarSmoothing(bar, enabled, chunked, lossTrail)
   if lossTrail and not useChunked then StopLossTrailAnimation(lossTrail) end
 end
 
-local function ApplyTextureColor(region, texture, r, g, b, a, force)
+local function ApplyTextureColor(region, texture, r, g, b, a, forceColor, forceTexture)
   if not region then
     return
   end
   r, g, b, a = r or 0, g or 0, b or 0, a or 1
   if texture then
-    if force == true or region._msufBgTexture ~= texture or region._msufBgColorTexture == true then
-      region:SetTexture(texture)
-      region._msufBgTexture = texture
-      region._msufBgColorTexture = nil
+    -- Dynamic dead/offline tint can overwrite live color without rebinding its art.
+    if forceTexture == true or region._msufBgTexture ~= texture or region._msufBgColorTexture == true then
+      MSUF.Bars.BindBackgroundTexture(region, texture)
+      forceColor = true
     end
-    if force == true or region._msufBgR ~= r or region._msufBgG ~= g or region._msufBgB ~= b or region._msufBgA ~= a then
+    if forceColor == true or region._msufBgR ~= r or region._msufBgG ~= g or region._msufBgB ~= b or region._msufBgA ~= a then
       region:SetVertexColor(r, g, b, a)
       region._msufBgR, region._msufBgG, region._msufBgB, region._msufBgA = r, g, b, a
     end
-  elseif force == true or region._msufBgColorTexture ~= true or region._msufBgR ~= r or region._msufBgG ~= g
+  elseif forceColor == true or region._msufBgColorTexture ~= true or region._msufBgR ~= r or region._msufBgG ~= g
       or region._msufBgB ~= b or region._msufBgA ~= a then
     region:SetColorTexture(r, g, b, a)
     region._msufBgColorTexture = true
@@ -1957,8 +1957,7 @@ local function ApplyBackgrounds(frame, health, power, force)
         r, g, b = resolveClass(frame, r, g, b)
       end
     end
-    ApplyTextureColor(frame.bg, spec.health.backgroundTexture, r, g, b, hb.a or spec.backgroundAlpha or 0.9, force)
-    frame._msufHPBgTex = spec.health.backgroundTexture
+    ApplyTextureColor(frame.bg, spec.health.backgroundTexture, r, g, b, hb.a or spec.backgroundAlpha or 0.9, force, force)
     if frame._msufHealthBgDynamic == true then
       -- ApplyTextureColor owns the cold texture/fallback pass and has its own
       -- cache. Force the dynamic runtime owner afterwards so a matching old
@@ -1976,8 +1975,7 @@ local function ApplyBackgrounds(frame, health, power, force)
         r, g, b = cr, cg, cb
       end
     end
-    ApplyTextureColor(frame.powerBarBG, spec.power.backgroundTexture, r, g, b, pb.a or spec.backgroundAlpha or 0.9, force)
-    frame._msufPowerBgTex = spec.power.backgroundTexture
+    ApplyTextureColor(frame.powerBarBG, spec.power.backgroundTexture, r, g, b, pb.a or spec.backgroundAlpha or 0.9, force, force)
   end
 end
 

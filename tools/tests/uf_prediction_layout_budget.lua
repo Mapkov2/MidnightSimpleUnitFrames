@@ -63,9 +63,28 @@ for mode = 1, 5 do
             frame._msufPredictionFrameWidth = 200
             local bar, healAbsorb, follow = Widget(), Widget(), Widget()
             items[#items + 1] = { frame, bar, healAbsorb, follow, mode, layout.ReverseForMode(mode, reverse) }
+            if not arg[2] then
+                frame.absorbBar, frame.healAbsorbBar = bar, healAbsorb
+                frame._msufPredictionHealAbsorbMode = mode
+                layout.PreparePredictionClip(frame, mode, mode, true)
+            end
             layout.EnsureHpGeometryHook(frame.hpBar)
         end
     end
+end
+-- A layer-only repair on a clipped FOLLOW_HP bar keeps its existing anchor points.
+if not arg[2] then
+    local frame = Widget()
+    frame.hpBar, frame.healAbsorbBar = Widget(), Widget()
+    frame._msufPredictionHealAbsorbMode = anchor.FOLLOW_HP
+    layout.PreparePredictionClip(frame, anchor.FOLLOW_HP, anchor.FOLLOW_HP, true)
+    local bar = frame.healAbsorbBar
+    layout.LayoutHealAbsorbBar(frame, bar, 3, false, anchor.FOLLOW_HP, 0, 0)
+    assert(frame._msufPredictionClip and bar:GetParent() == frame._msufPredictionClip)
+    function bar:ClearAllPoints() error("layer-only heal absorb repair rewrote its anchors") end
+    frame.hpBar.level = frame.hpBar.level + 1
+    layout.LayoutHealAbsorbBar(frame, bar, 3, false, anchor.FOLLOW_HP, 0, 0)
+    assert(bar.level == frame.hpBar.level + 3)
 end
 local function Batch(resize)
     for _, item in ipairs(items) do

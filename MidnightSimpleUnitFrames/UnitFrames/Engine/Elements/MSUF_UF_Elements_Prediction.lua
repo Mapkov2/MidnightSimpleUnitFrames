@@ -542,8 +542,10 @@ local function UngateOverAbsorbGlow(holder)
   end
 end
 
-local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
-  if issecretvalue(unit) == true or not UnitGetDetailedHealPrediction then return false end
+-- unitPublic: the caller already rejected a secret unit in this call
+-- (UpdateGlowHealthFast), so the token is not probed a second time.
+local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled, unitPublic)
+  if (unitPublic ~= true and issecretvalue(unit) == true) or not UnitGetDetailedHealPrediction then return false end
   local calc = frame._msufPredictionOverAbsorbCalc
   if not calc then
     calc = CreateUnitHealPredictionCalculator and CreateUnitHealPredictionCalculator()
@@ -580,8 +582,11 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   end
   holder._msufOverAbsorbGlowGated = true
   -- The flag sink carries both gates; the holder itself stays opaque, which
-  -- also retires the stripe's full-health gate on it.
-  SetOverAbsorbAlpha(holder, 1, false)
+  -- also retires the stripe's full-health gate on it. A steady tick finds the
+  -- plain 1 already cached: SetOverAbsorbAlpha's own skip, without its call.
+  if holder._msufOverAbsorbAlphaPlain ~= true or holder._msufOverAbsorbAlpha ~= 1 then
+    SetOverAbsorbAlpha(holder, 1, false)
+  end
   frame._msufPredictionFullHealthAlphaReady = nil
   if holder._msufShown ~= true then
     holder:SetShown(true)
@@ -791,6 +796,17 @@ local function ClearBarValueCache(bar)
   if not bar then return end
   for i = 1, #BAR_VALUE_CACHE_FIELDS do
     bar[BAR_VALUE_CACHE_FIELDS[i]] = nil
+  end
+end
+
+-- Preview writes and restores the native bars outside the live render cache.
+function Prediction.InvalidatePreviewBarValues(frame)
+  for i = 1, #PREDICTION_BAR_DEFS do
+    local bar = frame[PREDICTION_BAR_DEFS[i][2]]
+    if bar then
+      ClearBarValueCache(bar)
+      bar._msufShown = bar:IsShown() == true
+    end
   end
 end
 
@@ -1053,6 +1069,8 @@ function Prediction.Apply(frame, spec)
   local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
   local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
 
+  Layout.PreparePredictionClip(frame, healMode, absorbMode, MSUF.Client.IsRetail)
+
   ApplyPredictionBar(frame, cfg, spec, frame.incomingHealBar, cfg.heal,
     1, healMode, frame._msufPredictionHealReverse,
     "texture", "healR", "healG", "healB", "healA", nil,
@@ -1308,7 +1326,7 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
         frame._msufPredictionGlowDeferred = true
         return
       end
-      if not ShowProtectedOverAbsorb(frame, holder, unit, false) then HideOverAbsorbGlow(frame) end
+      if not ShowProtectedOverAbsorb(frame, holder, unit, false, true) then HideOverAbsorbGlow(frame) end
       return
     end
     return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true, nil, true)
@@ -1436,7 +1454,7 @@ end
 local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, maxHP,
     refreshHeal, refreshAbsorb, refreshHealAbsorb,
     showHeal, showAbsorb, showHealAbsorb, forceMax)
-  -- Preserve the original phase order and secret gates; full rationale is in docs/uf-responsibility-notes.md.
+  -- Preserve the phase order and secret gates; see docs/uf-responsibility-notes.md.
   if forceMax == true then
     InvalidateHpGeometry(frame.hpBar or frame.Health)
   end

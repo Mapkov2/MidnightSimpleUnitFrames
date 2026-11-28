@@ -435,7 +435,21 @@ end
 
 -- Optional sibling of the native scopes. The selection is menu state only;
 -- unit-frame settings and runtime continue to use CurrentBarsScope.
-local barsExtension, selectedExtension
+local barsExtension, selectedExtension, selectBarsView
+
+function M.BarsSlantedProvider()
+    return barsExtension and barsExtension.provider.slanted
+end
+
+function M.BarsRoundedProvider()
+    return barsExtension and barsExtension.provider.rounded
+end
+
+function M.SelectBarsExtension(key)
+    if key and (not barsExtension or key ~= barsExtension.key) then return false end
+    if selectBarsView then selectBarsView(key) else selectedExtension = key end
+    return true
+end
 
 function M.RegisterBarsScope(key, label, provider)
     if type(key) ~= "string" or key == "" or type(label) ~= "string" or type(provider) ~= "table"
@@ -464,12 +478,15 @@ end
 
 local function BuildBarsScopeView(ctx, b, extension)
     local native, external, shown
+    local shared = {}
     local function Apply()
         local showExternal = selectedExtension == extension.key
         if not external or shown == showExternal then return end
         shown = showExternal
-        for _, entry in ipairs(native) do (entry.outer or entry.frame):SetShown(not showExternal) end
-        for _, entry in ipairs(external) do (entry.outer or entry.frame):SetShown(showExternal) end
+        for _, entry in ipairs(native) do (entry.outer or entry.frame):SetShown(shared[entry] or not showExternal) end
+        for _, entry in ipairs(external) do
+            if not shared[entry] then (entry.outer or entry.frame):SetShown(showExternal) end
+        end
         b.layoutEntries = showExternal and external or native
         b:RequestRelayoutCollapsibles()
     end
@@ -485,9 +502,19 @@ local function BuildBarsScopeView(ctx, b, extension)
         b.layoutEntries = {}
         MSUF.RunHostAPIStep("bars scope build", extension.provider.build, ctx, b)
         external = b.layoutEntries
+        local provider = extension.provider
+        local sharedSections = { bars_rounded = provider.rounded, bars_slanted = provider.slanted }
+        local insertAt = math.min(3, #external + 1)
+        for _, entry in ipairs(native) do
+            if sharedSections[entry.sectionId] then
+                shared[entry] = true
+                table.insert(external, insertAt, entry)
+                insertAt = insertAt + 1
+            end
+        end
         local function Attach(entries, key)
             for _, entry in ipairs(entries) do
-                if entry.outer then
+                if entry.outer and not shared[entry] then
                     local old = entry._msuf2EnsureVisible
                     entry._msuf2EnsureVisible = function()
                         Select(key)
@@ -501,6 +528,7 @@ local function BuildBarsScopeView(ctx, b, extension)
         M.TrackRefresh(ctx, Apply)
         Apply()
     end
+    selectBarsView = Select
     return Select, Install
 end
 

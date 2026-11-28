@@ -324,8 +324,9 @@ local function CheckConsumption(scope, unit)
         CheckText(nil)
         assert(consumptionReads == before, unit .. " restricted aura event queried helpful auras")
         auraAccessRestricted = false
-        h:Event("UNIT_AURA", unit, fullUpdate)
+        h:Event("UNIT_AURA", unit, { isFullUpdate = false })
         CheckText("DRINKING")
+        assert(consumptionReads == before + 1, unit .. " first readable delta did not reseed consumption auras")
 
         h:EnterCombat()
         local protectedWrites = #h.violations
@@ -346,6 +347,21 @@ local function CheckConsumption(scope, unit)
         h:Event("UNIT_AURA", unit, { isFullUpdate = false, addedAuras = { otherAura } })
         CheckText(nil)
         assert(consumptionReads == before, unit .. " unrelated aura delta read the aura list")
+
+        local repeated = { isFullUpdate = false, updatedAuraInstanceIDs = { 12 } }
+        for i = 1, 30 do h:Event("UNIT_AURA", unit, repeated) end
+        CheckText(nil)
+        assert(consumptionReads == before, unit .. " known unrelated aura refresh read the full list")
+
+        h:Event("UNIT_AURA", unit, { isFullUpdate = false, removedAuraInstanceIDs = { 12 } })
+        helpfulAuras[unit] = { { spellId = 433, auraInstanceID = 12 } }
+        h:Event("UNIT_AURA", unit, repeated)
+        CheckText("EATING")
+        assert(consumptionReads == before + 1, unit .. " unknown aura update did not rescan")
+        helpfulAuras[unit] = {}
+        h:Event("UNIT_AURA", unit, fullUpdate)
+        CheckText(nil)
+        before = consumptionReads
 
         local drink = { spellId = 430, auraInstanceID = 13 }
         helpfulAuras[unit] = { drink }

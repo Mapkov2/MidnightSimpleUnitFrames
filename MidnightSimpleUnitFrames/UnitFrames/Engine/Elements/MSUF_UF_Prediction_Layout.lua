@@ -157,6 +157,27 @@ local function HpAlongSize(hpBar, vertical, runtimeWidth)
   return hpBar._msufPredGeomW or runtimeWidth or 1
 end
 
+-- Native child clipping can cut off the health bar's own fill at fractional
+-- screen coordinates. Clip the prediction children at the same bounds instead.
+local function PreparePredictionClip(frame, healMode, absorbMode, isolateHealth)
+  local hpBar = frame.hpBar or frame.Health
+  if not hpBar or not hpBar.SetClipsChildren then return end
+  if not ((frame.incomingHealBar and healMode == FOLLOW_HP)
+    or (frame.absorbBar and absorbMode == FOLLOW_HP)
+    or (frame.healAbsorbBar and frame._msufPredictionHealAbsorbMode == FOLLOW_HP)) then return end
+  if isolateHealth then
+    if frame._msufPredictionClip then return end
+    local clip = PixelLayoutRegion(CreateFrame("Frame", nil, hpBar))
+    clip:EnableMouse(false)
+    clip:SetAllPoints(hpBar)
+    clip:SetClipsChildren(true)
+    frame._msufPredictionClip = clip
+  elseif not hpBar._msufPredictionClipsChildren then
+    hpBar:SetClipsChildren(true)
+    hpBar._msufPredictionClipsChildren = true
+  end
+end
+
 -- Overlay StatusBars fill along the same axis as the HP bar. Orientation is a
 -- set-once native flag; the swipe below re-applies reverse fill after any axis
 -- flip because SetOrientation can reset it on some clients.
@@ -246,15 +267,18 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   if not (bar and hpBar) then
     return
   end
-  local followSource = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and followBar or nil
-  local follow = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
+  local followSource, follow
+  if mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW then
+    followSource = followBar
+    follow = (followBar and StatusTexture(followBar)) or StatusTexture(hpBar)
+  end
   local vertical = frame._msufPredictionVertical == true
   -- Extent along the fill axis only: width horizontally, height vertically. The
   -- cross axis is pinned by the corner anchors, so it is never measured. Served
   -- from the size-change-invalidated cache -- no native measure per event.
-  local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
+  local width = HpAlongSize(hpBar, vertical, frame._msufPredictionFrameWidth)
   local anchorTarget = follow or hpBar
-  local parent = hpBar
+  local parent = frame._msufPredictionClip or hpBar
   if mode == FOLLOW_HP_OVERFLOW then
     parent = EnsureOverflowClip(frame, hpBar, vertical,
       frame._msufPredictionHpReverse == true, width) or frame._msufHealthVisualRoot or frame
@@ -281,10 +305,6 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
 
   local parentChanged = SetParentCached(bar, parent)
   SyncBarLayer(frame, hpBar, bar, levelOffset, parentChanged)
-  if hpBar.SetClipsChildren and mode == FOLLOW_HP and hpBar._msufPredictionClipsChildren ~= true then
-    hpBar:SetClipsChildren(true)
-    hpBar._msufPredictionClipsChildren = true
-  end
   if bar._msufPredictionMode ~= mode
     or bar._msufPredictionReverse ~= reverse
     or bar._msufPredictionFollowBar ~= followSource
@@ -378,14 +398,15 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
   if not (bar and hpBar) then
     return false
   end
-  local followSource = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and followBar or nil
-  local follow = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
+  local followsHealth = mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW
+  local followSource = followsHealth and followBar or nil
+  local follow = followsHealth and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
   local vertical = frame._msufPredictionVertical == true
   -- Cached along-axis extent (see LayoutBar): this guard is the per-event hot
   -- path, so it must not measure the bar natively.
-  local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
+  local width = HpAlongSize(hpBar, vertical, frame._msufPredictionFrameWidth)
   local anchorTarget = follow or hpBar
-  local parent = (mode == FOLLOW_HP_OVERFLOW) and OverflowParent(frame) or hpBar
+  local parent = (mode == FOLLOW_HP_OVERFLOW) and OverflowParent(frame) or frame._msufPredictionClip or hpBar
   height = height or 0
   offsetY = offsetY or 0
   return bar._msufPredictionMode == mode
@@ -422,23 +443,24 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     bar._msufHealAbsorbMode = nil
     return LayoutBar(frame, bar, levelOffset, mode, ReverseForMode(mode, hpReverse), nil, height, offsetY)
   end
+  local parent = frame._msufPredictionClip or hpBar
   local hpTexture = StatusTexture(hpBar) or hpBar
   local vertical = frame._msufPredictionVertical == true
   -- Cached along-axis extent, as in LayoutBar.
-  local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
+  local width = HpAlongSize(hpBar, vertical, frame._msufPredictionFrameWidth)
   local reverse = hpReverse ~= true
 
   local layoutCurrent = bar._msufHealAbsorbAnchorTarget == hpTexture
     and bar._msufHealAbsorbMode == mode
     and bar._msufHealAbsorbWidth == width
     and bar._msufHealAbsorbHpReverse == hpReverse
-    and bar._msufHealAbsorbParent == hpBar
+    and bar._msufHealAbsorbParent == parent
     and bar._msufHealAbsorbLevelOffset == levelOffset
     and bar._msufHealAbsorbHeight == height
     and bar._msufHealAbsorbOffsetY == offsetY
     and bar._msufHealAbsorbVertical == vertical
     and bar._msufReverseFill == reverse
-  if layoutCurrent and bar.GetParent and bar:GetParent() ~= hpBar then
+  if layoutCurrent and bar.GetParent and bar:GetParent() ~= parent then
     layoutCurrent = false
   end
   if layoutCurrent and not PredictionLayerCurrent(frame, hpBar, bar, levelOffset) then
@@ -448,18 +470,14 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     return
   end
 
-  local parentChanged = SetParentCached(bar, hpBar)
+  local parentChanged = SetParentCached(bar, parent)
   SyncBarLayer(frame, hpBar, bar, levelOffset, parentChanged)
-  if hpBar.SetClipsChildren and hpBar._msufPredictionClipsChildren ~= true then
-    hpBar:SetClipsChildren(true)
-    hpBar._msufPredictionClipsChildren = true
-  end
 
   if bar._msufHealAbsorbAnchorTarget ~= hpTexture
     or bar._msufHealAbsorbMode ~= mode
     or bar._msufHealAbsorbWidth ~= width
     or bar._msufHealAbsorbHpReverse ~= hpReverse
-    or bar._msufHealAbsorbParent ~= hpBar
+    or bar._msufHealAbsorbParent ~= parent
     or bar._msufHealAbsorbHeight ~= height
     or bar._msufHealAbsorbOffsetY ~= offsetY
     or bar._msufHealAbsorbVertical ~= vertical
@@ -506,7 +524,7 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
     bar._msufHealAbsorbMode = mode
     bar._msufHealAbsorbWidth = width
     bar._msufHealAbsorbHpReverse = hpReverse
-    bar._msufHealAbsorbParent = hpBar
+    bar._msufHealAbsorbParent = parent
     bar._msufHealAbsorbHeight = height
     bar._msufHealAbsorbOffsetY = offsetY
     bar._msufHealAbsorbVertical = vertical
@@ -527,6 +545,7 @@ return {
   VisibleFollowBar = VisibleFollowBar,
   InvalidateHpGeometry = InvalidateHpGeometry,
   EnsureHpGeometryHook = EnsureHpGeometryHook,
+  PreparePredictionClip = PreparePredictionClip,
   LayoutBar = LayoutBar,
   PredictionLayoutCurrent = PredictionLayoutCurrent,
   LayoutBarIfNeeded = LayoutBarIfNeeded,

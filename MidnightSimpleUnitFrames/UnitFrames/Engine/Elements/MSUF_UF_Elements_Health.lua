@@ -13,9 +13,6 @@ local UnitHealthPercent = C.UnitHealthPercent or UnitHealthPercent
 local WHITE = C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C.SCALE_100
 local REVERSE_TO_100 = CurveConstants and CurveConstants.ReverseTo100
-local client = MSUF.Client
-local RETAIL_INVERSE_HEALTH_BACKGROUND = client and client.IsRetail == true
-  and client.IsForever ~= true and REVERSE_TO_100 ~= nil
 local CreateLossTrail = C.CreateLossTrail
 local SnapBarInterpolation = C.SnapBarInterpolation
 local SetBarSmoothing = C.SetBarSmoothing
@@ -112,7 +109,7 @@ end
 
 local RuntimeColorNeedsIdentityForSpec = MSUF.UFBarTextCommon.HealthModeNeedsIdentity
 
-local function RuntimeColorOnHealthEvent(frame, value, valueSecret)
+local function RuntimeColorOnHealthEvent(frame, value, valueSecret, event)
   local gradient = frame and frame._msufHealthRuntimeGradient
   if gradient == nil and frame then
     local health = frame.MSUFSpec and frame.MSUFSpec.health
@@ -125,9 +122,8 @@ local function RuntimeColorOnHealthEvent(frame, value, valueSecret)
     return true
   end
   if valueSecret == nil then valueSecret = issecretvalue(value) == true end
-  if valueSecret == true then
-    return false
-  end
+  -- A compound unit may have no flags event to carry a death transition.
+  if valueSecret == true then return event == "MSUF_DEPENDENT_TARGET_POLL" end
   return type(value) == "number" and value <= 0
 end
 
@@ -169,8 +165,7 @@ local function SetHealthBackgroundValue(frame, unit, percent, percentSecret, ani
 
   local missing, secret
   if percentSecret == false then
-    -- Both percent lanes already sanitized this public sample. Cold/absolute
-    -- callers pass nil and use the native inverse below; no stale sample reuse.
+    -- Reuse the sanitized public sample from the foreground update.
     missing = 100 - percent
   elseif UnitHealthPercent and REVERSE_TO_100 and unit then
     missing = UnitHealthPercent(unit, true, REVERSE_TO_100)
@@ -235,7 +230,7 @@ local function ApplyHealthBackgroundFillMode(frame, health)
     bar._msufOrientation or "HORIZONTAL", bar._msufReverseFill == true)
 
   if missing then
-    -- Keep the missing interval on a native StatusBar for secret-safe values.
+    -- The inverse native bar avoids clipping against a moving texture edge.
     if frame._msufIsGroupFrame == true and SnapBarInterpolation then
       -- A settings/cold apply can arrive while the foreground is still easing.
       -- Finish that old target before the inverse bar is seeded so both native
@@ -254,79 +249,6 @@ local function ApplyHealthBackgroundFillMode(frame, health)
   end
   if backgroundBar.Show then backgroundBar:Show() end
   return true
-end
-
--- Keep the background's full native UV mapping. A white mask follows the live
--- fill edge, including native interpolation, without a second health read.
--- Absolute and chunked-loss bars retain their distinct value semantics.
-local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
-  local bar, background = frame.hpBar, frame.healthBackgroundBar
-  if not (bar and background) then return end
-  local h = frame.MSUFSpec and frame.MSUFSpec.health
-  local orientation = bar._msufOrientation or "HORIZONTAL"
-  local reverse = bar._msufReverseFill == true
-  -- A full reversed StatusBar reports its leading edge on the far side, so a
-  -- clip mask anchored there covers the whole bar and the missing-health color
-  -- shows at 100%. The inverse value bar has no edge to misread.
-  -- On Retail the moving texture-edge mask can show the world through
-  -- an opaque background. Use the native inverse bar on that client.
-  local wanted = frame._msufHealthBackgroundFillMissing == true and percentPlan
-    and not RETAIL_INVERSE_HEALTH_BACKGROUND
-    and not (h and h.chunked == true)
-    and not reverse
-  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
-  local texture = background.GetStatusBarTexture and background:GetStatusBarTexture()
-  local supported = fill and texture and background.CreateMaskTexture
-    and texture.AddMaskTexture and texture.RemoveMaskTexture
-  -- The rounded surface already owns a mask on this very texture. Stacking a
-  -- second native clip mask on it renders the missing-health background wrong
-  -- (issue #146), so rounded frames keep the value-driven fill that 6.16 beta1
-  -- used. Frames without the rounded surface still take the cheap clip mask.
-  local roundedMasked = UF.Surface and UF.Surface.OwnsMask(frame, texture)
-  local active = wanted and supported and not roundedMasked and true or false
-  if not resetValue and frame._msufHealthBackgroundMaskActive == active
-    and frame._msufHealthBackgroundMaskFill == fill
-    and frame._msufHealthBackgroundMaskTexture == texture
-    and (not active or frame._msufHealthBackgroundMaskOwner == background)
-    and frame._msufHealthBackgroundMaskAxis == orientation
-    and frame._msufHealthBackgroundMaskReverse == reverse then
-    frame._msufHealthBackgroundNeedsValue = frame._msufHealthBackgroundFillMissing == true and not active
-    return
-  end
-  local mask = frame._msufHealthBackgroundClipMask
-  local oldTexture = frame._msufHealthBackgroundMaskTexture
-  if frame._msufHealthBackgroundMaskActive == true and mask and oldTexture then oldTexture:RemoveMaskTexture(mask) end
-  if active then
-    if not mask or frame._msufHealthBackgroundMaskOwner ~= background then
-      mask = background:CreateMaskTexture(nil, "ARTWORK")
-      -- Mask region bounds do not clip white UVs by themselves. Black outside
-      -- keeps range-faded health from exposing the full background underneath.
-      mask:SetTexture(WHITE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-      frame._msufHealthBackgroundClipMask = mask
-      frame._msufHealthBackgroundMaskOwner = background
-    end
-    mask:ClearAllPoints()
-    if orientation == "VERTICAL" then
-      mask:SetPoint("BOTTOMLEFT", fill, "TOPLEFT", 0, 0)
-      mask:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
-    else
-      mask:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
-      mask:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
-    end
-    texture:AddMaskTexture(mask)
-    background:SetMinMaxValues(0, 100)
-    background:SetValue(100)
-    background._msufHealthMissingMinMax = 100
-    background._msufHealthMissingValue, background._msufHealthMissingUnit = nil, nil
-  elseif frame._msufHealthBackgroundMaskActive == true and frame._msufHealthBackgroundFillMissing == true then
-    -- Restore the inverse when the clip mask is retired. Capability checks and
-    -- mask binding stay in this cold layout/route selection path.
-    SetHealthBackgroundValue(frame, frame.MSUFUnitKey, nil, nil, false)
-  end
-  frame._msufHealthBackgroundMaskActive = active
-  frame._msufHealthBackgroundMaskFill, frame._msufHealthBackgroundMaskTexture = fill, texture
-  frame._msufHealthBackgroundMaskAxis, frame._msufHealthBackgroundMaskReverse = orientation, reverse
-  frame._msufHealthBackgroundNeedsValue = frame._msufHealthBackgroundFillMissing == true and not active
 end
 
 local HEALTH_POWER_LAYOUT = { "Health", "Power" }
@@ -389,6 +311,7 @@ function Health.Create(frame, spec)
     backgroundBar:SetFrameLevel(frame:GetFrameLevel() or 0)
   end
   local bg = backgroundBar:GetStatusBarTexture()
+  bg._msufHealthBackground = true
   if bg.SetDrawLayer then bg:SetDrawLayer("BACKGROUND", -7) end
   bg:SetColorTexture(0.02, 0.02, 0.025, spec and spec.backgroundAlpha or 0.72)
   frame.healthBackgroundBar = backgroundBar
@@ -520,9 +443,6 @@ function Health.Apply(frame, spec)
   -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
   -- after the elements; a spec applies only once the core has loaded.
   MSUF.Require("ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua", MSUF.UF.Factory)(frame)
-  -- The fill-mode apply seeded the value; reassert the full masked texture
-  -- even when this frame's mask and orientation did not change.
-  if Health.SyncBackgroundPlan then Health.SyncBackgroundPlan(frame, true) end
 end
 
 function Health.GetEvents(frame, spec)
@@ -626,7 +546,11 @@ local function UpdateAbsolute(frame, event, unit)
   local value, maximum, percentReady, hpSecret, maxSecret =
     UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, animate)
   if frame._msufHealthBackgroundNeedsValue == true then
-    SetHealthBackgroundValue(frame, unit, nil, nil, animate)
+    if hpSecret or maxSecret then
+      SetHealthBackgroundValue(frame, unit, nil, nil, animate)
+    else
+      SetHealthBackgroundValue(frame, unit, value / maximum * 100, false, animate)
+    end
   end
   return value, maximum, percentReady, hpSecret, maxSecret
 end
@@ -747,12 +671,12 @@ if UnitHealthPercent and SCALE_100 then
     -- Apply already makes a gradient background dynamic and enables its color
     -- updates. These two flags fully select this route; do not recheck their
     -- derived flags on every value event.
-    if healthTick and frame._msufHealthRuntimeColorEnabled == false
+    if animate and frame._msufHealthRuntimeColorEnabled == false
       and frame._msufHealthBackgroundGradient == true then
       local refresh = frame._msufHealthBackgroundRefreshValue or RefreshHealthBarBackgroundColor
       if refresh(frame, event, unit, pct, 100, nil, nil, true, pctSecret) ~= true then SetColor(frame) end
     elseif frame._msufHealthRuntimeColorUpdateEnabled ~= false
-      and (not healthTick or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
+      and (not animate or RuntimeColorOnHealthEvent(frame, pct, pctSecret, event)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100, nil, nil, true) then SetColor(frame) end
     end
     if group then
@@ -785,7 +709,8 @@ else
     if not (frame and frame.hpBar and unit) then return end
     local hp, maxHP, absolutePercentReady, hpSecret = UpdateAbsolute(frame, event, unit)
     if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-      and (event ~= "UNIT_HEALTH" or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
+      and ((event ~= "UNIT_HEALTH" and event ~= "MSUF_DEPENDENT_TARGET_POLL")
+        or RuntimeColorOnHealthEvent(frame, hp, hpSecret, event)) then
       if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
     end
     if group then
@@ -815,7 +740,8 @@ local function UpdateSingleAbsolute(frame, event, unit)
 
   local hp, maxHP, percentReady, hpSecret = UpdateAbsolute(frame, event, unit)
   if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
+    and ((event ~= "UNIT_HEALTH" and event ~= "MSUF_DEPENDENT_TARGET_POLL")
+        or RuntimeColorOnHealthEvent(frame, hp, hpSecret, event)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
   local updateTextureState = frame._msufSurfaceHealthUpdate
@@ -843,7 +769,8 @@ local function UpdateSingleCurrent(frame, event, unit)
   -- steady health ticks avoid the extra UnitHealthPercent call entirely.
   local hp, maxHP, _, hpSecret = UpdateAbsolute(frame, event, unit)
   if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
+    and ((event ~= "UNIT_HEALTH" and event ~= "MSUF_DEPENDENT_TARGET_POLL")
+        or RuntimeColorOnHealthEvent(frame, hp, hpSecret, event)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
   local updateTextureState = frame._msufSurfaceHealthUpdate
@@ -1025,13 +952,6 @@ local function HealthValuePlan(frame)
   return frame and frame._msufHealthValuePlan or HEALTH_PLAN_PERCENT
 end
 
-function Health.SyncBackgroundPlan(frame, resetValue)
-  if not frame then return end
-  local percentPlan = UnitHealthPercent and SCALE_100
-    and (frame._msufIsGroupFrame == true or HealthValuePlan(frame) == HEALTH_PLAN_PERCENT)
-  SyncHealthBackgroundMask(frame, percentPlan, resetValue)
-end
-
 local function UpdateColorOnly(frame, event, unit)
   if not (frame and frame.hpBar) then return end
   local frameUnit = frame.MSUFUnitKey
@@ -1062,8 +982,6 @@ function Health.Update(frame, event, unit)
 end
 
 function Health.SelectUpdate(frame, spec)
-  -- Text changes can select a different value path without a full Health.Apply.
-  Health.SyncBackgroundPlan(frame)
   if (spec and spec.scope == "group") or (frame and frame._msufIsGroupFrame == true) then
     -- No health-text consumers -> the folded single-pass lane. Any text slot,
     -- percent need, or health-driven text color keeps the generic group path
@@ -1160,6 +1078,13 @@ end
 
 ExportPublic("MSUF_UFCore_RefreshHealthBarColor", Health.RefreshColor)
 
+-- Preview painters supply synthetic health instead of the unit's live value.
+function Health.PaintSampleBackgroundValue(frame, fraction, animate)
+  if frame._msufHealthBackgroundNeedsValue ~= true then return end
+  local animateBackground = animate == true and frame.hpBar._msufChunkedLoss ~= true
+  SetHealthBackgroundValue(frame, nil, fraction * 100, false, animateBackground)
+end
+
 --- Scene form of the dynamic health background (health gradient, match health): the colour of the health the sample
 --- bar shows. The live refreshers read the unit's own health percent, or paint a fixed fallback tint when the frame
 --- holds no unit; a scene frame stands for a sample and asks the client nothing.
@@ -1196,10 +1121,7 @@ function Health.PaintSample(frame, unit, hp, hpMax, animate)
   end
   UpdateAbsoluteValues(frame, unit, hp, hpMax, true, animateValue)
   if animate ~= true and bar._msufChunkedLoss then bar:SetValue(hp) end
-  if frame._msufHealthBackgroundNeedsValue == true then
-    local animateBackground = RETAIL_INVERSE_HEALTH_BACKGROUND and animateValue and bar._msufChunkedLoss ~= true
-    SetHealthBackgroundValue(frame, unit, hp * 100 / hpMax, false, animateBackground)
-  end
+  Health.PaintSampleBackgroundValue(frame, hp / hpMax, animateValue)
   local health = frame.MSUFSpec and frame.MSUFSpec.health
   if frame._msufHealthRuntimeGradient == true and health then
     local r, g, b = C.PreviewHealthGradientColor(health, hp / hpMax)

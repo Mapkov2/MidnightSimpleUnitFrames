@@ -1131,7 +1131,9 @@ local function UpdateGoneStateFromHealth(frame, event, unit, seedHP)
   local cfg = frame._msufGFVisualRuntimeGroup
   if not (cfg and frame._msufGFVisualRuntimeGone and frame.bg and IsUnitToken(frameUnit)) then return end
   local gone
-  if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
+  -- Protected ticks pass no seed (UpdateGroupPercentLean); type() answers a
+  -- secret's kind without inspecting it, so a missing seed skips the probe.
+  if type(seedHP) == "number" and issecretvalue(seedHP) ~= true then
     gone = seedHP <= 0
   else
     local dead, known = ReadDeadCached(frame, frameUnit)

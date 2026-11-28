@@ -208,7 +208,6 @@ local function _MSUF_GetBgKeys(prefix)
     local k = _MSUF_BgKeyCache[prefix]
     if k then return k end
     k = {
-        tex = "_msuf" .. prefix .. "BgTex",
         r   = "_msuf" .. prefix .. "BgR",
         g   = "_msuf" .. prefix .. "BgG",
         b   = "_msuf" .. prefix .. "BgB",
@@ -240,12 +239,25 @@ local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret,
     end
 end
 
+local FLAT_HEALTH_BACKGROUND = "interface\\buttons\\white8x8"
+
+local function BindBackgroundTexture(region, texture)
+    local path = region._msufHealthBackground and type(texture) == "string" and texture:lower():gsub("/", "\\")
+    if path == FLAT_HEALTH_BACKGROUND or path == FLAT_HEALTH_BACKGROUND .. ".blp" then
+        -- The opaque 8x8 art can sample transparent padding on stretched bars.
+        region:SetTexture(texture, "CLAMP", "CLAMP", "NEAREST")
+    else
+        region:SetTexture(texture)
+    end
+    region._msufBgTexture, region._msufBgColorTexture = texture, nil
+end
+MSUF.Bars.BindBackgroundTexture = BindBackgroundTexture
+
 local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca, colorSecret, force)
     if not t or not tex then return end
-    local k = _MSUF_GetBgKeys(prefix)
-    if frame[k.tex] ~= tex then
-        t:SetTexture(tex)
-        frame[k.tex] = tex
+    if t._msufBgTexture ~= tex or t._msufBgColorTexture == true then
+        BindBackgroundTexture(t, tex)
+        force = true
     end
     _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret, force)
 end
