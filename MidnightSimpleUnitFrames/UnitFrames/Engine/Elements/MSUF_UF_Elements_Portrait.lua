@@ -49,6 +49,11 @@ local PORTRAIT_CAST_EVENTS = {
   "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
   "UNIT_SPELLCAST_EMPOWER_START", "UNIT_SPELLCAST_EMPOWER_STOP",
 }
+local PORTRAIT_CAST_EVENT = (function()
+  local set = {}
+  for i = 1, #PORTRAIT_CAST_EVENTS do set[PORTRAIT_CAST_EVENTS[i]] = true end
+  return set
+end)()
 local function WithPortraitCastEvents(events)
   local combined = {}
   for i = 1, #events do combined[#combined + 1] = events[i] end
@@ -1855,10 +1860,14 @@ function Portrait.GetEvents(frame, spec)
     else
       events = castSpellIcon and PORTRAIT_2D_CAST_EVENTS or PORTRAIT_2D_EVENTS
     end
+    -- A reaction border or reaction background follows UNIT_FACTION.
+    if (p.border and p.border.style == "REACTION")
+      or (p.bg and p.bg.enabled == true and p.bg.mode == "REACTION") then
+      events = WithPortraitReactionEvent(events)
+    end
     if p.dragonArtwork ~= true and p.shape == "BLIZZARD" and p.blizzardElite == true then
       return WithPortraitClassificationEvent(events)
     end
-    if p.border and p.border.style == "REACTION" then return WithPortraitReactionEvent(events) end
     return events
   end
   return EMPTY_EVENTS
@@ -2150,7 +2159,8 @@ function Portrait.Update(frame, event, unit)
     UpdatePortraitClassification(frame, p)
   end
   if event == "UNIT_CLASSIFICATION_CHANGED" then return end
-  local dynamicBg = p.bg and p.bg.dynamic == true
+  -- A cast never changes the unit, so it never changes a class or reaction tint.
+  local dynamicBg = p.bg and p.bg.dynamic == true and PORTRAIT_CAST_EVENT[event] ~= true
   if event == "UNIT_FACTION" then
     LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
     if dynamicBg then ApplyPortraitBackground(frame, p) end
@@ -2241,6 +2251,38 @@ if Model then
     end
   end)
 end
+
+-- Target of target, focus target and pet target never receive unit events of
+-- their own, so the core registers their two model events for every unit and
+-- hands the frame's own token to the update. Without a filter each model or
+-- portrait change of any unit (party, raid, nameplates) re-resolved all three
+-- portraits; a 3D one reloaded its model. This route drops a payload that is
+-- plainly another unit. A secret or unreadable answer still refreshes.
+(function()
+  if not (UF.RegisterRoute and UF.RouteCompiler and UF.dependentUnitParents) then return end
+  local Compiler = UF.RouteCompiler
+  local BeginFrameEvent, EndFrameEvent = Compiler.BeginFrameEvent, Compiler.EndFrameEvent
+  local UnitIsUnit = UnitIsUnit
+  local function CompileDependentModelRoute(_, _, list, target)
+    if not (target and UF.dependentUnitParents[target] and UnitIsUnit and BeginFrameEvent and EndFrameEvent) then
+      return nil
+    end
+    local count = #list
+    return function(self, ev, payload, ...)
+      if type(payload) == "string" and issecretvalue(payload) ~= true then
+        local same = UnitIsUnit(payload, target)
+        if issecretvalue(same) ~= true and same == false then return end
+      end
+      BeginFrameEvent(self, ev)
+      for i = 1, count, 2 do
+        list[i](self, ev, list[i + 1] == true and self.MSUFUnitKey or target, ...)
+      end
+      EndFrameEvent(self)
+    end
+  end
+  UF.RegisterRoute("portrait-dependent-model", CompileDependentModelRoute, 15,
+    { UNIT_PORTRAIT_UPDATE = true, UNIT_MODEL_CHANGED = true })
+end)()
 
 Portrait.Routes = { events = true, identity = true }
 UF.RegisterElement("Portrait", Portrait)

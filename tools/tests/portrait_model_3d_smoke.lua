@@ -3,7 +3,7 @@
 -- falls back to 2D (secret GUID, refused SetUnit, offline, unit swaps), the
 -- instanced-combat fallback per unit (player and pet keep 3D), the party
 -- opt-out, Classic without the combat rule, previews, the cast icon, render
--- switches, camera/inset layout, the ring hole and the background tint. Native rendering, real restriction behaviour,
+-- switches, camera/inset layout, the ring hole, the background tint and the dependent units' model-event filter. Native rendering, real restriction behaviour,
 -- alpha inheritance and frame-level draw order need an in-game check.
 local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local flavor = arg[2] or "Mainline"
@@ -140,6 +140,15 @@ dependencies.MSUF_EventBus_Unregister = function(event, key)
 end
 local Portrait
 core.UF.RegisterElement = function(name, element) Check(name == "Portrait", "wrong element") Portrait = element end
+-- Route compiler seam: dependent units' model events are filtered by payload.
+local routes = {}
+core.UF.dependentUnitParents = { targettarget = "target", focustarget = "focus", pettarget = "pet" }
+core.UF.RouteCompiler = { BeginFrameEvent = Noop, EndFrameEvent = Noop }
+core.UF.RegisterRoute = function(name, compile, _, routeEvents) routes[name] = { compile = compile, events = routeEvents } end
+env.UnitIsUnit = function(a, b)
+  if state.unitIsUnitSecret then return Secrets.New("boolean") end
+  return a == b or (state.sameUnits ~= nil and state.sameUnits[a] == b)
+end
 local function Load(path)
   local chunk = assert(loadfile(root .. "/" .. path))
   setfenv(chunk, env)
@@ -436,8 +445,51 @@ Check(r == 1 and g == 0.6 and b == 0, "faction change did not repaint the reacti
 bgCustom.MSUFSpec.portrait.bg.enabled = false
 Portrait.Apply(bgCustom, bgCustom.MSUFSpec)
 Check(Bg(bgCustom) == false, "disabled background stayed visible")
+-- Only a reaction tint (border or background) listens to UNIT_FACTION.
+local function HasEvent(list, name)
+  for i = 1, #list do if list[i] == name then return true end end
+  return false
+end
+Check(HasEvent(Portrait.GetEvents(bgReaction, bgReaction.MSUFSpec), "UNIT_FACTION"),
+  "a reaction background does not register UNIT_FACTION")
+Check(not HasEvent(Portrait.GetEvents(bgClass, bgClass.MSUFSpec), "UNIT_FACTION"),
+  "a class background registered UNIT_FACTION")
+-- A cast does not change the unit, so it never repaints the tint.
+local paints = bgReaction.MSUFPortraitHolder.bg
+local vertex = paints.SetVertexColor
+local castPaints = 0
+paints.SetVertexColor = function(...) castPaints = castPaints + 1 return vertex(...) end
+paints._msufVertexR = nil
+Fire(bgReaction, "UNIT_SPELLCAST_START")
+Fire(bgReaction, "UNIT_SPELLCAST_STOP")
+Check(castPaints == 0, "cast events repainted the reaction background")
+paints.SetVertexColor = vertex
 state.players, state.reaction = nil, nil
 for _, frame in ipairs({ bgClass, bgNpc, bgReaction, bgCustom }) do Portrait.Disable(frame) end
+
+-- Target of target, focus target and pet target get every unit's model events;
+-- the route refreshes them only for their own unit (or an answer it cannot read).
+do
+  local route = assert(routes["portrait-dependent-model"], "dependent model route not registered")
+  Check(route.events.UNIT_PORTRAIT_UPDATE and route.events.UNIT_MODEL_CHANGED, "dependent route events")
+  local calls = {}
+  local function Update(_, ev, unit) calls[#calls + 1] = ev .. ":" .. tostring(unit) end
+  Check(route.compile({}, "UNIT_MODEL_CHANGED", { Update, false }, nil) == nil, "route claimed a frame's own events")
+  Check(route.compile({}, "UNIT_MODEL_CHANGED", { Update, false }, "party1") == nil, "route claimed a non-dependent unit")
+  local path = assert(route.compile({}, "UNIT_MODEL_CHANGED", { Update, false }, "targettarget"))
+  local self = { MSUFUnitKey = "targettarget" }
+  path(self, "UNIT_MODEL_CHANGED", "nameplate3")
+  Check(#calls == 0, "another unit's model change refreshed the target of target")
+  state.sameUnits = { player = "targettarget" }
+  path(self, "UNIT_PORTRAIT_UPDATE", "player")
+  Check(#calls == 1 and calls[1] == "UNIT_PORTRAIT_UPDATE:targettarget", "the dependent unit's own change was dropped")
+  state.unitIsUnitSecret = true
+  path(self, "UNIT_MODEL_CHANGED", "nameplate3")
+  Check(#calls == 2, "a secret UnitIsUnit answer must still refresh")
+  state.unitIsUnitSecret, state.sameUnits = nil, nil
+  path(self, "UNIT_MODEL_CHANGED", Secrets.New("string"))
+  Check(#calls == 3, "a secret payload must still refresh")
+end
 
 for _, frame in ipairs(fallbackFrames) do Portrait.Disable(frame) end
 for _, frame in ipairs(keepFrames) do Portrait.Disable(frame) end

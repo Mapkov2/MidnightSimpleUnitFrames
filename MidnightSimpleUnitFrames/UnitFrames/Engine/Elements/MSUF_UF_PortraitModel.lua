@@ -19,8 +19,9 @@ local EventBusUnregister = MSUF.Require("MSUF_EventBus_Unregister", "MSUF_UF_Por
 -- including open-world combat and out-of-range or offline units.
 --
 -- Cost contract: SetUnit runs only when the bound unit token or identity
--- changes or the element forces a model refresh (model/portrait events,
--- already coalesced to one per frame by the element). No OnUpdate, timers or polling.
+-- changes or the element forces a model refresh (model/portrait events of the
+-- frame's own unit, coalesced to one per frame by the element). No OnUpdate,
+-- timers or polling.
 -- The camera is replayed from compiled numbers on OnModelLoaded and when the
 -- layout changes them. Classic clients never register the combat rule.
 
@@ -59,8 +60,9 @@ end
 -- The portrait camera only sticks on a shown model: zoom and distance set on a
 -- hidden one (or before a cached model finished loading) leave the client's
 -- full-body camera in place, a tiny figure at the bottom of the portrait. So
--- the camera is set before SetUnit, again after it, on OnModelLoaded and on
--- every OnShow.
+-- the camera is set after SetUnit (which resets it), on OnModelLoaded and on
+-- every OnShow. Nothing draws between SetUnit and the call after it, so a
+-- camera before SetUnit would only be overwritten.
 local function ApplyCamera(model)
   if model.SetPortraitZoom then model:SetPortraitZoom(1) end
   if model.SetCamDistanceScale then model:SetCamDistanceScale(model._msufCamScale or 1) end
@@ -268,7 +270,6 @@ end
 --- for the 2D portrait, so a refused or slow load keeps the model frame.
 local function BindUnit(model, unit, guid, generation, visible)
   if visible ~= false then SetShown(model, true) end
-  ApplyCamera(model)
   model:SetUnit(unit)
   model._msufUnit, model._msufGUID, model._msufGeneration = unit, guid, generation
   ApplyCamera(model)

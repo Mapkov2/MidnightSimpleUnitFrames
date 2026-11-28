@@ -23,6 +23,7 @@ ENTRY_POINTS = (
 )
 OPERATIONAL = (
     'tools/artwork/', 'tools/build-classic-menu-art.py', 'tools/build-portrait-contour.py',
+    'tools/build-portrait-model-holes.py',
     'tools/generate_aura_icon_skins.py', 'tools/update-addon-changelog.ps1',
     'tools/release-check.md',
 )
