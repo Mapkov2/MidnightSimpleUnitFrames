@@ -345,6 +345,70 @@ local function ConfiguredWidthSource(g, unit)
     return NormalizeWidthSourceKind(def and g and g[def.match])
 end
 
+local function UnitframeSpanOutset(frame)
+    local spec = frame and frame.MSUFSpec
+    if not spec or frame._msufRUFModernBorderSuppressed == true then return nil end
+    local border = spec.border
+    local thickness = border and tonumber(border.thickness)
+    if not (border and border.enabled and thickness and thickness > 0) then return 0 end
+    local overlay = frame.MSUFBorderOverlay
+    if overlay and overlay._msufNormalOutset then return overlay._msufNormalOutset end
+    local styles = MSUF.BorderStyles
+    local outset = math.max(1, thickness)
+    if border.texture and styles and border.textureMode == styles.FRAME_BORDER then
+        outset = styles.EdgeSize(border.textureKey, thickness) * 0.5
+    end
+    return outset
+end
+
+local function UnitframeSpan(g, unit, owner, bar, source)
+    if not MSUF.Client.IsRetail or (unit ~= "player" and unit ~= "target" and unit ~= "focus") then return end
+    local def = UNIT_CASTBAR[unit]
+    if g[def.detached] or (unit == "player" and g.castbarPlayerAnchorToUtility) then return end
+    if (source or ConfiguredWidthSource(g, unit)) ~= "unitframe" then return end
+    local outset = UnitframeSpanOutset(owner)
+    if outset then return ScaledValue(owner, bar, outset) end
+end
+
+local SPAN_ANCHOR = "unitframe-width"
+local function HasUnitframeSpan(bar)
+    return bar and bar._msufAnchor and bar._msufAnchor.point == SPAN_ANCHOR
+end
+
+local function CanUpdateRuntimeSpan(unit, bar, outset)
+    if (outset or HasUnitframeSpan(bar)) and InCombat() then
+        -- A position request can change offsets or leave auto width entirely.
+        -- Replay it through the settings owner, independent of source signatures.
+        MSUF.ApplyService.RequestCastbarUnit(unit, "MSUF_CASTBAR_ANCHOR", "layout")
+        return false
+    end
+    return true
+end
+
+-- The normal outline is an outset from the unitframe. Use the same corners on
+-- screen and in the preview, independent of the current highlight edge.
+local function ApplyUnitframeSpan(bar, owner, outset, x, y)
+    if outset > 0 and owner.MSUFBorderOverlay then owner = owner.MSUFBorderOverlay end
+    local cache = bar._msufAnchor
+    if HasUnitframeSpan(bar) and cache.relTo == owner and cache.outset == outset
+        and cache.ofsX == x and cache.ofsY == y then return end
+    bar:ClearAllPoints()
+    bar:SetPoint("BOTTOMLEFT", owner, "TOPLEFT", x - outset, y)
+    bar:SetPoint("BOTTOMRIGHT", owner, "TOPRIGHT", x + outset, y)
+    cache = cache or {}
+    cache.point, cache.relTo, cache.outset, cache.ofsX, cache.ofsY = SPAN_ANCHOR, owner, outset, x, y
+    bar._msufAnchor = cache
+end
+Anchors.UnitframeSpan = UnitframeSpan
+Anchors.ApplyUnitframeSpan = ApplyUnitframeSpan
+
+function Anchors.GetCastbarAnchorOffsets(g, unit)
+    local def = UNIT_CASTBAR[unit]
+    local x = tonumber(g[def.x]) or tonumber(g[def.fallbackX]) or def.dx
+    local y = tonumber(g[def.y]) or tonumber(g[def.fallbackY]) or def.dy
+    return Round(x), Round(y)
+end
+
 local function UsesPlayerUtilityAnchor(g)
     return MSUF.Client.Family == "Mainline" and g.castbarPlayerAnchorToUtility == true
 end
@@ -357,15 +421,20 @@ end
 
 local function ApplyPlayerCastbarPosition(bar, g)
     if not bar then return false end
-    local x = Round(tonumber(g.castbarPlayerOffsetX) or 0)
-    local y = Round(tonumber(g.castbarPlayerOffsetY) or 5)
+    local x, y = Anchors.GetCastbarAnchorOffsets(g, "player")
     local utility = Anchors.GetPlayerUtilityAnchor(g)
+    local player = not g.castbarPlayerDetached and GetUnitframe("player")
+    local outset = not utility and player and UnitframeSpan(g, "player", player, bar)
+    if not CanUpdateRuntimeSpan("player", bar, outset) then return false end
     if utility and utility ~= bar then
         SetPointIfChanged(bar, "TOP", utility, "BOTTOM", x, y)
     else
-        local player = not g.castbarPlayerDetached and GetUnitframe("player")
         if player then
-            SetPointIfChanged(bar, "BOTTOM", player, "TOP", x, y)
+            if outset then
+                ApplyUnitframeSpan(bar, player, outset, x, y)
+            else
+                SetPointIfChanged(bar, "BOTTOM", player, "TOP", x, y)
+            end
         elseif g.castbarPlayerDetached or UsesPlayerUtilityAnchor(g) or (bar._msufAnchor and bar._msufAnchor.point == "TOP") then
             SetPointIfChanged(bar, "CENTER", UIParent, "CENTER", x, y)
         else
@@ -386,6 +455,13 @@ local function UsesUnitframeWidth(g, unit)
         and def ~= nil
         and not (g and g[def.detached] == true)
         and not (manualWidth and manualWidth > 0)
+end
+
+-- Pool body, Edit Mode and Menu2 use the normal rectangular outline only in
+-- attached unit-frame width mode. Old clients and manual layouts keep their anchors.
+function Anchors.PoolUsesOutline(g, unit, owner)
+    return owner and owner.MSUFSpec and MSUF.Client.IsRetail and not owner._msufRUFModernBorderSuppressed
+        and not g[UNIT_CASTBAR[NormalizeUnit(unit)].detached] and UsesUnitframeWidth(g, unit)
 end
 
 local function ScaledLeft(frame)
@@ -461,6 +537,19 @@ function Anchors.GetCastbarDesiredSize(unit, g, bar, fallbackW, fallbackH)
     if not w or w <= 0 then w = tonumber(g.castbarGlobalWidth) or fallbackW or 250 end
     if not h or h <= 0 then h = tonumber(g.castbarGlobalHeight) or fallbackH or 18 end
 
+    return w, h, preserveWidth
+end
+
+-- Single-unit layout only. Cast event and pool callers keep the legacy size
+-- resolver and don't do any work for these anchors.
+function Anchors.GetSingleCastbarLayoutSize(unit, g, bar, fallbackW, fallbackH)
+    local w, h, preserveWidth = Anchors.GetCastbarDesiredSize(unit, g, bar, fallbackW, fallbackH)
+    if MSUF.Client.IsRetail and ConfiguredWidthSource(g, unit) == "unitframe" then
+        local owner = GetUnitframe(unit)
+        local outset = UnitframeSpan(g, unit, owner, bar, "unitframe")
+        local width = outset and ScaledWidth(owner, bar)
+        if width then return width + 2 * outset, h, true end
+    end
     return w, h, preserveWidth
 end
 
@@ -566,9 +655,13 @@ local function WidthSourceNeedsReanchor(g, unit)
             changed = sliceChanged or changed
             offset, sliceChanged = StoreFrameSignature(state, offset, source)
             changed = sliceChanged or changed
-            local inset = Round(UnitframeNormalBorderInset(frame, source) * 100)
+            local outset = UnitframeSpan(g, unit, frame, frame, matchSrc)
+            local inset = Round((outset or UnitframeNormalBorderInset(frame, source)) * 100)
             if state[offset] ~= inset then changed = true end
             state[offset] = inset
+            offset = offset + 1
+            if state[offset] ~= outset then changed = true end
+            state[offset] = outset
             offset = offset + 1
         end
     else
@@ -655,6 +748,22 @@ local function QueueWidthSourceSync()
     end
 end
 
+local function QueueWidthSourceFrameChange(frame)
+    if not widthSourceLifecycleActive then return end
+    local current = widthSourceFrameDependents[frame]
+    if not current then return end
+    local anyDirty = false
+    for unit, generation in pairs(current) do
+        if widthSourceDependencyGeneration[unit] == generation then
+            dirtyWidthSourceUnits[unit] = dirtyWidthSourceUnits[unit] or true
+            widthSourceDirtySerial[unit] = (widthSourceDirtySerial[unit] or 0) + 1
+            anyDirty = true
+        end
+    end
+    if anyDirty then QueueWidthSourceSync() end
+end
+Anchors.OnUnitframeOutlineChanged = QueueWidthSourceFrameChange
+
 -- Hook a source frame so size/show/hide changes re-queue a sync. Returns true
 -- if the frame was newly hooked (or already valid).
 local function HookWidthSourceFrame(frame, unit, generation)
@@ -676,33 +785,18 @@ local function HookWidthSourceFrame(frame, unit, generation)
         return false
     end
     if not hooks then
-      local function QueueIfActive()
-        if not widthSourceLifecycleActive then return end
-        local current = widthSourceFrameDependents[frame]
-        local anyDirty = false
-        if current then
-            for dependentUnit, dependencyGeneration in pairs(current) do
-                if widthSourceDependencyGeneration[dependentUnit] == dependencyGeneration then
-                    dirtyWidthSourceUnits[dependentUnit] = dirtyWidthSourceUnits[dependentUnit] or true
-                    widthSourceDirtySerial[dependentUnit] = (widthSourceDirtySerial[dependentUnit] or 0) + 1
-                    anyDirty = true
-                end
-            end
-        end
-        if anyDirty then QueueWidthSourceSync() end
-    end
-      hooks = { callback = QueueIfActive, stage = 0 }
-      hookedWidthSourceFrames[frame] = hooks
+        hooks = { stage = 0 }
+        hookedWidthSourceFrames[frame] = hooks
     end
     if hooks.stage < 1 then
-      frame:HookScript("OnSizeChanged", hooks.callback)
+      frame:HookScript("OnSizeChanged", QueueWidthSourceFrameChange)
       hooks.stage = 1
     end
     if hooks.stage < 2 then
-      frame:HookScript("OnShow", hooks.callback)
+      frame:HookScript("OnShow", QueueWidthSourceFrameChange)
       hooks.stage = 2
     end
-    frame:HookScript("OnHide", hooks.callback)
+    frame:HookScript("OnHide", QueueWidthSourceFrameChange)
     hooks.stage = 3
     return true
 end
@@ -952,6 +1046,11 @@ local function SetOuterSize(frame, w, h)
     return true
 end
 
+local function NeedsUnitframeSpanPosition(bar, g, unit)
+    if not MSUF.Client.IsRetail or not bar then return false end
+    return HasUnitframeSpan(bar) or UnitframeSpan(g, unit, GetUnitframe(unit), bar) ~= nil
+end
+
 --- The player castbar and its preview take the full size and layout.
 local function ApplyPlayerCastbarEffectiveSize(g)
     local frame = Frames.player
@@ -959,11 +1058,14 @@ local function ApplyPlayerCastbarEffectiveSize(g)
     local target = frame or preview
     if not target then return false end
 
-    local w, h, preserveWidth = Anchors.GetCastbarDesiredSize("player", g, target, 250, 18)
+    local w, h, preserveWidth = Anchors.GetSingleCastbarLayoutSize("player", g, target, 250, 18)
     if frame then ApplyPlayerCastbarSizeAndLayout(frame, g, w, h, preserveWidth) end
     if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
-    if UsesPlayerUtilityAnchor(g) then
+    local utility = UsesPlayerUtilityAnchor(g)
+    if utility or NeedsUnitframeSpanPosition(frame, g, "player") then
         ApplyPlayerCastbarPosition(frame, g)
+    end
+    if utility or NeedsUnitframeSpanPosition(preview, g, "player") then
         ApplyPlayerCastbarPosition(preview, g)
     end
     return true
@@ -978,6 +1080,25 @@ local function TargetFocusCastbar(unit)
     return Frames.focus, Frames.focusPreview
 end
 
+local function ApplyTargetFocusCastbarPosition(frame, g, unit)
+    local x, y = Anchors.GetCastbarAnchorOffsets(g, unit)
+    local detached = g[UNIT_CASTBAR[unit].detached]
+    local owner = not detached and GetUnitframe(unit)
+    local outset = owner and UnitframeSpan(g, unit, owner, frame)
+    if not CanUpdateRuntimeSpan(unit, frame, outset) then return false end
+    if detached then
+        SetPoint(frame, "CENTER", UIParent, "CENTER", x, y)
+    else
+        if not owner then return false end
+        if outset then
+            ApplyUnitframeSpan(frame, owner, outset, x, y)
+        else
+            SetPoint(frame, "BOTTOMLEFT", owner, "TOPLEFT", x + GetCastbarAutoAnchorOffsetX(g, unit, frame), y)
+        end
+    end
+    return true
+end
+
 --- Target and focus: the live bar gets its outer size (the status bar keeps
 --- the icon's square), the preview the full layout.
 local function ApplyTargetFocusCastbarEffectiveSize(unit, g)
@@ -987,13 +1108,23 @@ local function ApplyTargetFocusCastbarEffectiveSize(unit, g)
 
     local fallbackW = (target.GetWidth and target:GetWidth()) or 240
     local fallbackH = (target.GetHeight and target:GetHeight()) or 18
-    local w, h, preserveWidth = Anchors.GetCastbarDesiredSize(unit, g, target, fallbackW, fallbackH)
+    local w, h, preserveWidth = Anchors.GetSingleCastbarLayoutSize(unit, g, target, fallbackW, fallbackH)
 
+    if NeedsUnitframeSpanPosition(frame, g, unit) then
+        ApplyTargetFocusCastbarPosition(frame, g, unit)
+    end
     if frame and SetOuterSize(frame, w, h) and frame.statusBar then
         local barH = (frame.GetHeight and frame:GetHeight()) or h or 18
         SetWidth(frame.statusBar, math.max(1, (w or 240) - barH - 1))
     end
-    if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
+    if preview then
+        local position = unit == "target" and Previews.PositionTargetCastbarPreview or Previews.PositionFocusCastbarPreview
+        if position and NeedsUnitframeSpanPosition(preview, g, unit) then
+            position()
+        else
+            ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth)
+        end
+    end
     return true
 end
 
@@ -1098,21 +1229,10 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
         return nil, preview, g
     end
 
-    local def = UNIT_CASTBAR[unit]
-    local anchorFrame = GetUnitframe(unit)
-    local offsetX = Round(tonumber(g[def.x]) or (unit == "focus" and tonumber(g.castbarTargetOffsetX)) or def.dx)
-    local offsetY = Round(tonumber(g[def.y]) or (unit == "focus" and tonumber(g.castbarTargetOffsetY)) or def.dy)
-
-    if g[def.detached] then
-        SetPoint(frame, "CENTER", UIParent, "CENTER", offsetX, offsetY)
-    else
-        if not anchorFrame then return end
-        SetPoint(frame, "BOTTOMLEFT", anchorFrame, "TOPLEFT",
-            offsetX + GetCastbarAutoAnchorOffsetX(g, unit, frame), offsetY)
-    end
+    if not ApplyTargetFocusCastbarPosition(frame, g, unit) then return end
 
     Anchors.UpdateCastbarWidthSourceSync(g, unit, true)
-    local width, desiredHeight, preserveWidth = Anchors.GetCastbarDesiredSize(unit, g, frame,
+    local width, desiredHeight, preserveWidth = Anchors.GetSingleCastbarLayoutSize(unit, g, frame,
         (frame.GetWidth and frame:GetWidth()) or 240,
         (frame.GetHeight and frame:GetHeight()) or 18)
 
@@ -1179,7 +1299,7 @@ local function ReanchorPlayerCastBarBase()
     if not ApplyPlayerCastbarPosition(Frames.player, g) then return end
 
     Anchors.UpdateCastbarWidthSourceSync(g, "player", true)
-    local width, height, preserveWidth = Anchors.GetCastbarDesiredSize("player", g, Frames.player, 250, 18)
+    local width, height, preserveWidth = Anchors.GetSingleCastbarLayoutSize("player", g, Frames.player, 250, 18)
     ApplyPlayerCastbarSizeAndLayout(Frames.player, g, width, height, preserveWidth)
 
     -- Keep the preview size 1:1 with the real bar (show/hide handled elsewhere).

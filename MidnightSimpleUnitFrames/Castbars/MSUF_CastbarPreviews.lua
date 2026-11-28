@@ -95,7 +95,7 @@ local SetTextIfChangedFn = Require("MSUF_SetTextIfChanged", FILE)
 local GetCastbarTimeFormat = Require("MSUF_GetCastbarTimeFormat", FILE)
 local FormatCastbarTimeText = Require("MSUF_FormatCastbarTimeText", FILE)
 local CreateCastbarPreviewFrame = Frames.CreateCastbarPreviewFrame
-local GetCastbarDesiredSize = Anchors.GetCastbarDesiredSize
+local GetSingleCastbarLayoutSize = Anchors.GetSingleCastbarLayoutSize
 local ApplyPlayerCastbarSizeAndLayout = Anchors.ApplyPlayerCastbarSizeAndLayout
 local GetCastbarAutoAnchorOffsetX = Anchors.GetCastbarAutoAnchorOffsetX
 local HardSyncCastbarPreview = Utils.HardSyncCastbarPreview
@@ -129,7 +129,7 @@ local function FormatTimeText(frame, remaining, total)
 end
 
 local function GetDesiredPreviewSize(unit, frame)
-    return GetCastbarDesiredSize(unit, EnsureGeneralDB(), frame, 250, 18)
+    return GetSingleCastbarLayoutSize(unit, EnsureGeneralDB(), frame, 250, 18)
 end
 
 local function CreatePreview(unit)
@@ -168,18 +168,32 @@ local function PositionPreview(unit, frame)
 
     local general = EnsureGeneralDB()
     local config = PREVIEW_UNITS[unit]
+    local parent = not general[config.detached] and CoreFrame(unit)
+    local outset = parent and Anchors.UnitframeSpan(general, unit, parent, frame)
+    if outset and IsInCombat() then return end
+
     local width, height, preserveWidth = GetDesiredPreviewSize(unit, frame)
+    local source = SourceCastbarForUnit(unit)
 
     ApplyPlayerCastbarSizeAndLayout(frame, general, width, height, preserveWidth)
+    if outset then HardSyncCastbarPreview(frame, source) end
     if unit == "player" then
         if not Anchors.ApplyPlayerCastbarPosition(frame, general) then return end
-        HardSyncCastbarPreview(frame, SourceCastbarForUnit(unit))
+        if not outset then HardSyncCastbarPreview(frame, source) end
         ApplyCastbarFrameLayer(frame, general, unit)
         return
     end
 
-    local parent = general[config.detached] and UIParent or CoreFrame(unit)
+    if general[config.detached] then parent = UIParent end
     if not parent then return end
+
+    if outset then
+        local x, y = Anchors.GetCastbarAnchorOffsets(general, unit)
+        outset = Anchors.UnitframeSpan(general, unit, parent, frame)
+        Anchors.ApplyUnitframeSpan(frame, parent, outset, x, y)
+        ApplyCastbarFrameLayer(frame, general, unit)
+        return
+    end
 
     local offsetX = tonumber(general[config.x])
     local offsetY = tonumber(general[config.y])
@@ -192,6 +206,7 @@ local function PositionPreview(unit, frame)
     end
 
     frame:ClearAllPoints()
+    if frame._msufAnchor then frame._msufAnchor.point = nil end
     if general[config.detached] then
         frame:SetPoint("CENTER", parent, "CENTER", offsetX, offsetY)
     else
@@ -199,7 +214,7 @@ local function PositionPreview(unit, frame)
         frame:SetPoint("BOTTOMLEFT", parent, "TOPLEFT", offsetX + autoX, offsetY)
     end
 
-    HardSyncCastbarPreview(frame, SourceCastbarForUnit(unit))
+    HardSyncCastbarPreview(frame, source)
     ApplyCastbarFrameLayer(frame, general, unit)
 end
 

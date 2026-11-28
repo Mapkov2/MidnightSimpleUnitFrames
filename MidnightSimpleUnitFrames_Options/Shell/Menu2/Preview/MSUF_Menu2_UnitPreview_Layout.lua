@@ -380,9 +380,10 @@ local function CastbarFootprint(st, minX, maxX, minY, maxY)
         cLeft = (w - castW) * 0.5 + castOffsetX
         cBottom = h + castOffsetY
     elseif key == "boss" or key == "arena" then
-        cLeft = castOffsetX - box._bossBorderInset
-        cBottom = castOffsetY - box._bossBorderInset - box._bossCastbarGap - castBarH
-            + (box._runtimePowerEmbedded == true and PowerBarFootprintHeight(st) or 0)
+        local left, top = MSUF.UFPreviewCastbar.PoolOutlineOrigin(key, st.g, castOffsetX, castOffsetY)
+        cLeft = left or castOffsetX - box._bossBorderInset
+        cBottom = (top or (castOffsetY - box._bossBorderInset - box._bossCastbarGap
+            + (box._runtimePowerEmbedded == true and PowerBarFootprintHeight(st) or 0))) - castBarH
     else
         cLeft = castOffsetX
         cBottom = h + castOffsetY
@@ -520,6 +521,7 @@ function Stage.ResolveScaleAndLevels(st)
         end
     end
     local body = mock._body
+    body._msufBorderPreviewZoom = previewScale
     local geometryChanged = body:GetScale() ~= scale or box._sceneCanvasX ~= mockOffsetX + panX
         or box._sceneCanvasY ~= mockOffsetY + panY
     body:SetScale(scale)
@@ -533,6 +535,11 @@ function Stage.ResolveScaleAndLevels(st)
         box._sceneCanvasX, box._sceneCanvasY = mockOffsetX + panX, mockOffsetY + panY
         -- Boss/arena snapping and shaped masks consume the owner's final effective scale and position.
         box._unitScene:Refresh()
+    elseif MSUF.Client.IsRetail then
+        local bounds = body.MSUFNormalOutlineBounds
+        local revision = bounds and bounds.revision
+        MSUF.UF.elements.Borders.RefreshPixelGeometry(body)
+        if bounds and bounds.revision ~= revision then box._unitScene:RefreshData(true) end
     end
     if mock.sizeTag then mock.sizeTag:SetText(st.format("%d x %d", w, h)) end
     if mock.bounds then mock.bounds:SetFrameLevel(Layers.ElementLevel(30, 30, 31) + 16) end

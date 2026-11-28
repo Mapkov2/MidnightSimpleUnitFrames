@@ -1,5 +1,6 @@
 -- Castbar state owner; dependencies bind once when the page module loads.
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2/UnitVisualCastbar")
 local M = MSUF.MSUF2
 M.UnitVisualFactories = M.UnitVisualFactories or {}
 
@@ -90,7 +91,7 @@ local function TrackForceOffHeader(ctx, sec, entry, switch, isForceOff)
         entry._msuf2HeaderAlwaysEnabled = active
         entry.openHighlightEnabled = not active
         if active and not forceOffStatus then
-            forceOffStatus = entry.header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            forceOffStatus = PixelLayoutRegion(entry.header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
             forceOffStatus:SetPoint("RIGHT", switch, "LEFT", -8, 0)
             forceOffStatus:SetWidth(68)
             forceOffStatus:SetJustifyH("RIGHT")

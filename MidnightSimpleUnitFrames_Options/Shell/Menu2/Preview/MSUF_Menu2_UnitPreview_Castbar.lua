@@ -11,6 +11,7 @@ local CanonKey = PreviewModel.CanonKey
 local Castbar = MSUF.UFPreviewCastbar or {}
 MSUF.UFPreviewCastbar = Castbar
 local CoreFrame = MSUF.UF.GetFrame
+local Anchors = MSUF.Castbars.Anchors
 local EMPTY_DETAILS = {}
 -- The castbar module API is published once by the core castbar files, which load before this addon. It is
 -- resolved here because these lookups run on every preview refresh and drag step.
@@ -21,6 +22,8 @@ local GetCastbarWidthSourceKey = MSUF.Require("MSUF_GetCastbarWidthSourceKey", F
 local GetCastbarDesiredSize = MSUF.Require("MSUF_GetCastbarDesiredSize", FILE)
 local ShouldUseMSUFCastbar = MSUF.Require("MSUF_ShouldUseMSUFCastbar", FILE)
 local GetEffectiveCooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", FILE)
+local SnapToPixel = MSUF.Require("MSUF_Snap", FILE)
+local GetPhysicalPixelSize = MSUF.Require("MSUF_GetPhysicalPixelSize", FILE)
 local CDMGetScaledWidth = MSUF.Require("MSUF_CDM_GetScaledWidth", FILE)
 local PREVIEW_CASTBAR_KEYS = { player = "playerPreview", target = "targetPreview", focus = "focusPreview" }
 local RUNTIME_UNITS = { boss = "boss1", arena = "arena1" }
@@ -97,6 +100,16 @@ local function RuntimeUnitFrame(key)
     local unit = RUNTIME_UNITS[key] or key
     return CoreFrame(unit) or (unit and _G["MSUF_" .. unit])
 end
+function Castbar.PoolOutlineOrigin(key, g, x, y)
+    local owner = RuntimeUnitFrame(key)
+    if not Anchors.PoolUsesOutline(g, key, owner) then return end
+    local bounds = MSUF.UF.GetNormalOutlineBounds(owner)
+    if not (bounds and bounds.pixelSize) then return end
+    local bar = RuntimeCastbarFrame(key) or owner
+    local dx, dy = MSUF.Castbars.Pools.OutlineOffsets(bounds, bar, x, y)
+    local scale = bar:GetEffectiveScale() / bounds.effectiveScale
+    return bounds.leftOffset + dx * scale, bounds.bottomOffset + dy * scale
+end
 local function EffectiveScaleProxy(frame)
     local scale = frame and frame.GetEffectiveScale and frame:GetEffectiveScale()
     scale = tonumber(scale)
@@ -125,8 +138,8 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     if widthSource == "essential" then
         w = ReadEssentialWidth(targetFrame)
     end
-    local desiredW, desiredH, preserveWidth =
-        GetCastbarDesiredSize(RUNTIME_UNITS[key] or key, g or {}, targetFrame, fallbackW, fallbackH)
+    local size = RUNTIME_UNITS[key] and GetCastbarDesiredSize or Anchors.GetSingleCastbarLayoutSize
+    local desiredW, desiredH, preserveWidth = size(RUNTIME_UNITS[key] or key, g or {}, targetFrame, fallbackW, fallbackH)
     if not w or w <= 0 then w = desiredW end
     h = desiredH
     if not w or w <= 0 then
@@ -314,25 +327,46 @@ function Castbar.ComposeScene(st)
     -- the castbar with the unit-frame preview.
     if mock.cast.SetScale then mock.cast:SetScale(box._mockCastFrameScale or 1) end
     local scw, sch = max(20, S(castW)), max(6, S(castBarH))
-    mock.cast:SetSize(scw, sch)
-    if mock.cast.sizeTag then
-        mock.cast.sizeTag:SetText(st.format("%d x %d", st.floor(castW + 0.5), st.floor(castBarH + 0.5)))
-        mock.cast.sizeTag:Show()
+    local matchParent = MSUF.Client.IsRetail and castW * st.scale >= 20 and castBarH * st.scale >= 6
+    if matchParent then
+        -- The scene and its layout slot share the same final edges at this zoom.
+        local pixel = GetPhysicalPixelSize(mock.cast)
+        scw = max(pixel, SnapToPixel(mock.cast, castW * st.scale))
+        sch = max(pixel, SnapToPixel(mock.cast, castBarH * st.scale))
     end
-    mock.cast:ClearAllPoints()
-    if st.castDetached then
-        box._detachedCastPreview = true
-        box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY = S(castOffsetX), S(castOffsetY)
-        mock.cast:SetPoint("CENTER", mock._body, "CENTER", box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY)
-    elseif key == "player" then
-        mock.cast:SetPoint("BOTTOM", mock._body, "TOP", S(castOffsetX), S(castOffsetY))
-    elseif key == "boss" or key == "arena" then
-        mock.cast:SetPoint("TOPLEFT", mock._body, "BOTTOMLEFT",
-            S(castOffsetX - box._bossBorderInset),
-            S(castOffsetY - box._bossBorderInset - box._bossCastbarGap)
-                + (box._runtimePowerEmbedded == true and st.powerH or 0))
+    mock.cast:SetSize(scw, sch)
+    local outset = matchParent and not st.castDetached and Anchors.UnitframeSpan(g, key, mock._body, mock.cast)
+    if outset then
+        local x, y = Anchors.GetCastbarAnchorOffsets(g, key)
+        Anchors.ApplyUnitframeSpan(mock.cast, mock._body, outset, x * st.scale, y * st.scale)
+        local anchoredWidth = mock.cast:GetWidth()
+        if anchoredWidth and anchoredWidth > 0 then scw = anchoredWidth end
     else
-        mock.cast:SetPoint("BOTTOMLEFT", mock._body, "TOPLEFT", S(castOffsetX), S(castOffsetY))
+        mock.cast:ClearAllPoints()
+        if mock.cast._msufAnchor then mock.cast._msufAnchor.point = nil end
+        if st.castDetached then
+            box._detachedCastPreview = true
+            box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY = S(castOffsetX), S(castOffsetY)
+            mock.cast:SetPoint("CENTER", mock._body, "CENTER", box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY)
+        elseif key == "player" then
+            mock.cast:SetPoint("BOTTOM", mock._body, "TOP", S(castOffsetX), S(castOffsetY))
+        elseif RUNTIME_UNITS[key] and Anchors.PoolUsesOutline(g, key, mock._body) then
+            MSUF.Castbars.Pools.AnchorOutline(mock.cast, mock._body, castOffsetX, castOffsetY, st.scale, box._mockRuntimeScale)
+            local anchoredWidth = mock.cast:GetWidth()
+            if anchoredWidth and anchoredWidth > 0 then scw = anchoredWidth end
+        elseif key == "boss" or key == "arena" then
+            mock.cast:SetPoint("TOPLEFT", mock._body, "BOTTOMLEFT",
+                S(castOffsetX - box._bossBorderInset),
+                S(castOffsetY - box._bossBorderInset - box._bossCastbarGap)
+                    + (box._runtimePowerEmbedded == true and st.powerH or 0))
+        else
+            mock.cast:SetPoint("BOTTOMLEFT", mock._body, "TOPLEFT", S(castOffsetX), S(castOffsetY))
+        end
+    end
+    if mock.cast.sizeTag then
+        local labelWidth = outset and scw / st.scale or castW
+        mock.cast.sizeTag:SetText(st.format("%d x %d", st.floor(labelWidth + 0.5), st.floor(castBarH + 0.5)))
+        mock.cast.sizeTag:Show()
     end
     local root = box._castSceneRoot
     if not root then
@@ -361,6 +395,7 @@ function Castbar.ComposeScene(st)
     sample.kickReady, sample.kickRecovery = true, CAST_KICK_RECOVERY
     local opts = box._castOpts
     opts.width, opts.height, opts.scale = castW, castBarH, st.scale
+    opts.matchParent = matchParent
     local previous = scene
     scene = root:Castbar(CAST_SCENE_UNIT[key] or key, opts)
     if previous and previous ~= scene then previous:Hide() end

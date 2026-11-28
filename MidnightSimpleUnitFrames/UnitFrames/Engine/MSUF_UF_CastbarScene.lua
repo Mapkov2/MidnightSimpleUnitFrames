@@ -87,10 +87,14 @@ function Surface.Paint(scene)
   Projection(scene, sample)
   scene.paintKick = scene.paintKick or C.KickReady.CreateSamplePainter(scene.kickStatus)
   frame:SetScale(opts.scale or 1)
-  local width, height = C.Anchors.GetCastbarDesiredSize(scene.key, g, frame, 250, 18)
-  frame:SetSize(opts.width or width, opts.height or height)
   frame:ClearAllPoints()
-  frame:SetPoint(opts.point or "CENTER", scene.root.parent, opts.point or "CENTER", opts.x or 0, opts.y or 0)
+  if opts.matchParent then
+    frame:SetAllPoints(scene.root.parent)
+  else
+    local width, height = C.Anchors.GetCastbarDesiredSize(scene.key, g, frame, 250, 18)
+    frame:SetSize(opts.width or width, opts.height or height)
+    frame:SetPoint(opts.point or "CENTER", scene.root.parent, opts.point or "CENTER", opts.x or 0, opts.y or 0)
+  end
   if C.Empower.PlayerCastbar_ClearEmpower then C.Empower.PlayerCastbar_ClearEmpower(frame, false) end
   frame.interrupted = sample.interrupted == true
   frame.isNotInterruptible = sample.notInterruptible == true

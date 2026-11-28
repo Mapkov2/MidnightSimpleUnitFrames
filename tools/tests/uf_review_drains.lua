@@ -226,7 +226,7 @@ Case("width-source-signature", function()
     cb.Anchors.UpdateCastbarWidthSourceSync(g, "target")
     local flush = Required(cb.Anchors.UpdateCastbarWidthSourceSync, "FlushWidthSourceSync")
     local dirty = Required(flush, "dirtyWidthSourceUnits")
-    local source = assert(cb.Anchors.GetCastbarUnitframeWidthSource("target"))
+    local source = assert(h.core.Client.IsRetail and h.UF.frames.target or cb.Anchors.GetCastbarUnitframeWidthSource("target"))
     source:SetWidth(source:GetWidth() + 37)
     dirty.target = true
     local native, hits, fault = bar.SetWidth, 0, true

@@ -142,6 +142,9 @@ local function EffectiveSize(g, unit)
         fn = MSUF.Require("MSUF_GetCastbarDesiredSize", CALLER)
         CastbarProviders.desiredSize = fn
     end
+    if MSUF.Client.IsRetail and (unit == "player" or unit == "target" or unit == "focus") then
+        fn = MSUF.Castbars.Anchors.GetSingleCastbarLayoutSize
+    end
     local w, h = fn(unit, g, CastbarFrame(unit), ManualWidth(g, unit), ManualHeight(g, unit))
     if w and h then return floor(w + 0.5), floor(h + 0.5) end
     return floor(ManualWidth(g, unit) + 0.5), floor(ManualHeight(g, unit) + 0.5)

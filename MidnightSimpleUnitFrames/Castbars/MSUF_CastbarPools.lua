@@ -133,6 +133,35 @@ local function Snap(frame, value)
 end
 Pools.Snap = Snap
 
+-- Native frame outlines are already edge-snapped. Express settings and the
+-- physical gap on their pixel grid before applying any Menu2 presentation zoom.
+function Pools.OutlineOffsets(bounds, bar, x, y, runtimeScale)
+    local scale = bounds and bounds.effectiveScale and bounds.effectiveScale / bar:GetEffectiveScale()
+    local step = scale and bounds.pixelSize and bounds.pixelSize * scale or GetPhysicalPixelSize(bar, 1)
+    -- Menu2 scales the canvas independently. Round in live castbar units first.
+    if runtimeScale then step = step / runtimeScale end
+    local dx = (x < 0 and -1 or 1) * math_floor(math_abs(x) / step + .5) * step
+    local dy = (y < 0 and -1 or 1) * math_floor(math_abs(y) / step + .5) * step
+    return dx, dy - UNITFRAME_GAP * step, scale
+end
+
+-- Both anchors follow the normal border and embedded power when the unit moves.
+function Pools.AnchorOutline(bar, owner, x, y, zoom, runtimeScale)
+    local bounds = MSUF.UF.GetNormalOutlineBounds(owner)
+    -- A first-time castbar in combat may precede the optional outline carrier.
+    -- The secure owner is only an anchor reference. Its geometry is never read here.
+    local relative = bounds or owner
+    local dx, dy, scale = Pools.OutlineOffsets(bounds, bar, x, y, runtimeScale)
+    zoom = zoom or 1
+    dx, dy = dx * zoom, dy * zoom
+    local changed = SetPointIfChanged(bar, "TOPLEFT", relative, "BOTTOMLEFT", dx, dy, true)
+    if changed then bar:SetPoint("TOPRIGHT", relative, "BOTTOMRIGHT", dx, dy) end
+    local width = bounds and bounds.frameWidth and (bounds.frameWidth + bounds.rightOffset - bounds.leftOffset) * scale
+    local resized = width ~= bar._msufPoolOutlineWidth
+    bar._msufPoolOutlineWidth = width
+    return changed, resized
+end
+
 local function ClearFontAttempt(frame)
     if not frame then return end
     for index = 1, #FONT_REGIONS do
@@ -265,6 +294,69 @@ function Pools.ForEachFrame(visitBar, visitPreview)
     end
 end
 
+local function DefineOutlineAnchor(desc, UpdateAnchorBase)
+    local KIND = desc.kind
+    local UNIT_PREFIX = desc.unitPrefix
+    local DB_OFFSET_X, DB_OFFSET_Y = desc.db.offsetX, desc.db.offsetY
+    local DB_HEIGHT = desc.db.height
+    local ReadGeometry = Config.Geometry
+    return function(frame)
+        if not frame then return false end
+        local active = frame._msufPoolFollowsOutline
+        local unit = frame.unit or (UNIT_PREFIX .. (frame._msufPoolIndex or 1))
+        local owned = MSUF.UF.frames[unit]
+        if not (owned or active) then
+            frame.UpdateLifecycleAnchor = frame.UpdateAnchor
+            return UpdateAnchorBase(frame)
+        end
+        local general = ReadGeometry().general or {}
+        local follows = Anchors.PoolUsesOutline(general, unit, owned) and owned or nil
+        if not (follows or active) then
+            frame.UpdateLifecycleAnchor = desc.independentAnchor
+            return UpdateAnchorBase(frame)
+        end
+        frame.UpdateLifecycleAnchor = frame.UpdateAnchor
+        local x, y = tonumber(general[DB_OFFSET_X]) or 0, tonumber(general[DB_OFFSET_Y]) or 0
+        local revision = tonumber(Config.styleRevision) or 1
+        local height = tonumber(general[DB_HEIGHT]) or 0
+        if height <= 0 then height = tonumber(general.castbarGlobalHeight) or 12 end
+        if InCombat() then
+            local dirty = follows ~= active or x ~= frame._msufPoolOutlineX or y ~= frame._msufPoolOutlineY
+                or frame._msufPoolOutlineHeight ~= height or frame._msufPoolAnchorValidationRev ~= revision
+            if dirty and not frame._msufPoolOutlineDeferred then
+                frame._msufPoolOutlineDeferred = true
+                MSUF.ApplyService.RequestCastbarUnit(KIND, "MSUF_CASTBAR_ANCHOR", "layout")
+                if follows and not frame._msufPoolAnchorValidationRev and not frame:IsProtected() then
+                    -- The generic driver gives a new pool bar a screen-centre
+                    -- placeholder. Establish its first safe owner-relative points
+                    -- once, without modifying or measuring any protected unit frame.
+                    Pools.AnchorOutline(frame, follows, x, y)
+                    SetHeightIfChanged(frame, Snap(frame, height))
+                    frame._msufPoolAnchorValidationRev = revision
+                    return true, true
+                end
+            end
+            return false, false
+        end
+        frame._msufPoolFollowsOutline, frame._msufPoolOutlineDeferred = follows, nil
+        if not follows then
+            frame._msufPoolOutlineWidth = nil
+            frame.UpdateLifecycleAnchor = desc.independentAnchor
+            -- GetWidth may still report the old two-point span in this layout
+            -- pass. Store the explicit width for the soon-to-be single anchor.
+            local width, _, exact = Anchors.GetCastbarDesiredSize(unit, general, frame, 240, 12)
+            if width > 0 then frame:SetWidth(exact and width or Snap(frame, width)) end
+            UpdateAnchorBase(frame)
+            return true, true
+        end
+        local heightChanged = SetHeightIfChanged(frame, Snap(frame, height))
+        local moved, resized = Pools.AnchorOutline(frame, owned, x, y)
+        frame._msufPoolOutlineX, frame._msufPoolOutlineY, frame._msufPoolOutlineHeight = x, y, height
+        frame._msufPoolAnchorValidationRev = revision
+        return moved or resized or heightChanged, resized or heightChanged
+    end
+end
+
 --- Pools.Define stage 1: the anchor/size pass of one bar.
 local function DefinePoolAnchorBase(desc)
     local ReadGeometry = Config.Geometry
@@ -369,12 +461,13 @@ local function DefinePoolAnchorBase(desc)
         frame._msufPoolAnchorValidationRev = tonumber(Config.styleRevision) or 1
         return changed, sizeChanged
     end
-    return UpdateAnchorBase
+    if not MSUF.Client.IsRetail then return UpdateAnchorBase end
+    return DefineOutlineAnchor(desc, UpdateAnchorBase), UpdateAnchorBase
 end
 
 --- Pools.Define stage 2: the internal layout, the anchor pass and the
 --- pre-cast validation of one bar.
-local function DefinePoolLayout(desc, UpdateAnchorBase)
+local function DefinePoolLayout(desc, UpdateAnchorBase, independentAnchorBase)
     local KIND = desc.kind
 
     --- Applies only internal region layout. Positioning relative to the unit
@@ -390,14 +483,17 @@ local function DefinePoolLayout(desc, UpdateAnchorBase)
         Core.ApplyCastbarSparkVisual(frame, general)
     end
 
-    local function UpdateAnchor(frame, forceLayout)
-        local changed, sizeChanged = UpdateAnchorBase(frame)
-        -- Moving between the fallback UIParent anchor and the live unit frame
-        -- changes only the external anchor. Internal icon/text/spark geometry
-        -- depends on size, not position, so a pure reanchor rebuilds nothing.
-        if sizeChanged or forceLayout then ApplyLayout(frame) end
-        return changed
+    -- Select the lifecycle entry point during layout. Independent widths keep
+    -- validating their original provider at the same cost on encounter events.
+    local function WithInternalLayout(anchorBase)
+        return function(frame, forceLayout)
+            local changed, sizeChanged = anchorBase(frame)
+            if sizeChanged or forceLayout then ApplyLayout(frame) end
+            return changed
+        end
     end
+    desc.independentAnchor = independentAnchorBase and WithInternalLayout(independentAnchorBase)
+    local UpdateAnchor = WithInternalLayout(UpdateAnchorBase)
 
     --- The generic driver can receive the first spellcast event long after the
     --- lifecycle pass. Validate the pool geometry and detail-font generation
@@ -476,7 +572,7 @@ local function DefinePoolBars(desc, pool, ApplyLayout, UpdateAnchor, UpdateAncho
         -- Lifecycle events need current geometry for a real active cast, but a
         -- full visual refresh is only necessary when that geometry changed.
         -- Visual settings already own their explicit force-layout path.
-        if refreshLayout then frame:UpdateAnchor(false) end
+        if refreshLayout then frame:UpdateLifecycleAnchor(false) end
         ShowState(frame, state)
         return true
     end
@@ -508,6 +604,7 @@ local function DefinePoolBars(desc, pool, ApplyLayout, UpdateAnchor, UpdateAncho
         frame.ApplyLayout = ApplyLayout
         frame.PrepareForCast = PrepareForCast
         frame.UpdateAnchor = UpdateAnchor
+        frame.UpdateLifecycleAnchor = UpdateAnchor
         frame.UpdateAnchorBase = UpdateAnchorBase
 
         if not frame._msufPoolHooked then
@@ -605,7 +702,7 @@ local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
             -- At most one provider/size/layout validation per rendered frame.
             -- A later real cast still calls PrepareForCast, so provider changes
             -- or a cast racing this queue cannot expose stale geometry.
-            frame:UpdateAnchor(false)
+            frame:UpdateLifecycleAnchor(false)
         end
 
         index = index + 1
@@ -905,8 +1002,8 @@ function Pools.Define(desc)
     kinds[KIND] = pool
     order[#order + 1] = pool
 
-    local UpdateAnchorBase = DefinePoolAnchorBase(desc)
-    local ApplyLayout, UpdateAnchor, PrepareForCast = DefinePoolLayout(desc, UpdateAnchorBase)
+    local UpdateAnchorBase, independentAnchorBase = DefinePoolAnchorBase(desc)
+    local ApplyLayout, UpdateAnchor, PrepareForCast = DefinePoolLayout(desc, UpdateAnchorBase, independentAnchorBase)
     local Enabled, RefreshFromUnit, EnsureCastbars =
         DefinePoolBars(desc, pool, ApplyLayout, UpdateAnchor, UpdateAnchorBase, PrepareForCast)
     local QueuePass, QueuePrewarm, CancelLifecycle = DefinePoolPasses(desc, Enabled, RefreshFromUnit)

@@ -264,6 +264,10 @@ function Preview:Position(frame, index)
     end
 
     local unit = self.unitPrefix .. index
+    if unitFrame.MSUFSpec and Anchors.PoolUsesOutline(general, unit, unitFrame) then
+        Pools.AnchorOutline(frame, unitFrame, tonumber(general[db.offsetX]) or 0, tonumber(general[db.offsetY]) or 0)
+        return
+    end
     local source = Anchors.GetCastbarUnitframeWidthSource(unit) or unitFrame
     local autoX = Anchors.GetCastbarAutoAnchorOffsetX(general, unit, frame)
     local bottomInset = Anchors.GetCastbarUnitframeBottomInset(unit, frame)

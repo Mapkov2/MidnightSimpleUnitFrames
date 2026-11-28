@@ -2,7 +2,8 @@ local root = assert(arg[1]):gsub("\\", "/"):gsub("/$", "")
 local flavor = arg[2] or "Mainline"
 local World = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
 local mw = World.Open(root, flavor, { page = "opt_castbar" })
-local C, M, g = mw.core.Castbars, mw.M, mw.env.MSUF_DB.general
+local core = mw.core
+local C, M, g = core.Castbars, mw.M, mw.env.MSUF_DB.general
 
 local function CheckAnchor(frame, expected, context)
     local point, parent, relative, x = frame.castText:GetPoint(1)
@@ -100,6 +101,12 @@ for _, unit in ipairs({ "player", "target" }) do
     for _, box in ipairs(mw.world.widgets.frames) do
         if box.key == unit and box._castScene and not box._castScene.retired then
             unitPreview = box._castScene:Frame()
+            assert(box._castScene.opts.matchParent == core.Client.IsRetail, "cast preview ignored its layout slot")
+            local slot = box.mock.cast
+            local width, height = slot:GetWidth(), slot:GetHeight()
+            local pixel = core.Require("MSUF_GetPhysicalPixelSize", "castbar layout test")(slot)
+            assert(math.abs(width / pixel - math.floor(width / pixel + 0.5)) < 1e-6, "cast slot width is off grid")
+            assert(math.abs(height / pixel - math.floor(height / pixel + 0.5)) < 1e-6, "cast slot height is off grid")
         end
     end
     CheckAnchor(assert(unitPreview, unit .. " preview missing"), 0, unit .. " unit preview")

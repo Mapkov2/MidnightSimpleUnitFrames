@@ -32,6 +32,7 @@ local SetTextIfChangedFn = Require("MSUF_SetTextIfChanged", FILE)
 local GetCastbarTextColor = Require("MSUF_GetCastbarTextColor", FILE)
 local GetCastbarBackgroundColor = Require("MSUF_GetCastbarBackgroundColor", FILE)
 local PixelLayoutRegion = Require("MSUF_PixelLayoutRegion", FILE)
+local SnapToPixel = Require("MSUF_Snap", FILE)
 local ResolveFontShadowMetrics = Require("MSUF_ResolveFontShadowMetrics", FILE)
 local ApplyResolvedFont = Require("MSUF_ApplyResolvedFont", FILE)
 local ResolveFontKeyPath = Require("MSUF_ResolveFontKeyPath", FILE)
@@ -539,6 +540,12 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     -- Shaped outlines extend out from the fill and need their own clearance.
     local fillExtension = frame._msufRoundedCastbarActive ~= true and frameInset or 0
     local shape = Visuals.IconShape(g, prefix)
+    local flatPixelLayout = frame._msufPixelLayoutEnabled and frame._msufRoundedCastbarActive ~= true
+    if flatPixelLayout then
+        barW, barH = SnapToPixel(frame, barW), SnapToPixel(frame, barH)
+        size, spacing = SnapToPixel(frame, size), SnapToPixel(frame, spacing)
+        x, y = SnapToPixel(frame, x), SnapToPixel(frame, y)
+    end
     local layoutKey = KeyPart(unit) .. "|" .. shape .. "|"
         .. BoolKey(icon ~= nil) .. "|"
         .. BoolKey(showIcon) .. "|"
@@ -552,6 +559,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
         .. position .. "|"
         .. KeyPart(frameInset) .. "|"
         .. KeyPart(fillExtension) .. "|"
+        .. BoolKey(flatPixelLayout) .. "|"
         .. KeyPart(DetailString(g, prefix, "IconBorderStyle", nil, "NONE")) .. "|"
         .. KeyPart(DetailNum(g, prefix, "IconBorderThickness", nil, 0)) .. "|"
         .. KeyPart(g.castbarBorderR) .. "|"
@@ -568,7 +576,11 @@ local function ApplyIconLayout(frame, g, unit, prefix)
             local host = EnsureIconHost(frame)
             host:SetSize(size, size)
             host:ClearAllPoints()
-            if position == "RIGHT" then
+            if flatPixelLayout then
+                local edge = (position == "RIGHT" or position == "INSIDE_RIGHT") and "BOTTOMRIGHT" or "BOTTOMLEFT"
+                local inset = position == "INSIDE_LEFT" and spacing or position == "INSIDE_RIGHT" and -spacing or 0
+                host:SetPoint(edge, frame, edge, x + inset, SnapToPixel(frame, (barH - size) * 0.5) + y)
+            elseif position == "RIGHT" then
                 host:SetPoint("RIGHT", frame, "RIGHT", x, y)
             elseif position == "INSIDE_RIGHT" then
                 host:SetPoint("RIGHT", frame, "RIGHT", x - spacing, y)
@@ -713,28 +725,43 @@ local function TimeTextAnchor(g, unit, prefix)
     return position, pool and x - 2 or x
 end
 
-local function CenteredSpellTextSpace(frame, g, unit, prefix, statusW, x)
+local function TextBand(position)
+    return (position == "ABOVE" or position == "BELOW") and position or "INSIDE"
+end
+
+local function SpellTextSpace(frame, g, unit, prefix, statusW, position, x)
     if not (frame.timeText and ShowTimeForUnit(g, unit)) then return x end
     local timePosition, timeX = TimeTextAnchor(g, unit, prefix)
-    if timePosition == "ABOVE" or timePosition == "BELOW" then return x end
+    if TextBand(position) ~= TextBand(timePosition) then return x end
 
     local timeW = RegionNumber(frame.timeText, "GetStringWidth", nil)
     local reserve = math.max(timeW and timeW + 10 or 0, ApproxTimeTextReserve(frame, g, prefix, statusW))
     local left, right = 0, statusW
-    local center = statusW / 2 + x
+    local timerCentered = timePosition ~= "LEFT" and timePosition ~= "RIGHT"
     if timePosition == "LEFT" then
         left = Clamp(2 + timeX + reserve, 0, statusW - 1)
     elseif timePosition == "RIGHT" then
         right = Clamp(statusW + timeX - reserve, 1, statusW)
     else
-        -- A timer that also uses CENTER needs its own interval.
         local timerLeft = Clamp(statusW / 2 + timeX - reserve / 2, 0, statusW)
         local timerRight = Clamp(statusW / 2 + timeX + reserve / 2, 0, statusW)
-        if statusW - timerRight > timerLeft then
-            left = math.min(statusW - 1, timerRight)
-        else
-            right = math.max(1, timerLeft)
-        end
+        local preferRight = position == "RIGHT" or (position ~= "LEFT" and statusW - timerRight > timerLeft)
+        if preferRight then left = math.min(statusW - 1, timerRight)
+        else right = math.max(1, timerLeft) end
+    end
+
+    if position == "LEFT" then
+        if timePosition == "RIGHT" then return x, right - (2 + x) end
+        local edge = Clamp(left + 2 + x, left, right - 1)
+        return edge - 2, right - edge
+    elseif position == "RIGHT" then
+        if timePosition == "LEFT" then return x, statusW + x - left end
+        local edge = Clamp(right + x, left + 1, right)
+        return edge - statusW, edge - left
+    end
+    -- Center on the bar unless the timer takes the middle slot in this band.
+    local center = statusW / 2 + x
+    if position ~= "CENTER" or timerCentered then
         center = Clamp((left + right) / 2 + x, left + .5, right - .5)
         x = center - statusW / 2
     end
@@ -769,53 +796,26 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     local x = DetailNum(g, prefix, "TextOffsetX", nil, 0)
     local y = DetailNum(g, prefix, "TextOffsetY", nil, 0)
     local position = NormalizeTextPosition(DetailString(g, prefix, "SpellNamePosition", nil, "LEFT"), "LEFT")
-    local statusW = RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250)
+
+    local statusW = math.max(1, RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250))
     local maxWidth = DetailNum(g, prefix, "SpellNameMaxWidth", nil, 0)
     local truncate = NormalizeSpellNameTruncate(DetailString(g, prefix, "SpellNameTruncate", nil, "AUTO"))
-    local centeredRoom
-    if position == "CENTER" and truncate ~= "NONE" then
-        x, centeredRoom = CenteredSpellTextSpace(frame, g, unit, prefix, math.max(1, statusW), x)
-    end
-    AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
     local shortening, shorteningMaxLen, shorteningReserved = GetSpellNameShorteningConfig(frame)
-    --- Returns the comfortable auto width plus the hard edge the spell text may
-    --- never cross. Both keep the time text's own pixels and the user's
-    --- "Reserved space"; only the fixed 8px edge padding separates them, so a
-    --- character budget that needs those last pixels can reclaim them without
-    --- eating either the timer or a configured gap.
-    local function AutoWidth()
-        local timeReserve = 0
-        -- Time text is always Shown() with alpha 0 when the user turns it off,
-        -- so its widget state cannot answer this - ask the profile instead, or
-        -- disabling the timer never gives its pixels back to the name.
-        if frame.timeText and ShowTimeForUnit(g, unit) then
-            local timeW = RegionNumber(frame.timeText, "GetStringWidth", nil)
-            timeReserve = timeW and math.max(44, timeW + 10) or ApproxTimeTextReserve(frame, g, prefix, statusW)
-        end
-        local reserved = shortening and (tonumber(shorteningReserved) or 0) or 0
-        local hardMax = math.max(20, statusW - timeReserve - reserved)
-        return math.max(20, hardMax - 8), hardMax
-    end
     local width, autoHardMax
     if truncate == "NONE" then
         width = math.max(statusW, 1000)
-    elseif centeredRoom then
+    else
+        local room
+        x, room = SpellTextSpace(frame, g, unit, prefix, statusW, position, x)
         local reserved = shortening and (tonumber(shorteningReserved) or 0) or 0
-        local hardMax = math.max(1, centeredRoom - reserved)
+        local hardMax = room and math.max(1, room - reserved) or math.max(20, statusW - reserved)
         if truncate == "CLIP" and maxWidth and maxWidth > 0 then
-            width = math.min(maxWidth, hardMax)
+            width = room and math.min(maxWidth, hardMax) or maxWidth
         else
             width, autoHardMax = math.max(math.min(20, hardMax), hardMax - 8), hardMax
         end
-    elseif truncate == "CLIP" then
-        if maxWidth and maxWidth > 0 then
-            width = maxWidth
-        else
-            width, autoHardMax = AutoWidth()
-        end
-    else
-        width, autoHardMax = AutoWidth()
     end
+    AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
     if shortening then
         -- "Max name length" is a character budget, but restricted unit cast
         -- names can be secret in combat and therefore cannot legally pass
@@ -865,9 +865,6 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
 
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
-    -- Boss and arena time offsets are stored relative to a -2 base, without
-    -- the player-offset fallback; the Unit preview and its drag handle
-    -- (bossBaseX) read and write them the same way.
     local position, x = TimeTextAnchor(g, unit, prefix)
     local y = DetailNum(g, prefix, "TimeOffsetY", not POOL_SHOW_KEYS[unit] and "castbarPlayerTimeOffsetY" or nil, 0)
     AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))

@@ -455,10 +455,19 @@ end
 -- Player-only tint: honours the player color override and nameplate-derived
 -- interruptibility. The target/focus/boss frame method of the same name in
 -- MSUF_CastbarDriver.lua does neither; the two are intentionally separate.
+local spellColors
 function Player.CreateColorPainter(UnitClass, C_NamePlate)
 local function UpdateColorForInterruptible(frame)
     if not frame or not frame.statusBar then return end
 
+    if spellColors and not (frame.interruptFeedbackEndTime and GetTime() < frame.interruptFeedbackEndTime) then
+        local spellID = PlainNumber(frame._msufActiveSpellID)
+        local color = spellID and spellColors[spellID]
+        if color then
+            Utils.SetStatusBarColorIfChanged(frame.statusBar, color[1], color[2], color[3], 1)
+            return
+        end
+    end
     local general = Config.Read().general or {}
 
     if general.playerCastbarOverrideEnabled then
@@ -545,6 +554,23 @@ end
 return UpdateColorForInterruptible
 end
 local UpdateColorForInterruptible = Player.CreateColorPainter(UnitClass, C_NamePlate)
+
+function Player.SetSpellColors(text)
+    if issecretvalue(text) or type(text) ~= "string" or #text > 1800 then return false end
+    local parsed = {}
+    for token in text:gmatch("[^,%s]+") do
+        local id, hex = token:match("^(%d+):(%x%x%x%x%x%x)$")
+        local spell = id and tonumber(id)
+        if spell and spell > 0 and spell < 2147483648 then
+            parsed[spell] = { tonumber(hex:sub(1, 2), 16) / 255, tonumber(hex:sub(3, 4), 16) / 255,
+                tonumber(hex:sub(5, 6), 16) / 255 }
+        end
+    end
+    spellColors = next(parsed) and parsed or nil
+    local frame = Castbars.Frames and Castbars.Frames.player
+    if frame and frame.MSUF_castActive == true then UpdateColorForInterruptible(frame) end
+    return true
+end
 
 local function InvalidateCastState(unit)
     if not unit then return end

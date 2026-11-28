@@ -419,7 +419,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Selection.lua",
-          "source_sha256": "da592d0e4a21ebb496728a293ec2c88452004f82de2628eb44923f1d81c0244d"
+          "source_sha256": "697fe41052e10db8a7582271e64658caf31e434b1e80936bed44cd929a5a8484"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Layers.lua",
@@ -431,19 +431,19 @@
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Native.lua",
-          "source_sha256": "54ae90fa40b223b404724e70b99bd484b4c2421ecfb34ce3e5ec51c4d33bdc46"
+          "source_sha256": "a01b7f480a0e7e4e02743225b601003f37b67243425bddded34a6e7a227d2428"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_HandleStorage.lua",
-          "source_sha256": "2f2e3b371f13b70d61d483431e308209cd4a04f2753bd09b7dcf7d1d04c7a4f5"
+          "source_sha256": "a622b1f4dff81aa75851e1e3f3de386456ecddcc81e1bf817e4e77a1d6f8c3b4"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_HandleDrag.lua",
-          "source_sha256": "3ef18f817ba645a2a2479958b506c851fc47fe2787080835afa04151e7f20ed3"
+          "source_sha256": "f05a550e9627ed219b3fa306e3901c3d9689e8315c0ab4fb95c28da68815b074"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_HandleView.lua",
-          "source_sha256": "32fedb418cf6f8619e5de4c30ab4ffd4a8e3aa261f9af14348efd04d14852770"
+          "source_sha256": "6a555f5d4fd0be62db104443c5a2c83acd80724373b8413ba836eca007f42a16"
         },
         {
           "file": "Preview/MSUF_Menu2_GroupPreview_Handles.lua",
@@ -550,11 +550,11 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Castbar.lua",
-          "source_sha256": "20f95b9780513ba61e933f96be8bc72022e268f9647a61c4cdfb91cb756ce2fa"
+          "source_sha256": "9e9253b6bd30861ab1e3f92c98787acc01226416fde993b9def1a3c07a921761"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_View.lua",
-          "source_sha256": "313dc5e378dadbbf886dc79b5c2ffaf550a7e454247407c75f7e0d14c5da8679"
+          "source_sha256": "fb64bc05e7e2bd7b94f0ee0c9e4a361b2593f072f37f2089566f04b091f1d192"
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Specs.lua",
@@ -607,7 +607,7 @@
         },
         {
           "file": "Preview/MSUF_Menu2_UnitPreview_Input.lua",
-          "source_sha256": "56aa1bbfb19fe208e17cbf9d15bb2c5b209014b78b9b7f28f27b95ee0e14fdcd"
+          "source_sha256": "da35c3ce925a97ba6d55e5214b23363b8cc5fff737bcddd042252e283cf45852"
         }
       ],
       "review_note": "2026-11-01: removed unused pre-scene colour/model graph; moved unchanged castbar composition to its existing owner; bound animation readers to the runtime namespace with forward-load handling. Historical render counts retained. 2026-11-01: target-name visibility getter shared with the footprint pass through the Castbar namespace. 2026-11-01: unchanged composition bodies split into named planning/layout/presentation owners; every added support source pinned; historical counts unchanged.",
@@ -717,7 +717,8 @@
       "support_sources": [
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Textures.lua",
-          "source_sha256": "bebda175141e03c6b14a4c9628701c502ae4a47e8281fef84776f9b007eebbd1"
+          "source_sha256": "f8a39c4261528f4aade7b2b2ed7492752586a812ab318f55c1f672a3d1e3d3af",
+          "review_note": "2026-11-24: material samples still use NewRuntimeUnitSurface."
         },
         {
           "file": "Pages/MSUF_Menu2_GlobalBars_Shapes.lua",
@@ -728,7 +729,7 @@
           "source_sha256": "04bb3705bf43586fbb48b3f24098703a8d77747f83c1e13293a6323fcf6e84f4"
         }
       ],
-      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned."
+      "review_note": "2026-10-24 H3 scene-input ownership / H4 responsibility split; baseline counts retained, moved adapters pinned. 2026-11-24: the shape sample still uses NewRuntimeUnitSurface; counts unchanged."
     },
     {
       "file": "Pages/MSUF_Menu2_AdvancedColors.lua",
@@ -907,7 +908,8 @@
           "reason": "reviewed runtime adapter / editor chrome"
         }
       ],
-      "declaration_exclusions": []
+      "declaration_exclusions": [],
+      "review_note": "2026-11-24: bar preview lanes still use NewRuntimeUnitSurface; counts unchanged."
     }
   ],
   "before_physical": 2303,
