@@ -338,7 +338,9 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     x = x or 0
     y = y or 0
     local kind = widget._msuf2ControlKind
-    if kind == "slider" then titleJustify = "LEFT" end
+    -- Field titles start at their control's left edge. Segments keep the
+    -- caller's alignment for full-width tab rows.
+    if kind == "slider" or kind == "dropdown" or kind == "textinput" then titleJustify = "LEFT" end
     widget._msuf2ContextLayoutParent = parent
     widget._msuf2ContextLayoutX = x
     widget._msuf2ContextLayoutY = y
@@ -368,8 +370,9 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
         widget._msuf2Title:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     end
     widget:ClearAllPoints()
-    if kind == "slider" or kind == "dropdown" or kind == "textinput" or kind == "segment" then
-        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24)
+    if kind == "dropdown" or kind == "slider" or kind == "textinput" or kind == "segment" then
+        local titleOffset = widget._msuf2SettingsTitleOffset or (kind == "dropdown" and W.DROPDOWN_FIELD_OFFSET) or 24
+        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - titleOffset)
     elseif kind == "color" then
         if widget._msuf2Title then widget._msuf2Title:SetWidth(100) end
         widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 108, y + 2)

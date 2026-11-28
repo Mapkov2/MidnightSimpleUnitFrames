@@ -93,7 +93,7 @@ function M.CreateSearchBusyIndicator(parent)
     local indicator = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     indicator:SetSize(20, 20)
     indicator:Hide()
-    local icon = indicator:CreateTexture(nil, "ARTWORK")
+    local icon = PixelLayoutRegion(indicator:CreateTexture(nil, "ARTWORK"))
     icon:SetAllPoints()
     icon:SetTexture("Interface\\COMMON\\StreamCircle")
     local accent = T.colors.accent

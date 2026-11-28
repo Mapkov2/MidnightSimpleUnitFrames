@@ -521,12 +521,14 @@ local function BuildWindowChrome(state)
         historyMode = "none", help = "Opens the next page from the menu page history.",
     })
     M.RefreshPageHistoryNav()
-    local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
-    local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
-    local sbCombat = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
     local sbVersion = StatusText("RIGHT", status, "RIGHT", -16, 15, "RIGHT", 0.50)
+    local sbCombat = StatusText("RIGHT", sbVersion, "LEFT", -16, 0, "RIGHT")
+    local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
+    sbProfile:SetPoint("RIGHT", sbCombat, "LEFT", -16, 0)
+    if sbProfile.SetMaxLines then sbProfile:SetMaxLines(1) end
+    local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
     local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -16, 15, "RIGHT", 0)
-    sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 15)
+    sbFeedback:SetPoint("LEFT", status, "LEFT", 24, 30)
     status.profileText = sbProfile
     status.editText = sbEdit
     status.combatText = sbCombat
@@ -598,9 +600,10 @@ local function BuildWindowToolbar(state)
             return
         end
         local active = IsEditModeActive and IsEditModeActive()
-        MSUF.Require("MSUF_SetMSUFEditModeDirect", FILE)(not active)
+        MSUF.Require("MSUF_SetMSUFEditModeDirect", FILE)(not active, not active and M.ActiveEditUnitKey() or nil)
         RefreshDashboardEditModeButton()
         if f.RefreshStatus then f:RefreshStatus() end
+        if not active then M.ParkMenuForEditMode() end
     end
     local toolbarEdit = T.Button(status, "Edit Mode: Off", 152, 24)
     toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -24, 12)
@@ -638,7 +641,7 @@ local function BuildWindowToolbar(state)
         local badgeWidth = badge and badge.GetTextWidth and badge:GetTextWidth() or 0
         local badgeRoom = badgeWidth > 0 and (FEATURES_BADGE_GAP + badgeWidth) or 0
         -- Keep the hit area stable when the badge goes away on click.
-        toolbarFeatures:SetWidth(max(132, math.ceil(label:GetStringWidth() + 24 + badgeRoom)))
+        toolbarFeatures:SetWidth(max(132, T.MeasureButtonWidth(toolbarFeatures, 0) + badgeRoom))
         label:ClearAllPoints()
         label:SetPoint("CENTER", toolbarFeatures, "CENTER", unseen and -badgeRoom * 0.5 or 0, 0)
         if badge then
@@ -655,6 +658,7 @@ local function BuildWindowToolbar(state)
     local toolbarReset = T.Button(status, "Reset page", 88, 24)
     toolbarReset:SetPoint("RIGHT", toolbarFeatures, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarReset)
+    T.FitButtonWidth(toolbarReset, 88)
     M.AddTooltip(toolbarReset, "Reset page", function()
         local key = M.activeKey
         local scoped = key and M.BuildScopedPageResetWarning and M.BuildScopedPageResetWarning(key)
@@ -698,6 +702,7 @@ local function InstallWindowStatusRuntime(state)
     local sbCombat, sbVersion = status.combatText, status.versionText
     local RefreshToolbarPageReset = M.RefreshToolbarPageReset
     local RefreshSeeNewFeaturesBadge = M.RefreshSeeNewFeaturesBadge
+    local suiteVersionText
     function f:RefreshStatus()
         local profile = tostring(MSUF_ActiveProfile or "Default")
         local profileText = M.Format("Profile: %s", profile)
@@ -710,6 +715,18 @@ local function InstallWindowStatusRuntime(state)
         local version = GetAddonVersion()
         local versionText = type(version) == "string" and version ~= ""
             and (version:match("^%d") and ("v" .. version) or version) or ""
+        if suiteVersionText == nil then
+            -- The TOC version is fixed once the Suite starts. Avoid recounting its modules on status events.
+            local overview = M.GetSuiteOverview()
+            if overview then
+                local suiteVersion = overview.version
+                suiteVersionText = type(suiteVersion) == "string" and suiteVersion ~= ""
+                    and M.FormatSuiteTitle(overview) or ""
+            end
+        end
+        if suiteVersionText and suiteVersionText ~= "" then
+            versionText = versionText ~= "" and (versionText .. "  ·  " .. suiteVersionText) or suiteVersionText
+        end
         SetCachedText(status, "_msuf2VersionText", sbVersion, versionText)
         RefreshDashboardEditModeButton()
         RefreshToolbarPageReset()

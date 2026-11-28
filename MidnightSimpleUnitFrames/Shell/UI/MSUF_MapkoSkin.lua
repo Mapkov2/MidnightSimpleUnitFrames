@@ -204,6 +204,10 @@ end
 local function PaintPalette(color, entry)
     if active then
         local r, g, b, a = api:GetColor(entry.token)
+        if entry.token == "disabled" then
+            local gray = r * 0.2126 + g * 0.7152 + b * 0.0722
+            r, g, b = gray, gray, gray
+        end
         color[1], color[2], color[3], color[4] = r, g, b, a
     else
         for i = 1, 4 do color[i] = entry[i] end

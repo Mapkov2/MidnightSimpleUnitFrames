@@ -254,13 +254,20 @@ local function RelayoutCaptionGroup(group)
     for _, button in ipairs(group._msuf2CaptionButtons) do LayoutCaptionGlyph(button) end
 end
 
-local function OnCaptionScaleProbeSizeChanged(probe)
-    RelayoutCaptionGroup(probe._msuf2CaptionGroupOwner)
-end
-
-local function OnCaptionScaleProbeEvent(probe)
+local function OnCaptionScaleProbeChanged(probe)
     local group = probe._msuf2CaptionGroupOwner
     if group:IsVisible() then RelayoutCaptionGroup(group) end
+end
+
+local function EnableCaptionScaleProbe(probe)
+    probe:SetScript("OnSizeChanged", OnCaptionScaleProbeChanged)
+    probe:RegisterEvent("DISPLAY_SIZE_CHANGED")
+    OnCaptionScaleProbeChanged(probe)
+end
+
+local function DisableCaptionScaleProbe(probe)
+    probe:UnregisterEvent("DISPLAY_SIZE_CHANGED")
+    probe:SetScript("OnSizeChanged", nil)
 end
 
 -- Caption bars are one physical pixel at the effective scale of their last
@@ -273,9 +280,10 @@ local function CreateCaptionScaleProbe(group)
     local probe = CreateFrame("Frame", nil, group)
     probe:SetAllPoints(UIParent)
     probe._msuf2CaptionGroupOwner = group
-    probe:SetScript("OnSizeChanged", OnCaptionScaleProbeSizeChanged)
-    probe:SetScript("OnEvent", OnCaptionScaleProbeEvent)
-    probe:RegisterEvent("DISPLAY_SIZE_CHANGED")
+    probe:SetScript("OnEvent", OnCaptionScaleProbeChanged)
+    probe:SetScript("OnShow", EnableCaptionScaleProbe)
+    probe:SetScript("OnHide", DisableCaptionScaleProbe)
+    if probe:IsVisible() then EnableCaptionScaleProbe(probe) end
     group._msuf2CaptionScaleProbe = probe
 end
 

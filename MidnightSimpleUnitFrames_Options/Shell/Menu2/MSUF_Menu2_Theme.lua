@@ -4,11 +4,19 @@ local T = M.Theme
 local SharedUI = MSUF.UI
 
 T.fontSizes = SharedUI.fontSizes
+-- Settings text: field and checkbox labels plus visible values (dropdown
+-- fields, numeric edits, steppers, segment choices). "control" is the MSUF
+-- role; "settingCard" is the same size in the card weight that Suite setting
+-- rows use. Edit Mode and gameplay read SharedUI.FontSize and stay at 13.
+local SETTING_TEXT_SIZE = 14
+T.SETTING_TEXT_SIZE = SETTING_TEXT_SIZE
+T.SETTING_CARD_ROLE = "settingCard"
 function T.FontSize(role, fallback)
     -- Menu-only readability floor; gameplay fonts keep their own sizing.
     if role == "micro" then return 11 end
     if role == "navigation" then return 14 end
     if role == "caption" or role == "supporting" then return 12 end
+    if role == "control" or role == "settingCard" then return SETTING_TEXT_SIZE end
     return SharedUI.FontSize(role, fallback)
 end
 T.NormalizeFontSize = SharedUI.NormalizeFontSize

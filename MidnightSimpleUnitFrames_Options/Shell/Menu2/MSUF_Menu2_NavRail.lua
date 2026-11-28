@@ -340,9 +340,22 @@ local function ApplyNavAvailabilityVisual(btn)
     badge:SetShown(off)
     local width = off and badge.GetStringWidth and tonumber(badge:GetStringWidth()) or 0
     if off and width <= 0 then width = 24 end
-    -- Icon layout re-anchors the label; only its right edge moves here, so a
-    -- long label ends before the badge instead of running under it.
-    if btn._msuf2Label then btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", off and -(floor(width + 0.5) + 12) or -8, 0) end
+    local label = btn._msuf2Label
+    local _, _, _, left = label:GetPoint(1)
+    local badgeInset = floor(width + 0.5) + 12
+    -- A long localized name can use the full row while its state stays visible below it.
+    local measure = label.GetUnboundedStringWidth or label.GetStringWidth
+    local badgeBelow = off and measure(label) > btn:GetWidth() - (left or 0) - badgeInset
+    local offset = badgeBelow and 10 or 0
+    local right = off and not badgeBelow and -badgeInset or -8
+    label:SetPoint("LEFT", btn, "LEFT", left, offset)
+    label:SetPoint("RIGHT", btn, "RIGHT", right, offset)
+    badge:SetPoint("RIGHT", btn, "RIGHT", -8, -offset)
+    local height = NAV_BUTTON_H + 2 * offset
+    if btn:GetHeight() ~= height then
+        btn:SetHeight(height)
+        return true
+    end
 end
 function M.RefreshNavAvailability()
     local relayout = false
@@ -356,7 +369,7 @@ function M.RefreshNavAvailability()
             btn._msuf2NavOff = off
             btn._msuf2NavOffReason = off and type(reason) == "string" and reason ~= "" and reason or nil
             btn._msuf2NavHidden = hide
-            ApplyNavAvailabilityVisual(btn)
+            if ApplyNavAvailabilityVisual(btn) then relayout = true end
         end
     end
     if relayout then ReflowNavRail() end
@@ -932,7 +945,7 @@ local function InstallNavReflow(parent, listScroll, list, created)
                 btn:Show()
                 btn:ClearAllPoints()
                 btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + (btn._msuf2NavIndent or 0), y)
-                y = y - NAV_BUTTON_STEP
+                y = y - btn:GetHeight() - (NAV_BUTTON_STEP - NAV_BUTTON_H)
             else
                 if btn then btn:Hide() end
                 if item.frame then item.frame:Hide() end

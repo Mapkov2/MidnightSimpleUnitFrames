@@ -23,6 +23,7 @@ local RaiseForeverPadCursor = Parts.RaiseForeverPadCursor
 local RefreshDashboardEditModeButton = Parts.RefreshDashboardEditModeButton
 local RestoreMinimizedSlashMenu = Parts.RestoreMinimizedSlashMenu
 local RestoreSlashMenuWindow = Parts.RestoreSlashMenuWindow
+local SeedMenuScaleForScreen = Parts.SeedMenuScaleForScreen
 local T = Parts.T
 local max = Parts.max
 
@@ -266,6 +267,8 @@ end
 
 local function BuildWindow()
     if M.frame then return M.frame end
+    -- Before the shell reads its size: the screen-safe bounds follow the scale.
+    SeedMenuScaleForScreen()
     T.ApplyMenuAccent()
     local state = BuildWindowShell()
     InstallWindowInteractions(state)

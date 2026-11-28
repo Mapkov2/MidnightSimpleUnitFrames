@@ -1,5 +1,6 @@
 --- Provider-neutral popup for frames registered through MSUF_EditModeAPI.
 local addonName, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/EditMode/MSUF_EditMode_ExternalPopup.lua")
 
 local EM2 = MSUF.Optional("MSUF_EM2")
 if not EM2 then return end
@@ -142,10 +143,10 @@ end
 local function ScrollChoices(menu)
     local rows, width = menu._items or {}, menu:GetWidth()
     if not menu._choiceScroll then
-        local scroll = CreateFrame("ScrollFrame", nil, menu)
+        local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, menu))
         scroll:SetPoint("TOPLEFT", 2, -3)
         scroll:SetPoint("BOTTOMRIGHT", -2, 3)
-        local content = CreateFrame("Frame", nil, scroll)
+        local content = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
         scroll:SetScrollChild(content)
         menu._choiceScroll, menu._choiceContent = scroll, content
         menu:EnableMouseWheel(true)

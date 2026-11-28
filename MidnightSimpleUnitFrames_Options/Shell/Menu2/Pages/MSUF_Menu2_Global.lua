@@ -696,7 +696,6 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
             gap = 4,
             builder = builder,
             ctx = ctx,
-            flowGap = 12,
         })
     end
     return {

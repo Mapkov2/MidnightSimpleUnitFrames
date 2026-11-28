@@ -503,6 +503,8 @@ local function BuildTopActions(ctx, builder, unit, label)
                 value = tabUnit,
                 text = UnitTopTabKey(tabUnit, false),
                 width = UnitTopTabWidth(tabUnit, false),
+                compactText = UnitTopTabKey(tabUnit, true),
+                compactWidth = UnitTopTabWidth(tabUnit, true),
             }
         end
     end
@@ -513,6 +515,9 @@ local function BuildTopActions(ctx, builder, unit, label)
         label = "",
         labelWidth = 0,
         startX = 16,
+        -- Nine frame tabs do not fit one row beside Copy To on a narrow
+        -- window: use the short labels before taking a second row.
+        compactWhenWrapped = true,
         getValue = function() return unit end,
         setValue = function(tabUnit)
             local pageKey = UNIT_PAGE_FOR_UNIT[tabUnit]

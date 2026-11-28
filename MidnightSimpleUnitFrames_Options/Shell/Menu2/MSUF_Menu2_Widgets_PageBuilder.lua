@@ -104,6 +104,11 @@ function PageBuilderStages.NotifyCollapsibleSectionState(entry, open)
     if type(fn) == "function" then fn(entry.pageKey, entry.sectionId, open, entry) end
 end
 local SECTION_FOCUS_GAP = 12
+-- Vertical room between settings groups in the page flow: cards/headers and
+-- accordions. Rows inside a group keep their own compact spacing.
+local SECTION_FLOW_GAP = 16
+local ACCORDION_FLOW_GAP = 12
+W.SECTION_FLOW_GAP, W.ACCORDION_FLOW_GAP = SECTION_FLOW_GAP, ACCORDION_FLOW_GAP
 local function EffectiveFrameScale(frame, fallback)
     local scale = frame and frame.GetEffectiveScale and tonumber(frame:GetEffectiveScale())
     if not scale or scale <= 0 then return fallback or 1 end
@@ -338,13 +343,13 @@ end
 --- Header layout for one collapsible entry: the UX summary, the badge row, or
 --- the hint. Shared by every accordion instead of one closure body per section;
 --- the section's wrapper hands in the regions it captured at creation.
-function PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, label, arrow, builder)
+function PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, label, arrow, width)
     local actionRefresh = entry._msuf2RefreshSectionAction
     if actionRefresh then
         WatchSectionActionHover(entry.featureSwitch, actionRefresh)
         WatchSectionActionHover(entry._msuf2CustomBadge, actionRefresh)
     end
-    local headerW = (header.GetWidth and header:GetWidth()) or builder.width or 240
+    local headerW = width
     local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
     local swatchReserve = (tonumber(entry._msuf2ColorSwatchReserve) or 0)
         + (tonumber(entry._msuf2FeatureSwitchReserve) or 0)
@@ -379,7 +384,19 @@ function PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, l
         summary:ClearAllPoints()
         summary:SetPoint("LEFT", header, "LEFT", left, 0)
         summary:SetWidth(math.max(1, room))
-        local showSummary = not entry.open and room >= 110 and (summary:GetText() or "") ~= ""
+        local showSummary = not entry.open and room >= 110
+        if showSummary and entry._msuf2SummaryPrimary then
+            local measure = summary.GetUnboundedStringWidth or summary.GetStringWidth
+            T.SetTranslatedText(summary, entry._msuf2SummaryText)
+            if measure(summary) > room - 2 then
+                T.SetTranslatedText(summary, entry._msuf2SummaryPrimary)
+                if measure(summary) > room - 2 then
+                    T.SetTranslatedText(summary, entry._msuf2SummarySecondary or "")
+                    if measure(summary) > room - 2 then T.SetTranslatedText(summary, "") end
+                end
+            end
+        end
+        showSummary = showSummary and (summary:GetText() or "") ~= ""
         summary:SetShown(showSummary)
         hint:Hide()
         for _, badge in ipairs(entry._msuf2Badges or {}) do badge:Hide() end
@@ -530,8 +547,9 @@ function PageBuilderStages.SetAccordionOpen(entry, value, animated)
 end
 -- A card inside a collapsible flow is laid out together with the accordions.
 local function AddSectionLayoutEntry(builder, section, height)
+    section._msuf2SectionFlowGap = SECTION_FLOW_GAP
     if not builder._collapsibleStartY then return end
-    builder.layoutEntries[#builder.layoutEntries + 1] = { kind = "section", frame = section, height = height, gap = 12 }
+    builder.layoutEntries[#builder.layoutEntries + 1] = { kind = "section", frame = section, height = height, gap = SECTION_FLOW_GAP }
 end
 --- The builder's vertical-flow and relayout methods; installed once per build.
 function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
@@ -566,7 +584,7 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
                         layoutChanged = true
                     end
-                    y = y - h - (entry.gap or 12)
+                    y = y - h - (entry.gap or SECTION_FLOW_GAP)
                 end
             elseif entry.kind == "spacer" then
                 y = y - (entry.height or 10)
@@ -603,7 +621,10 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                 then
                     refreshState(entry)
                 end
-                y = y - entry.outer:GetHeight() - 8
+                -- A lazy disclosure can resize the outer frame inside a state callback
+                -- before its animation advances. Follow the displayed height during motion.
+                local height = entry._msuf2MotionActive and entry.outer:GetHeight() or PageBuilderStages.AccordionHeight(entry)
+                y = y - height - ACCORDION_FLOW_GAP
             end
         end
         if self.y ~= y then
@@ -639,7 +660,7 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
         SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
-        self.y = self.y - (height or 120) - 12
+        self.y = self.y - (height or 120) - SECTION_FLOW_GAP
         UpdateContentHeight(math.abs(self.y) + 28)
         AddSectionLayoutEntry(self, section, height or 120)
         W.RegisterGuidedRegion(ctx, section, title)
@@ -869,7 +890,11 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         entry.ancestorEntry = self.ancestorEntry
         RefreshCollapseHintSuppression(entry)
         local function RefreshHeaderLayout()
-            PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, entry.hint, entry.label, entry.arrow, self)
+            -- The header spans the declared outer width minus the scroll inset.
+            -- Once visible, use the resolved width for font fitting and badges.
+            local width = not ctx._msuf2Building and header:GetWidth()
+            PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, entry.hint, entry.label, entry.arrow,
+                width or (self.width - ACCORDION_HEADER_RIGHT_INSET))
         end
         entry._msuf2RefreshLayout = RefreshHeaderLayout
         outer._msuf2CollapsibleEntry = entry
@@ -885,7 +910,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         local RefreshHeaderTone = PageBuilderStages.InstallHeaderTone(entry)
         entry.kind = "collapsible"
         PageBuilderStages.WireAccordionHeader(entry, ctx, title, collapseHintClickState, RefreshHeaderLayout, RefreshHeaderTone)
-        self.y = self.y - outer:GetHeight() - 8
+        self.y = self.y - PageBuilderStages.AccordionHeight(entry) - ACCORDION_FLOW_GAP
         RefreshHeaderLayout()
         RefreshHeaderTone(false)
         self.layoutEntries[#self.layoutEntries + 1] = entry
@@ -1066,7 +1091,7 @@ function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
             sub:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -8)
             section.subtitle = sub
         end
-        self.y = self.y - (height or 78) - 12
+        self.y = self.y - (height or 78) - SECTION_FLOW_GAP
         UpdateContentHeight(math.abs(self.y) + 28)
         AddSectionLayoutEntry(self, section, height or 78)
         return section
@@ -1221,6 +1246,55 @@ local function BuildCardControl(ctx, card, row, set, x, y, width)
     return widget
 end
 
+local SETTINGS_CAPTION_INSET = { toggle = 40, slider = 4, dropdown = 4, segment = 4, color = 32 }
+local function SettingsCaptionFits(parent, row, kind, width)
+    local inset = SETTINGS_CAPTION_INSET[kind]
+    if not inset or not row.label then return true end
+    local probe = parent._msuf2SettingsCaptionProbe
+    if not probe then
+        probe = T.Font(parent, "GameFontHighlightSmall", "", T.colors.text, "control")
+        probe:Hide()
+        parent._msuf2SettingsCaptionProbe = probe
+    end
+    T.SetTranslatedText(probe, Tr(CardResolve(row.label) or ""))
+    local measure = probe.GetUnboundedStringWidth or probe.GetStringWidth
+    if measure(probe) + inset > width then return false end
+    if kind == "dropdown" and type(row.values) == "table" then
+        for _, choice in ipairs(row.values) do
+            local text = type(choice) == "table" and choice.text or choice
+            if type(text) == "string" then
+                T.SetTranslatedText(probe, Tr(text))
+                if measure(probe) + 48 > width then return false end
+            end
+        end
+    end
+    return true
+end
+
+local function FitWrappedSettingCaption(widget, kind, parent, x, y, cellH)
+    local label = kind == "toggle" and widget._msuf2Label or CARD_MOVE_JUSTIFY[kind] and widget._msuf2Title
+    if not label then return cellH end
+    local measure = label.GetUnboundedStringWidth or label.GetStringWidth
+    if measure(label) <= label:GetWidth() + 1 then return cellH end
+    label:SetWordWrap(true)
+    local height = math.ceil(label:GetStringHeight())
+    if kind == "toggle" then
+        if height + 6 <= cellH then return cellH end
+        label:ClearAllPoints()
+        label:SetPoint("TOPLEFT", widget, "TOPRIGHT", 8, -3)
+        widget._msuf2ToggleCaptionHeight = height + 6
+        if widget._msuf2UpdateToggleProxyBounds then widget:_msuf2UpdateToggleProxyBounds() end
+        return height + 6
+    end
+    local baseOffset = (kind == "dropdown" and W.DROPDOWN_FIELD_OFFSET) or 24
+    local titleOffset = math.max(baseOffset, height + 6)
+    if titleOffset > baseOffset then
+        widget._msuf2SettingsTitleOffset = titleOffset
+        W.MoveWidget(widget, parent, x, y)
+    end
+    return cellH + titleOffset - baseOffset
+end
+
 --- Uniform multi-column settings rows inside an EXISTING section or card (the
 --- "Zeilen-Grid" building block): fixed cell metrics, cells flow left-to-right
 --- then top-to-bottom, optional per-row reset-to-default action. Uses the same
@@ -1229,7 +1303,7 @@ end
 ---
 --- spec = {
 ---   x?, y?, width?, columns? (default 2), colGap?, rowGap?,
----   rows = { { <BuildCardControl row fields> , reset? = function } , ... },
+---   rows = { { <BuildCardControl row fields>, fullWidth?, startsGroup?, reset? } , ... },
 --- }
 --- A row's `reset` writes its default through the row's own apply path; the
 --- glyph next to the control stays dim until hovered.
@@ -1251,11 +1325,21 @@ function W.SettingsRows(ctx, parent, spec)
         local row = rows[i]
         local kind = row.kind or row.type
         local cellH = row.height or CARD_ROW_HEIGHT[kind] or 30
-        local x = x0 + col * (colW + colGap)
         local hasReset = type(row.reset) == "function"
+        local resetWidth = hasReset and 22 or 0
+        local fullWidth = row.fullWidth or (columns > 1 and not row.width
+            and not SettingsCaptionFits(parent, row, kind, colW - resetWidth))
+        if col > 0 and (fullWidth or row.startsGroup) then
+            y = y - rowH - rowGap
+            col, rowH = 0, 0
+        end
+        if i > 1 and row.startsGroup then y = y - 4 end
+        local cellW = fullWidth and width or colW
+        local x = x0 + col * (colW + colGap)
         local set = row.write and M.ControlSchema.Setter(row) or row.set
-        local widget = BuildCardControl(ctx, parent, row, set, x, y, colW - (hasReset and 22 or 0))
+        local widget = BuildCardControl(ctx, parent, row, set, x, y, cellW - resetWidth)
         if widget then
+            cellH = FitWrappedSettingCaption(widget, kind, parent, x, y, cellH)
             M.ControlSchema.Custom(widget, { id = row.controlId or row.id, kind = kind,
                 scope = ctx.key, applyDomain = "settingsRows", meta = row, setting = row.setting,
                 settingPath = row.settingKey, get = row.get, set = set, write = row.write,
@@ -1265,7 +1349,7 @@ function W.SettingsRows(ctx, parent, spec)
             if hasReset then
                 local resetBtn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
                 resetBtn:SetSize(18, 18)
-                resetBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + colW - 17, y - (kind == "slider" and 20 or 4))
+                resetBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + cellW - 17, y - (kind == "slider" and 20 or 4))
                 local glyph = T.Font(resetBtn, "GameFontDisableSmall", "\226\134\186", T.colors.muted)
                 glyph:SetPoint("CENTER", resetBtn, "CENTER", 0, 0)
                 resetBtn:SetAlpha(0.35)
@@ -1289,7 +1373,7 @@ function W.SettingsRows(ctx, parent, spec)
             end
         end
         rowH = max(rowH, cellH)
-        col = col + 1
+        col = col + (fullWidth and columns or 1)
         if col >= columns then
             col = 0
             y = y - rowH - rowGap

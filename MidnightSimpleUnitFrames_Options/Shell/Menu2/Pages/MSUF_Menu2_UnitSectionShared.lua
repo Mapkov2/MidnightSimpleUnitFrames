@@ -651,19 +651,24 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
         if not (popup and popup._checks) then return end
         for i = 1, #categories do
             local cat = categories[i]
-            if popup._checks[i] then popup._checks[i]:SetChecked(scopes[cat.key] == true) end
+            local widget, available = popup._checks[i], not opts.isCategoryAvailable or opts.isCategoryAvailable(cat.key)
+            if widget then
+                if opts.isCategoryAvailable then W.SetControlEnabled(widget, available) end
+                widget:SetChecked(available and scopes[cat.key] == true)
+            end
         end
     end
     local function SetAll(selected, feedback)
         for i = 1, #categories do
             local cat = categories[i]
             scopes[cat.key] = selected and true or false
-            if popup and popup._checks and popup._checks[i] then popup._checks[i]:SetChecked(selected and true or false) end
         end
+        SyncChecks()
         if feedback and M.ShowStatusFeedback then M.ShowStatusFeedback(feedback, "info", 1.15) end
     end
     local function RefreshTargets()
         if not popup then return end
+        SyncChecks()
         local source = SourceKey()
         local selected = opts.selectedTarget and opts.selectedTarget(source)
         if popup._title then T.SetTranslatedText(popup._title, M.Format(opts.titleFormat or "Copy from %s", opts.sourceLabel and opts.sourceLabel(source)
@@ -690,7 +695,6 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
     local api = {}
     function api.GetPopup() return popup end
     function api.Refresh()
-        SyncChecks()
         RefreshTargets()
     end
     function api.Hide()

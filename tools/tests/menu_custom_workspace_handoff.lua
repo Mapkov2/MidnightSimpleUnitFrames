@@ -11,6 +11,12 @@ local mw = MW.Open(root, flavor, { page = "home", beforeOptions = function(world
     end
 end })
 local M = mw.M
+local motionControl
+local bind = M.ControlSchema.Bind
+M.ControlSchema.Bind = function(ctx, widget, spec)
+    if spec.id:find("animate-appearance", 1, true) then motionControl = spec end
+    return bind(ctx, widget, spec)
+end
 for _, unit in ipairs({ "player", "target" }) do
     local key = "uf_" .. unit
     assert(mw:Select(key))
@@ -21,5 +27,20 @@ for _, unit in ipairs({ "player", "target" }) do
             M.BuildAuras3CompactCustomWorkspace(ctx, M.Widgets.PageBuilder(ctx), unit, index, tool)
         end
     end
+end
+if flavor == "Mainline" or flavor == "Forever" then
+    local spec = assert(motionControl, "Defensive Buffs Setup is missing its animation switch")
+    assert(M.ControlSchema.ResolvePath(spec) == "auras3.customContainers.perUnit.player.items.4.placed.animateAppearance")
+    local set = M.ControlSchema.Setter(spec)
+    local function enabled()
+        return M.EnsureDB().auras3.customContainers.perUnit.player.items[4].placed.animateAppearance
+    end
+    assert(enabled() ~= true)
+    set(true)
+    assert(enabled() == true)
+    set(false)
+    assert(enabled() == false)
+else
+    assert(not motionControl, "Native appearance animation switch leaked to a Classic client")
 end
 print("PASS Custom Aura handoff " .. flavor .. ": all containers and tools use lexical helpers")

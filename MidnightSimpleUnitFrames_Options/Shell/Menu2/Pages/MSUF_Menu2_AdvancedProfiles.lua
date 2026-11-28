@@ -113,11 +113,11 @@ local function ProfileExportValues()
         local skinReady = MSUF.SuiteLink.SkinAddOnEnabled()
         -- Suite rows are translated here (one format key), so the picker shows them as is.
         values[#values + 1] = { value = "suite_module:skin", text = M.Format("Suite module: %s", Tr("Skinning")),
-            translate = false, disabled = not skinReady }
+            translate = false, disabled = not skinReady, searchText = "Skinning" }
         values[#values + 1] = { value = "all", text = "MSUF only - full profile" }
         for _, module in ipairs(MSUF.SuiteLink.ProfileModules()) do
             values[#values + 1] = { value = "suite_module:" .. module.id,
-                text = M.Format("Suite module: %s", Tr(module.title)), translate = false }
+                text = M.Format("Suite module: %s", Tr(module.title)), translate = false, searchText = module.title }
         end
     else
         values[#values + 1] = { value = "all", text = "Full profile" }
@@ -1171,7 +1171,7 @@ function ProfilesPage.ImportExport(state)
         exportValues[#exportValues + 1] = item
     end
     local exportKind = AP.Row(nil, stringCard, { "dropdown", "advancedprofiles.exportKind.24", nil,
-        { "Export kind", exportValues, exportKindW },
+        { "Export kind", exportValues, exportKindW, { searchable = true } },
         bind = function(exportKind)
         BindProfileControl(ctx, exportKind, "dropdown", "Export kind",
             function() return M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all") end,

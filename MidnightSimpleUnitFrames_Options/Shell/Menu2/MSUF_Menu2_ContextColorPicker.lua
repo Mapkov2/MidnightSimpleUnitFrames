@@ -578,6 +578,7 @@ function Picker.BuildTargetSelector(panel)
     local selectorColor = ColorChip(selector, 14, 14)
     selectorColor:SetPoint("LEFT", 68, 0)
     local selectorLabel = selector._msuf2Label
+    T.ApplyMenuFont(selectorLabel, 0, "control")
     selectorLabel:ClearAllPoints()
     selectorLabel:SetPoint("LEFT", selectorColor, "RIGHT", 10, 0)
     selectorLabel:SetPoint("RIGHT", -28, 0)

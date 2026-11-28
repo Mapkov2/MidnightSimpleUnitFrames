@@ -36,6 +36,7 @@ end
 local dropdownFrame, dropdownScroll, dropdownChild, dropdownOwner, dropdownSlider
 local dropdownClosing, dropdownClosingOwner
 local dropdownRows = {}
+local dropdownSearch
 -- Forever's Gamepad UI: the open list takes the pad from the menu window
 -- (Game/Forever/PadNavigation.lua) and starts on the chosen row; B closes it
 -- through SmartNavigationCloseHandler and the window gets its selection back.
@@ -47,13 +48,24 @@ local function ShowForeverDropdown(selectedRow)
 end
 -- One popup instance is reused for all dropdowns. This keeps strata/focus behavior predictable
 -- and avoids leaking row frames as pages are rebuilt.
-local DROPDOWN_ROW_H = 24
+-- Field and choice text use the "control" type role, the same size as checkbox
+-- labels. Keep the two-unit gap at the end of the reserved 48-unit row.
+local DROPDOWN_FIELD_H = 26
+local DROPDOWN_FIELD_OFFSET = 20
+local DROPDOWN_FIELD_TEXT_LEFT = 12
+local DROPDOWN_FIELD_TEXT_RIGHT = -32
+local DROPDOWN_CHEVRON_RIGHT = -10
+local DROPDOWN_ROW_H = 26
+local DROPDOWN_SEARCH_H = 36
 local DROPDOWN_ICON_SIZE = 20
 local DROPDOWN_ICON_LEFT = 12
-local DROPDOWN_ICON_TEXT_LEFT = 36
+local DROPDOWN_ICON_TEXT_LEFT = 40
+local DROPDOWN_SWATCH_TEXT_LEFT = 36
 local DROPDOWN_TEXTURE_PREVIEW_W = 72
 local DROPDOWN_TEXTURE_PREVIEW_H = 12
-local DROPDOWN_TEXTURE_TEXT_LEFT = 92
+local DROPDOWN_TEXTURE_TEXT_LEFT = 94
+W.DROPDOWN_FIELD_H = DROPDOWN_FIELD_H
+W.DROPDOWN_FIELD_OFFSET = DROPDOWN_FIELD_OFFSET
 local DROPDOWN_BAR_PREVIEW_W = 132
 local DROPDOWN_BAR_PREVIEW_H = 8
 local DROPDOWN_BAR_PREVIEW_RIGHT = 24
@@ -266,17 +278,16 @@ local function DropdownAvailableSpace(owner)
     if not (ownerTop and ownerBottom and boundaryTop and boundaryBottom) then return nil, nil end
     return max(0, ownerBottom - boundaryBottom - 10), max(0, boundaryTop - ownerTop - 10)
 end
-local function DropdownVisibleRows(owner, rowCount, preferred, rowHeight)
+local function DropdownVisibleRows(owner, rowCount, preferred, rowHeight, chromeHeight)
     preferred = min(rowCount or 0, preferred or 12)
     rowHeight = tonumber(rowHeight) or DROPDOWN_ROW_H
     local below, above = DropdownAvailableSpace(owner)
     if not below then return preferred, false end
-    local preferredH = preferred * rowHeight + 4
+    local preferredH = preferred * rowHeight + chromeHeight
     local openAbove = below < preferredH and above > below
     local maxSpace = openAbove and above or below
-    local fit = floor((maxSpace - 4) / rowHeight)
-    if fit > 0 then preferred = min(preferred, max(3, fit)) end
-    return max(1, preferred), openAbove
+    local fit = floor((maxSpace - chromeHeight) / rowHeight)
+    return max(1, min(preferred, fit)), openAbove
 end
 local function DropdownAnchorCoord(v)
     return floor((tonumber(v) or 0) + 0.5)
@@ -343,6 +354,20 @@ local function FinishDropdownClose(frame)
         frame:SetAlpha(1)
     end
 end
+local function ResetDropdownSearch(hide)
+    if not (dropdownSearch and dropdownSearch:IsShown()) then return end
+    if dropdownSearch._msuf2Values then
+        dropdownSearch._msuf2Values = nil
+        dropdownFrame:UnregisterEvent("GLOBAL_MOUSE_DOWN")
+        dropdownSearch:ClearFocus()
+        dropdownSearch:EnableMouse(false)
+    end
+    if hide then
+        dropdownSearch:Hide()
+        dropdownSearch._msuf2Empty:Hide()
+        dropdownSearch:SetText("")
+    end
+end
 function CloseDropdown(opts)
     local immediate = opts == true or (type(opts) == "table" and opts.immediate == true)
     if dropdownClosing and not dropdownOwner and not immediate then return end
@@ -352,6 +377,7 @@ function CloseDropdown(opts)
     dropdownClosing = true
     dropdownClosingOwner = owner
     dropdownOwner = nil
+    ResetDropdownSearch(immediate)
     HideDropdownFocus(not immediate)
     if immediate and dropdownFrame then
         dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
@@ -457,6 +483,7 @@ local function EnsureDropdownFrame()
         HideDropdownFocus(true)
         SetDropdownOwnerMouseWheel(dropdownOwner or dropdownClosingOwner, false)
         dropdownOwner = nil
+        ResetDropdownSearch(true)
         dropdownClosing = nil
         dropdownClosingOwner = nil
         if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
@@ -517,15 +544,28 @@ HideDropdownItemTooltip = function(owner)
     if not GameTooltip then return end
     if not owner or not GameTooltip.IsOwned or GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
 end
+-- Long translated labels end in an ellipsis; the tooltip then carries the full text.
+local function TruncatedText(fs)
+    if not (fs and fs.IsTruncated and fs:IsShown() and fs:IsTruncated()) then return nil end
+    local text = fs:GetText()
+    if text == nil or text == "" then return nil end
+    return text
+end
 local function ShowDropdownItemTooltip(owner)
     local item = owner and owner._msuf2Item
     local body = DropdownItemTooltipField(item, "tooltip", "description")
-    if not body or not GameTooltip then return end
-    local title = DropdownItemTooltipField(item, "tooltipTitle") or DropdownItemText(item)
+    if not GameTooltip or not (body or TruncatedText(owner and owner._msuf2Text)) then return end
+    local title = body and DropdownItemTooltipField(item, "tooltipTitle") or DropdownItemText(item)
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-    GameTooltip:SetText(title, 1, 1, 1)
-    GameTooltip:AddLine(body, 0.80, 0.86, 1.00, true)
+    GameTooltip:SetText(title, 1, 1, 1, 1, true)
+    if body then GameTooltip:AddLine(body, 0.80, 0.86, 1.00, true) end
     GameTooltip:Show()
+end
+--- Full title and selected-value text of a dropdown field whose label had to be
+--- cut short (nil when it fits). Page tooltips on the field append the value.
+function W.DropdownOverflowText(owner)
+    if not (owner and owner._msuf2ControlKind == "dropdown") then return nil, nil end
+    return TruncatedText(owner._msuf2Title), TruncatedText(owner._msuf2Label)
 end
 local function DropdownItemIcon(item)
     if type(item) ~= "table" then return nil end
@@ -609,9 +649,8 @@ local function ApplyDropdownItemFont(fs, item)
         return
     end
     local d = fs._msuf2DropdownDefaultFont
-    -- SharedMedia fonts use very different ascender/descender metrics. A one-pixel
-    -- inset keeps the font-name preview inside both the 24 px rows and 22 px field.
-    local size = max(8, ((d and d[2]) or 14) - 1)
+    -- Font previews can use third-party faces with unusually tall glyphs.
+    local size = max(8, ((d and d[2]) or T.FontSize("control")) - 1)
     local fontKey = item.fontKey or item.fontPreviewKey
     local fontPath = item.fontPath or item.font
     if (type(fontPath) ~= "string" or fontPath == "") and type(fontKey) == "string" and fontKey ~= "" then
@@ -716,17 +755,45 @@ local function PaintDropdownBarPreview(frame, config, width)
         frame._msuf2BarPreview[2].host:Hide()
     end
 end
--- The leading-edge parts of a choice row or field (icon, swatch with its border,
--- texture preview with its border); each kind of choice hides the others. Every
--- dropdown repaint runs this, so the hides are written out instead of looped.
+-- Plain choices need no art. A pooled row or field creates each preview
+-- region only when it first displays that kind of value.
+local function EnsureDropdownChoiceArt(frame, kind, width, height)
+    local preview = frame[kind]
+    local borderKey = kind .. "Border"
+    if preview then return preview, frame[borderKey] end
+    local border = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
+    border:SetPoint("LEFT", frame, "LEFT", frame._msuf2ChoiceBorderLeft, 0)
+    local padding = kind == "_msuf2Swatch" and 4 or 2
+    border:SetSize(width + padding, height + padding)
+    border:SetColorTexture(0, 0, 0, frame._msuf2ChoiceBorderAlpha)
+    frame[borderKey] = border
+    preview = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
+    preview:SetPoint("CENTER", border, "CENTER", 0, 0)
+    preview:SetSize(width, height)
+    frame[kind] = preview
+    return preview, border
+end
+local function EnsureDropdownIcon(frame)
+    local texture = frame._msuf2Icon
+    if not texture then
+        texture = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
+        texture:SetPoint("LEFT", frame, "LEFT", DROPDOWN_ICON_LEFT, 0)
+        texture:SetSize(DROPDOWN_ICON_SIZE, DROPDOWN_ICON_SIZE)
+        frame._msuf2Icon = texture
+    end
+    return texture
+end
+local function HideDropdownChoiceArt(frame, except)
+    local previous = frame._msuf2ChoiceArt
+    if not previous or previous == except then return end
+    frame[previous]:Hide()
+    local border = frame[previous .. "Border"]
+    if border then border:Hide() end
+end
 local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInset, statusbarTexture, barPreview)
-    local left = 12
+    local left = frame._msuf2CompactValueInsets and 6 or DROPDOWN_FIELD_TEXT_LEFT
+    local art
     if barPreview then
-        if frame._msuf2Icon then frame._msuf2Icon:Hide() end
-        if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
-        if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
-        if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
-        if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
         local inset = DROPDOWN_BAR_PREVIEW_RIGHT + DROPDOWN_BAR_PREVIEW_LABEL_GAP
         local textWidth = label.GetUnboundedStringWidth and label:GetUnboundedStringWidth() or label:GetStringWidth()
         local available = floor(frame:GetWidth() - left - inset - textWidth)
@@ -738,71 +805,33 @@ local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInse
             HideDropdownBarPreview(frame)
         end
     else
-        HideDropdownBarPreview(frame)
-        if statusbarTexture and frame._msuf2TexturePreview then
-            if frame._msuf2Icon then frame._msuf2Icon:Hide() end
-            if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
-            if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
-            if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Show() end
-            frame._msuf2TexturePreview:SetTexture(statusbarTexture)
-            frame._msuf2TexturePreview:SetVertexColor(1, 1, 1, 1)
-            frame._msuf2TexturePreview:Show()
+        if frame._msuf2BarPreview then HideDropdownBarPreview(frame) end
+        if statusbarTexture then
+            art = "_msuf2TexturePreview"
+            local texture, border = EnsureDropdownChoiceArt(frame, art, DROPDOWN_TEXTURE_PREVIEW_W, DROPDOWN_TEXTURE_PREVIEW_H)
+            texture:SetTexture(statusbarTexture)
+            texture:SetVertexColor(1, 1, 1, 1)
+            texture:Show()
+            border:Show()
             left = DROPDOWN_TEXTURE_TEXT_LEFT
         elseif icon then
-            if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
-            if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
-            if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
-            if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
-            SetDropdownIconTexture(frame._msuf2Icon, icon)
+            art = "_msuf2Icon"
+            SetDropdownIconTexture(EnsureDropdownIcon(frame), icon)
             left = DROPDOWN_ICON_TEXT_LEFT
         elseif sr then
-            if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
-            if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
-            if frame._msuf2Icon then frame._msuf2Icon:Hide() end
-            frame._msuf2Swatch:SetColorTexture(sr, sg, sb, sa or 1)
-            frame._msuf2Swatch:Show()
-            frame._msuf2SwatchBorder:Show()
-            left = 34
-        else
-            if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
-            if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
-            if frame._msuf2Icon then frame._msuf2Icon:Hide() end
-            if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
-            if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
+            art = "_msuf2Swatch"
+            local swatch, border = EnsureDropdownChoiceArt(frame, art, 12, 12)
+            swatch:SetColorTexture(sr, sg, sb, sa or 1)
+            swatch:Show()
+            border:Show()
+            left = DROPDOWN_SWATCH_TEXT_LEFT
         end
     end
+    HideDropdownChoiceArt(frame, art)
+    frame._msuf2ChoiceArt = art
     label:ClearAllPoints()
     label:SetPoint("LEFT", frame, "LEFT", left, 0)
     label:SetPoint("RIGHT", frame, "RIGHT", rightInset or -8, 0)
-end
-local function AddDropdownChoiceAssets(frame, borderLeft, borderAlpha)
-    local swatchBorder = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
-    swatchBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 12, 0)
-    swatchBorder:SetSize(16, 16)
-    swatchBorder:SetColorTexture(0, 0, 0, borderAlpha or 0.85)
-    swatchBorder:Hide()
-    frame._msuf2SwatchBorder = swatchBorder
-    local swatch = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
-    swatch:SetPoint("CENTER", swatchBorder, "CENTER", 0, 0)
-    swatch:SetSize(12, 12)
-    swatch:Hide()
-    frame._msuf2Swatch = swatch
-    local icon = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
-    icon:SetPoint("LEFT", frame, "LEFT", DROPDOWN_ICON_LEFT, 0)
-    icon:SetSize(DROPDOWN_ICON_SIZE, DROPDOWN_ICON_SIZE)
-    icon:Hide()
-    frame._msuf2Icon = icon
-    local texturePreviewBorder = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
-    texturePreviewBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 12, 0)
-    texturePreviewBorder:SetSize(DROPDOWN_TEXTURE_PREVIEW_W + 2, DROPDOWN_TEXTURE_PREVIEW_H + 2)
-    texturePreviewBorder:SetColorTexture(0, 0, 0, borderAlpha or 0.85)
-    texturePreviewBorder:Hide()
-    frame._msuf2TexturePreviewBorder = texturePreviewBorder
-    local texturePreview = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
-    texturePreview:SetPoint("CENTER", texturePreviewBorder, "CENTER", 0, 0)
-    texturePreview:SetSize(DROPDOWN_TEXTURE_PREVIEW_W, DROPDOWN_TEXTURE_PREVIEW_H)
-    texturePreview:Hide()
-    frame._msuf2TexturePreview = texturePreview
 end
 -- Keyboard focus is separate from the saved selection. Moving through a list
 -- never writes a setting; Enter uses the same guarded action as a mouse click.
@@ -818,7 +847,7 @@ FocusDropdownRow = function(index, scroll)
     if scroll then
         local top = (index - 1) * dropdownActiveRowHeight
         local offset = dropdownScroll:GetVerticalScroll() or 0
-        local visible = dropdownFrame:GetHeight() - 4
+        local visible = dropdownFrame._msuf2ListHeight
         if top < offset then SetDropdownScroll(top)
         elseif top + dropdownActiveRowHeight > offset + visible then
             SetDropdownScroll(top + dropdownActiveRowHeight - visible)
@@ -827,20 +856,11 @@ FocusDropdownRow = function(index, scroll)
         ShowDropdownItemTooltip(row)
     end
 end
-DropdownKeyDown = function(self, key)
-    local handled = dropdownOwner and (key == "ESCAPE" or key == "UP" or key == "DOWN"
-        or key == "HOME" or key == "END" or key == "ENTER" or key == "SPACE")
-    if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(not handled) end
-    if not handled then return end
-    if key == "ESCAPE" then
-        CloseDropdown({ immediate = true })
-        return
-    end
-    if key == "ENTER" or key == "SPACE" then
-        local row = dropdownRows[self._msuf2KeyboardIndex or 0]
-        if row then row:GetScript("OnClick")(row) end
-        return
-    end
+local function ActivateDropdownRow()
+    local row = dropdownRows[dropdownFrame._msuf2KeyboardIndex or 0]
+    if row then row:GetScript("OnClick")(row) end
+end
+local function MoveDropdownSelection(self, key)
     local count = self._msuf2RowCount or 0
     local step = (key == "UP" or key == "END") and -1 or 1
     local index = self._msuf2KeyboardIndex or (step == 1 and 0 or count + 1)
@@ -853,6 +873,19 @@ DropdownKeyDown = function(self, key)
             return
         end
         index = index + step
+    end
+end
+DropdownKeyDown = function(self, key)
+    local handled = dropdownOwner and (key == "ESCAPE" or key == "UP" or key == "DOWN"
+        or key == "HOME" or key == "END" or key == "ENTER" or key == "SPACE")
+    if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(not handled) end
+    if not handled then return end
+    if key == "ESCAPE" then
+        CloseDropdown(true)
+    elseif key == "ENTER" or key == "SPACE" then
+        ActivateDropdownRow()
+    else
+        MoveDropdownSelection(self, key)
     end
 end
 -- Rows and the owning button hand their wheel input to the list's own handler.
@@ -896,8 +929,8 @@ local function DropdownRow(index)
     selected:SetColorTexture(T.colors.accent2[1], T.colors.accent2[2], T.colors.accent2[3], 0.95)
     selected:Hide()
     row._msuf2Selected = selected
-    AddDropdownChoiceAssets(row, 10, 0.85)
-    local text = T.Font(row, "GameFontHighlight", "", T.colors.text)
+    row._msuf2ChoiceBorderLeft, row._msuf2ChoiceBorderAlpha = 10, 0.85
+    local text = T.Font(row, "GameFontHighlight", "", T.colors.text, "control")
     text:SetPoint("LEFT", row, "LEFT", 12, 0)
     text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     text:SetJustifyH("LEFT")
@@ -933,9 +966,184 @@ local function DropdownRow(index)
     dropdownRows[index] = row
     return row
 end
+local function RefreshDropdownScrollbar(count)
+    local visibleHeight = dropdownFrame._msuf2ListHeight
+    local totalHeight = count * dropdownActiveRowHeight
+    dropdownChild:SetHeight(max(1, totalHeight))
+    dropdownSlider:SetShown(totalHeight > visibleHeight)
+    local visibleRatio = visibleHeight / max(1, totalHeight)
+    local thumb = dropdownSlider._msuf2Thumb
+    if thumb then thumb:SetHeight(floor(max(34, min(visibleHeight - 12, visibleHeight * visibleRatio)) + 0.5)) end
+    PaintDropdownScrollbar(dropdownSlider._msuf2Hover)
+end
+
+local function PaintDropdownRows(owner, valuesTable)
+    local selectedIndex, firstEnabled
+    local selectedValue = owner._msuf2DropdownListValue
+    if selectedValue == nil then selectedValue = owner.value end
+    local rowHeight, rowWidth = dropdownActiveRowHeight, dropdownChild:GetWidth()
+    dropdownFrame._msuf2RowCount = #valuesTable
+    for i = 1, #valuesTable do
+        local item = valuesTable[i]
+        local row = DropdownRow(i)
+        local value = DropdownItemValue(item)
+        local icon = DropdownItemIcon(item)
+        local statusbarTexture = DropdownItemStatusbarTexture(item)
+        local barPreview = DropdownItemBarPreview(item)
+        local isHeader = DropdownItemHeader(item)
+        local disabled = DropdownItemDisabled(item)
+        row._msuf2Owner = owner
+        row._msuf2Value = value
+        row._msuf2Item = item
+        row._msuf2DropdownDisabled = disabled
+        row._msuf2KeyboardCue:Hide()
+        row:SetHeight(rowHeight)
+        row._msuf2Selected:SetHeight(rowHeight - 4)
+        if row.SetAlpha then row:SetAlpha(isHeader and 1 or (disabled and 0.62 or 1)) end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -((i - 1) * rowHeight))
+        row:SetWidth(rowWidth)
+        T.SetDangerButtonSurface(row, not disabled and type(item) == "table" and item.destructive == true)
+        row._msuf2Selected:SetShown((not isHeader) and value == selectedValue)
+        if (not isHeader) and value == selectedValue then selectedIndex = i end
+        if not disabled and not firstEnabled then firstEnabled = i end
+        RestoreDropdownDefaultFont(row._msuf2Text)
+        -- DropdownItemText already translated the entry (or kept it raw).
+        T.SetTranslatedText(row._msuf2Text, DropdownItemText(item))
+        if row._msuf2Text.SetTextColor then
+            local c = isHeader and (T.colors.accent2 or T.colors.accent or T.colors.text)
+                or (disabled and (T.colors.disabled or T.colors.dim or T.colors.muted) or T.colors.text)
+            row._msuf2Text:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        if DropdownItemHasFontPreview(item) then ApplyDropdownItemFont(row._msuf2Text, item) end
+        local sr, sg, sb, sa = DropdownItemSwatch(item)
+        -- A header row never shows a bar preview, texture, swatch or icon.
+        if isHeader then barPreview, statusbarTexture, sr, icon = nil, nil, nil, nil end
+        PaintDropdownChoice(row, row._msuf2Text, icon, sr, sg, sb, sa, -6, statusbarTexture, barPreview)
+        row:Show()
+    end
+    for i = #valuesTable + 1, #dropdownRows do
+        dropdownRows[i]:Hide()
+    end
+    return selectedIndex, firstEnabled
+end
+
+local function ScrollToDropdownRow(index)
+    local offset = (index or 1) * dropdownActiveRowHeight - dropdownFrame._msuf2ListHeight
+    SetDropdownScroll(max(0, offset))
+    FocusDropdownRow(index)
+end
+
+local function FilterDropdownItems(values, query)
+    local normalize = M.Search.Text.NormalizeSearchText
+    local words = {}
+    for word in normalize(query):gmatch("%S+") do words[#words + 1] = word end
+    if #words == 0 then return values end
+    local matches = {}
+    for _, item in ipairs(values) do
+        if not DropdownItemHeader(item) then
+            local text = DropdownItemText(item)
+            local label = normalize(text)
+            local alias = type(item) == "table" and (item.searchText or item.text)
+            if alias and alias ~= text then label = label .. " " .. normalize(alias) end
+            local matched = true
+            for i = 1, #words do
+                if not label:find(words[i], 1, true) then
+                    matched = false
+                    break
+                end
+            end
+            if matched then matches[#matches + 1] = item end
+        end
+    end
+    return matches
+end
+
+local function DropdownSearchChanged(self)
+    local query = self:GetText() or ""
+    self._msuf2Placeholder:SetShown(query == "")
+    self._msuf2Clear:SetShown(query ~= "")
+    local values = self._msuf2Values
+    local owner = dropdownOwner
+    if not (owner and values) or self._msuf2Query == query then return end
+    self._msuf2Query = query
+    local matches = FilterDropdownItems(values, query)
+    local empty = self._msuf2Empty
+    if #matches == 0 then
+        T.SetTranslatedText(empty, M.Format("No results for \"%s\".", (query:gsub("|", "||"))))
+    end
+    empty:SetShown(#matches == 0)
+    HideDropdownItemTooltip()
+    FocusDropdownRow(nil)
+    local selectedIndex, firstEnabled = PaintDropdownRows(owner, matches)
+    RefreshDropdownScrollbar(#matches)
+    local index = firstEnabled
+    if matches == values and selectedIndex and not dropdownRows[selectedIndex]._msuf2DropdownDisabled then index = selectedIndex end
+    ScrollToDropdownRow(index)
+end
+
+local function EnsureDropdownSearch()
+    if dropdownSearch then return dropdownSearch end
+    local search = PixelLayoutRegion(CreateFrame("EditBox", nil, dropdownFrame, "InputBoxScriptTemplate"))
+    dropdownSearch = search
+    dropdownFrame._msuf2SearchBox = search
+    search:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 8, -5)
+    search:SetPoint("TOPRIGHT", dropdownFrame, "TOPRIGHT", -8, -5)
+    search:SetHeight(26)
+    search:SetFontObject(GameFontHighlightSmall)
+    search:SetAutoFocus(false)
+    search:SetAltArrowKeyMode(false)
+    search:SetMaxLetters(80)
+    search:SetTextInsets(8, 26, 0, 0)
+    search:EnableMouse(true)
+    search:EnableMouseWheel(true)
+    search:SetScript("OnMouseWheel", ForwardDropdownWheel)
+    T.SkinEditBox(search)
+    T.StyleFontString(search, T.colors.text, 0, "control")
+
+    local placeholder = T.Font(search, "GameFontDisableSmall", "Search", T.colors.searchPlaceholder or T.colors.muted, "control")
+    placeholder:SetPoint("LEFT", search, "LEFT", 8, 0)
+    placeholder:SetPoint("RIGHT", search, "RIGHT", -26, 0)
+    placeholder:SetJustifyH("LEFT")
+    placeholder:SetWordWrap(false)
+    search._msuf2Placeholder = placeholder
+
+    local clear = T.Button(search, "", 20, 20, { history = false })
+    clear:SetPoint("RIGHT", search, "RIGHT", -3, 0)
+    clear:SetText("×", true)
+    clear:SetScript("OnClick", function()
+        if not search._msuf2Values then return end
+        search:SetText("")
+        search:SetFocus()
+    end)
+    clear:Hide()
+    search._msuf2Clear = clear
+
+    local empty = T.Font(dropdownScroll, "GameFontDisableSmall", "", T.colors.muted, "control")
+    empty:SetPoint("TOPLEFT", dropdownScroll, "TOPLEFT", 12, -5)
+    empty:SetPoint("TOPRIGHT", dropdownScroll, "TOPRIGHT", -8, -5)
+    empty:SetJustifyH("LEFT")
+    empty:SetWordWrap(false)
+    empty:Hide()
+    search._msuf2Empty = empty
+
+    -- Route arrow and enter through the list while the edit box owns typing.
+    search:HookScript("OnEditFocusGained", function() dropdownFrame:EnableKeyboard(false) end)
+    search:HookScript("OnEditFocusLost", function() dropdownFrame:EnableKeyboard(true) end)
+    search:SetScript("OnTextChanged", DropdownSearchChanged)
+    search:SetScript("OnArrowPressed", function(_, key)
+        if key == "UP" or key == "DOWN" then MoveDropdownSelection(dropdownFrame, key) end
+    end)
+    search:SetScript("OnEnterPressed", ActivateDropdownRow)
+    search:SetScript("OnEscapePressed", function() CloseDropdown(true) end)
+    dropdownFrame:SetScript("OnEvent", function(self)
+        if dropdownOwner and not (self:IsMouseOver() or dropdownOwner:IsMouseOver()) then CloseDropdown(true) end
+    end)
+    return search
+end
+
 local function OpenDropdown(owner, valuesTable)
     EnsureDropdownFrame()
-    RefreshDropdownMenuFonts()
     valuesTable = (type(valuesTable) == "table") and valuesTable or {}
     if #valuesTable == 0 then return end
     dropdownClosing = nil
@@ -963,70 +1171,42 @@ local function OpenDropdown(owner, valuesTable)
     local preferredWidth = tonumber(owner._msuf2DropdownPreferredWidth)
     local rowWidth = math.max(ownerWidth, preferredWidth
         or (hasBarPreviews and 430 or (hasStatusbarPreviews and 360 or (hasIcons and 300 or 180))))
+    ResetDropdownSearch(true)
+    local search = owner._msuf2DropdownSearchable and EnsureDropdownSearch()
+    local headerHeight = search and DROPDOWN_SEARCH_H or 0
+    local chromeHeight = headerHeight + 4
     local visible, openAbove = DropdownVisibleRows(owner, #valuesTable,
-        (hasIcons or hasStatusbarPreviews or hasBarPreviews) and 12 or 14, rowHeight)
+        (hasIcons or hasStatusbarPreviews or hasBarPreviews) and 12 or 14, rowHeight, chromeHeight)
     owner._msuf2DropdownOpenAbove = openAbove
-    local listHeight = visible * rowHeight + 4
-    local totalHeight = #valuesTable * rowHeight
+    local listHeight = visible * rowHeight
     local needsScroll = #valuesTable > visible
-    dropdownFrame:SetSize(rowWidth + (needsScroll and 20 or 4), listHeight)
-    dropdownChild:SetSize(rowWidth, totalHeight)
+    local listGutter = needsScroll and 20 or 4
+    local boundaryLeft, boundaryRight = DropdownBounds(owner)
+    if boundaryLeft then
+        rowWidth = min(rowWidth, max(1, floor(boundaryRight - boundaryLeft - 16 - listGutter)))
+    end
+    dropdownFrame._msuf2ListHeight = listHeight
+    dropdownFrame:SetSize(rowWidth + listGutter, listHeight + chromeHeight)
+    dropdownChild:SetWidth(rowWidth)
     dropdownScroll:ClearAllPoints()
-    dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2)
+    dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2 - headerHeight)
     dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", needsScroll and -16 or -2, 2)
-    if dropdownSlider then
-        dropdownSlider:SetShown(needsScroll)
-        dropdownSlider:SetMinMaxValues(0, math.max(0, totalHeight - (listHeight - 4)))
-        local visibleRatio = (listHeight - 4) / math.max(totalHeight, 1)
-        local thumbH = floor(max(34, min(listHeight - 16, (listHeight - 4) * visibleRatio)) + 0.5)
-        local thumb = dropdownSlider._msuf2Thumb
-        if thumb and thumb.SetHeight then thumb:SetHeight(thumbH) end
-        PaintDropdownScrollbar(dropdownSlider._msuf2Hover)
-    end
-    local selectedIndex = 1
-    dropdownFrame._msuf2RowCount = #valuesTable
-    for i = 1, #valuesTable do
-        local item = valuesTable[i]
-        local row = DropdownRow(i)
-        local value = DropdownItemValue(item)
-        local icon = DropdownItemIcon(item)
-        local statusbarTexture = DropdownItemStatusbarTexture(item)
-        local barPreview = DropdownItemBarPreview(item)
-        local selectedValue = owner._msuf2DropdownListValue
-        local isHeader = DropdownItemHeader(item)
-        local disabled = DropdownItemDisabled(item)
-        if selectedValue == nil then selectedValue = owner.value end
-        row._msuf2Owner = owner
-        row._msuf2Value = value
-        row._msuf2Item = item
-        row._msuf2DropdownDisabled = disabled
-        row._msuf2KeyboardCue:Hide()
-        row:SetHeight(rowHeight)
-        row._msuf2Selected:SetHeight(rowHeight - 4)
-        if row.SetAlpha then row:SetAlpha(isHeader and 1 or (disabled and 0.62 or 1)) end
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -((i - 1) * rowHeight))
-        row:SetWidth(rowWidth)
-        row._msuf2Selected:SetShown((not isHeader) and value == selectedValue)
-        if (not isHeader) and value == selectedValue then selectedIndex = i end
-        RestoreDropdownDefaultFont(row._msuf2Text)
-        -- DropdownItemText already translated the entry (or kept it raw).
-        T.SetTranslatedText(row._msuf2Text, DropdownItemText(item))
-        if row._msuf2Text.SetTextColor then
-            local c = isHeader and (T.colors.accent2 or T.colors.accent or T.colors.text) or (disabled and (T.colors.dim or T.colors.muted) or T.colors.text)
-            row._msuf2Text:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-        end
-        if DropdownItemHasFontPreview(item) then ApplyDropdownItemFont(row._msuf2Text, item) end
-        local sr, sg, sb, sa = DropdownItemSwatch(item)
-        -- A header row never shows a bar preview, texture, swatch or icon.
-        if isHeader then barPreview, statusbarTexture, sr, icon = nil, nil, nil, nil end
-        PaintDropdownChoice(row, row._msuf2Text, icon, sr, sg, sb, sa, -6, statusbarTexture, barPreview)
-        row:Show()
-    end
-    for i = #valuesTable + 1, #dropdownRows do
-        dropdownRows[i]:Hide()
+    dropdownSlider:SetPoint("TOPRIGHT", dropdownFrame, "TOPRIGHT", -8, -8 - headerHeight)
+    RefreshDropdownScrollbar(#valuesTable)
+    RefreshDropdownMenuFonts()
+    local selectedIndex, firstEnabled = PaintDropdownRows(owner, valuesTable)
+    local index = selectedIndex or (search and firstEnabled) or 1
+    if search then
+        if dropdownRows[index]._msuf2DropdownDisabled then index = firstEnabled end
+        search._msuf2Query = ""
+        search._msuf2Placeholder:Show()
+        search._msuf2Clear:Hide()
+        search._msuf2Values = valuesTable
+        search:EnableMouse(true)
+        search:Show()
     end
     dropdownOwner = owner
+    dropdownFrame:EnableKeyboard(true)
     if dropdownFrame.SetPropagateKeyboardInput then dropdownFrame:SetPropagateKeyboardInput(true) end
     SetDropdownOwnerMouseWheel(owner, true)
     ShowDropdownFocus(owner)
@@ -1034,11 +1214,17 @@ local function OpenDropdown(owner, valuesTable)
     dropdownFrame:SetAlpha(0)
     dropdownFrame:Show()
     dropdownFrame._msuf2AnchorKey = nil
-    PositionDropdown(owner)
-    SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * rowHeight) or 0)
-    FocusDropdownRow(selectedIndex)
+    if not PositionDropdown(owner) then
+        CloseDropdown(true)
+        return
+    end
+    ScrollToDropdownRow(index)
     PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })
-    ShowForeverDropdown(dropdownRows[selectedIndex])
+    ShowForeverDropdown(index and dropdownRows[index])
+    if search then
+        dropdownFrame:RegisterEvent("GLOBAL_MOUSE_DOWN")
+        if not (IS_FOREVER and MSUF.PadNavigation and MSUF.PadNavigation.IsGamepadUI()) then search:SetFocus() end
+    end
 end
 function W.OpenDropdown(owner, values, currentValue, onSelect)
     if not owner or CloseIfCombatBlocked() then return false end
@@ -1072,29 +1258,36 @@ local function FindDropdownItem(owner, value)
     end
     return nil, dynamic
 end
-function W.Dropdown(section, label, values, width)
+function W.Dropdown(section, label, values, width, opts)
     local x, y = NextRow(section, 48)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
-    local btn = T.Button(section, "", width or 240, 22, { history = false })
+    -- The title starts at the field's left edge. A label wider than the field
+    -- is cut with an ellipsis instead of wrapping onto the field below it.
+    title:SetJustifyH("LEFT")
+    if title.SetWordWrap then title:SetWordWrap(false) end
+    local btn = T.Button(section, "", width or 240, DROPDOWN_FIELD_H, { history = false })
     RegisterSearchObject(btn, label, "dropdown", { anchor = title, values = values })
     btn._msuf2Title = title
     btn._msuf2ControlKind = "dropdown"
     btn._msuf2DropdownWheelManaged = true
-    btn:SetPoint("TOPLEFT", x, y - 24)
+    btn._msuf2DropdownSearchable = opts and opts.searchable
+    btn:SetPoint("TOPLEFT", x, y - DROPDOWN_FIELD_OFFSET)
     btn.values = values or {}
+    T.ApplyMenuFont(btn._msuf2Label, 0, "control")
     btn._msuf2Label:ClearAllPoints()
-    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 12, 0)
-    btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -28, 0)
+    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", DROPDOWN_FIELD_TEXT_LEFT, 0)
+    btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", DROPDOWN_FIELD_TEXT_RIGHT, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
+    if btn._msuf2Label.SetWordWrap then btn._msuf2Label:SetWordWrap(false) end
     StoreDropdownDefaultFont(btn._msuf2Label)
     btn._msuf2Chevron = PixelLayoutRegion(btn:CreateTexture(nil, "OVERLAY"))
     btn._msuf2Chevron:SetTexture(T.media.dropdownChevron)
-    btn._msuf2Chevron:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+    btn._msuf2Chevron:SetPoint("RIGHT", btn, "RIGHT", DROPDOWN_CHEVRON_RIGHT, 0)
     btn._msuf2Chevron:SetSize(12, 12)
     btn._msuf2Chevron:SetVertexColor(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.95)
-    AddDropdownChoiceAssets(btn, 9, 0.90)
+    btn._msuf2ChoiceBorderLeft, btn._msuf2ChoiceBorderAlpha = 9, 0.90
     function btn:SetValues(nextValues)
         self.values = nextValues or {}
         if type(M.RegisterSearchWidget) == "function" then
@@ -1120,9 +1313,15 @@ function W.Dropdown(section, label, values, width)
             self:SetText(item and DropdownItemText(item) or tostring(value or ""))
         end
         if DropdownItemHasFontPreview(selectedItem) then ApplyDropdownItemFont(self._msuf2Label, selectedItem) end
-        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26, statusbarTexture, barPreview)
+        local rightInset = self._msuf2CompactValueInsets and -24 or DROPDOWN_FIELD_TEXT_RIGHT
+        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, rightInset, statusbarTexture, barPreview)
         local meta = self._msuf2SearchMeta
         if meta and dynamic then M.RegisterSearchWidget(self, meta) end
+    end
+    function btn:UseCompactValueInsets()
+        self._msuf2CompactValueInsets = true
+        self._msuf2Chevron:SetPoint("RIGHT", self, "RIGHT", -8, 0)
+        if self.value ~= nil then self:SetValue(self.value) end
     end
     function btn:GetValue()
         return self.value
@@ -1151,6 +1350,23 @@ function W.Dropdown(section, label, values, width)
     end)
     btn:HookScript("OnHide", function(self)
         if dropdownOwner == self then CloseDropdown({ immediate = true }) end
+    end)
+    -- A field without a page tooltip shows its cut-short title or value here;
+    -- M.AddTooltip owners (_msuf2TooltipTarget) append the value themselves.
+    -- A disabled reason hooked later is added to this same tooltip.
+    btn:HookScript("OnEnter", function(self)
+        if self._msuf2TooltipTarget or dropdownOwner == self or not GameTooltip then return end
+        local titleText, valueText = W.DropdownOverflowText(self)
+        if not (titleText or valueText) then return end
+        local heading = titleText or (self._msuf2Title and self._msuf2Title:GetText())
+        if heading == nil or heading == "" then heading, valueText = valueText, nil end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(heading, 1, 1, 1, 1, true)
+        if valueText then GameTooltip:AddLine(valueText, 0.80, 0.86, 1.00, true) end
+        GameTooltip:Show()
+    end)
+    btn:HookScript("OnLeave", function(self)
+        if not self._msuf2TooltipTarget then HideDropdownItemTooltip(self) end
     end)
     btn:SetScript("OnMouseWheel", function(self, delta)
         if dropdownOwner ~= self or not (dropdownFrame and dropdownFrame:IsShown()) then return end

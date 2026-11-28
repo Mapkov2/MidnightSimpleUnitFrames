@@ -1042,6 +1042,9 @@ local function AcquireVisualRow(popup, index)
     edit:SetJustifyH("CENTER")
     if edit.SetTextInsets then edit:SetTextInsets(2, 2, 0, 0) end
     if T.SkinEditBox then T.SkinEditBox(edit) end
+    -- Compact row: the field keeps the 18 height of its strata picker; the
+    -- number uses the control role like the row's other values.
+    if T.ApplyMenuFont then T.ApplyMenuFont(edit, 0, "control") end
     edit:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
     edit:SetScript("OnEnterPressed", function(self)
         local owner = self._ownerRow

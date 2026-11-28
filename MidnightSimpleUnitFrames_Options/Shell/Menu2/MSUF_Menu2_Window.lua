@@ -31,10 +31,8 @@ end
 
 local function RaiseForeverPadCursor()
     if not IS_FOREVER or ForeverPadUI() then return end
-    if type(CanAutoSetGamePadCursorControl) == "function"
-        and type(SetGamePadCursorControl) == "function"
-        and CanAutoSetGamePadCursorControl(true)
-    then
+    if type(CanAutoSetGamePadCursorControl) == "function" and type(SetGamePadCursorControl) == "function"
+        and CanAutoSetGamePadCursorControl(true) then
         SetGamePadCursorControl(true)
     end
 end
@@ -136,6 +134,26 @@ local function MenuScaleValue(percent)
 end
 local function EffectiveMenuScale(value)
     return ClampScale(value) * MENU_BASE_SCALE
+end
+-- A fresh install opens at a size that leaves room around the window. The
+-- 860-unit default fills a 768-unit screen (UI scale 100%) from edge to edge,
+-- so the first window build picks the largest 5% step that keeps the default
+-- window within MENU_SEED_SCREEN_SHARE of the screen height. It never scales
+-- up, applies only while the one-time welcome is pending and the scale is the
+-- untouched factory value, and records itself so a later choice of 100% stays.
+local MENU_SEED_SCREEN_SHARE, MENU_SEED_MIN_PERCENT = 0.80, 60
+local function SeedMenuScaleForScreen()
+    local firstLoad = MSUF.FirstLoad6
+    local state = firstLoad and firstLoad:GetState()
+    if not state or state.menuScaleSeeded or state.installKind ~= "fresh" or state.status ~= "pending" then return false end
+    local g = M.GetGeneralDB()
+    if math.abs((tonumber(g.slashMenuScale) or MENU_SCALE_REFERENCE) - MENU_SCALE_REFERENCE) > 0.001 then return false end
+    local fit = MENU_SEED_SCREEN_SHARE * UIParent:GetHeight() / (DEFAULT_WINDOW_H * EffectiveMenuScale(MENU_SCALE_REFERENCE))
+    local percent = floor(fit * 100 / MENU_SCALE_STEP_PERCENT) * MENU_SCALE_STEP_PERCENT
+    if percent >= 100 then return false end
+    g.slashMenuScale = MenuScaleValue(max(MENU_SEED_MIN_PERCENT, percent))
+    state.menuScaleSeeded = true
+    return true
 end
 local function WindowMaxBounds()
     local maxW, maxH = MAX_WINDOW_W, MAX_WINDOW_H
@@ -433,6 +451,7 @@ local function ResetWindowState(frame, closing)
     if closing then
         frame._msuf2PreMinimizeLayout = nil
         frame._msuf2Minimized = nil
+        frame._msuf2EditModeParked = nil
     end
 end
 local function RestoreSlashMenuWindow(frame)
@@ -496,6 +515,7 @@ local function RestoreMinimizedSlashMenu(frame)
     local target = frame._msuf2PreMinimizeLayout or CaptureFrameLayout(frame)
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     frame._msuf2Minimized = nil
+    frame._msuf2EditModeParked = nil
     ApplyMenuFramePriority(frame)
     if start and target then
         ApplyRawFrameLayout(frame, start)
@@ -542,6 +562,7 @@ local function MinimizeSlashMenuWindow(frame)
     if not M.minimizedBar then return false end
     local start = CaptureFrameLayout(frame)
     frame._msuf2Minimized = true
+    frame._msuf2EditModeParked = nil
     frame._msuf2PreMinimizeLayout = start
     if M.minimizedBar.title and frame.title and frame.title.GetText then T.SetTranslatedText(M.minimizedBar.title, frame.title:GetText() or "MSUF Menu") end
     ApplyMenuFramePriority(M.minimizedBar)
@@ -653,9 +674,7 @@ local function ApplySlashMenuSnap(frame)
             ApplyWindowLayout(frame, layout, true)
             RefreshWindowControls(frame)
         end,
-    }) then
-        return true
-    end
+    }) then return true end
     ApplyWindowLayout(frame, layout, true)
     RefreshWindowControls(frame)
     return true
@@ -710,6 +729,30 @@ local function RefreshDashboardEditModeButton()
     end
     M.RefreshGuidedTourChrome("EDIT_MODE_STATUS")
 end
+-- The unit whose page is open, so that Edit Mode started from the toolbar
+-- lands on that frame instead of always on the player frame.
+function M.ActiveEditUnitKey()
+    local unitPage = M.UnitPage
+    local page = unitPage and unitPage.UNIT_PAGES[M.activeKey]
+    return page and page.unit or nil
+end
+-- Edit Mode started from the toolbar parks the window in its minimized bar, so
+-- the frames are free to drag, and the window returns when Edit Mode ends.
+function M.ParkMenuForEditMode()
+    local frame = M.frame
+    if not (frame and frame:IsShown() and IsEditModeActive()) then return false end
+    if not MinimizeSlashMenuWindow(frame) then return false end
+    frame._msuf2EditModeParked = true
+    return true
+end
+-- A window the player restored, minimized again or closed in between is left
+-- alone, and nothing reopens on the frame that starts combat.
+local function ReturnMenuAfterEditMode(frame)
+    if not frame._msuf2EditModeParked or IsEditModeActive() then return end
+    local parked = frame._msuf2Minimized
+    frame._msuf2EditModeParked = nil
+    if parked and not M.IsConfigCombatLocked() then RestoreMinimizedSlashMenu(frame) end
+end
 local editModeUIHooked = false
 local function EnsureEditModeUIHook()
     if editModeUIHooked then return end
@@ -717,6 +760,7 @@ local function EnsureEditModeUIHook()
     register(function()
         RefreshMenuFramePriority()
         local frame = M.frame
+        if frame then ReturnMenuAfterEditMode(frame) end
         if frame and frame:IsShown() then
             if frame.RefreshStatus then frame:RefreshStatus() end
             M.RequestOrRefresh(nil, "edit-mode-ui")
@@ -1043,10 +1087,7 @@ end
 function M.EnsureFixedPreviewExpansionRoom(expander, animate)
     local frame = M.frame
     if not (frame and expander and type(expander.GetPreferredExpansionShortfall) == "function")
-        or frame._msuf2GrowingForFixedPreview
-    then
-        return false
-    end
+        or frame._msuf2GrowingForFixedPreview then return false end
     local animation = frame._msuf2WindowLayoutAnim
     if animation then
         -- The animation owns raw geometry until its normal completion rebuild.
@@ -1077,6 +1118,7 @@ ApplyMenuFrameScale = function(frame)
     local g = M.GetGeneralDB()
     local previousW = frame.GetWidth and frame:GetWidth() or WINDOW_W
     local previousH = frame.GetHeight and frame:GetHeight() or WINDOW_H
+    local previousScale = frame:GetScale()
     frame:SetScale(EffectiveMenuScale(g.slashMenuScale))
     if frame.windowControls and frame.windowControls._msuf2CaptionGroup then RefreshWindowControls(frame) end
     ApplyWindowResizeBounds(frame)
@@ -1142,6 +1184,7 @@ Parts.ResetWindowState = ResetWindowState
 Parts.RestoreMinimizedSlashMenu = RestoreMinimizedSlashMenu
 Parts.RestoreSlashMenuWindow = RestoreSlashMenuWindow
 Parts.SavePersistentMenuState = SavePersistentMenuState
+Parts.SeedMenuScaleForScreen = SeedMenuScaleForScreen
 Parts.SetCachedText = SetCachedText
 Parts.SetWindowMetrics = SetWindowMetrics
 Parts.SyncBossPagePreviewForKey = SyncBossPagePreviewForKey

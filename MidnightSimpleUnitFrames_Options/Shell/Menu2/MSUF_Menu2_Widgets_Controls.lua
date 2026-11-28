@@ -125,18 +125,20 @@ local function UpdateToggleProxyBounds(button)
     textWidth = max(0, textWidth)
     local baseWidth = tonumber(button._msuf2ProxyBaseWidth) or 40
     local hitWidth = max(36, floor(baseWidth + textWidth + 0.5))
+    local height = button._msuf2ToggleCaptionHeight or 28
+    local anchor = height > 28 and "TOPLEFT" or "LEFT"
     local rowHover = button._msuf2ToggleRowHover
     if rowHover then
         rowHover:ClearAllPoints()
-        rowHover:SetPoint("LEFT", button, "LEFT", -4, 0)
-        rowHover:SetSize(hitWidth, 28)
+        rowHover:SetPoint(anchor, button, anchor, -4, 0)
+        rowHover:SetSize(hitWidth, height)
         if rowHover.SetTexCoord then rowHover:SetTexCoord(0, 1, 0, 1) end
     end
     local labelHit = button._msuf2LabelHit
     if labelHit then
         labelHit:ClearAllPoints()
-        labelHit:SetPoint("LEFT", button, "LEFT", -4, 0)
-        labelHit:SetSize(hitWidth, 28)
+        labelHit:SetPoint(anchor, button, anchor, -4, 0)
+        labelHit:SetSize(hitWidth, height)
     end
 end
 local function UseControlTexture(tex, texture)
@@ -307,6 +309,7 @@ local function RefreshSwitchVisual(button, hover)
         br = checked and T.colors.checkActiveEdge or T.colors.checkInactiveEdge
         kb = checked and T.colors.title or T.colors.muted
     end
+    if not enabled then bg, br, kb = T.colors.disabledSurface, T.colors.disabledEdge, T.colors.disabled end
     local mul = enabled and (pressed and 1.10 or hover and 1.08 or 1) or 1
     local alpha = enabled and 1 or 0.58
     if button._msuf2SwitchFill then button._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] * alpha) end
@@ -482,6 +485,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
         local br = checked
             and (T.colors.checkActiveEdge or { min(active[1] + 0.20, 1), min(active[2] + 0.31, 1), min(active[3] + 0.48, 1), 0.90 })
             or (T.colors.checkInactiveEdge or ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 }))
+        if not enabled then bg, br = T.colors.disabledSurface, T.colors.disabledEdge end
         local bgMul = enabled and (down and 1.14 or hover and 1.08 or 1) or 1
         local borderAlpha = enabled
             and (checked and (down and 1.00 or hover and 0.96 or 0.88) or (down and 0.90 or hover and 0.80 or 0.68))
@@ -621,16 +625,37 @@ function W.SectionSwitch(section, label, displayLabel)
     if M.AddTooltip then M.AddTooltip(button, label, nil, { hook = true }) end
     return button
 end
-local function ScopeButtonWidth(item, overrides, button)
-    local text = Tr(item.text or item.label or tostring(item.value or ""))
+-- A scope item may carry compactText (and compactWidth). A bar built with
+-- compactWhenWrapped shows those short labels for as long as the full ones
+-- would need a second row, and returns to the full labels once they fit.
+local function ScopeItemText(item, compact)
+    return (compact and item.compactText) or item.text or item.label or tostring(item.value or "")
+end
+local function ScopeButtonWidth(item, overrides, compact, button)
+    local text = Tr(ScopeItemText(item, compact))
     if overrides and item.value ~= "shared" then text = text .. " *" end
-    local minimum = item.width or 56
+    local minimum = (compact and item.compactWidth) or item.width or 56
     local label = button and button._msuf2Label
     local width = T.MeasureTabWidth(text, minimum, label)
     if label and label:GetText() ~= text then
         width = math.max(width, T.MeasureTabWidth(label:GetText(), minimum, label))
     end
     return width
+end
+local function MeasureScopeRows(values, flow, compact, buttons)
+    local startX, maxRight = flow.startX, flow.maxRight
+    local x, y, rows = startX, flow.centerY, 1
+    for i = 1, #values do
+        local preferred = ScopeButtonWidth(values[i], flow.hasOverride, compact, buttons and buttons[i])
+        local width = math.min(math.max(1, maxRight - startX), preferred)
+        if x > startX and x + width > maxRight then
+            x = startX
+            y = y - flow.rowStep
+            rows = rows + 1
+        end
+        x = x + width + flow.gap
+    end
+    return rows, y
 end
 local function MeasureScopeOverrideLayout(values, opts)
     opts = opts or {}
@@ -644,19 +669,14 @@ local function MeasureScopeOverrideLayout(values, opts)
     local sectionW = opts.width or (opts.ctx and opts.ctx.width) or 720
     local maxRight = opts.maxRight or (sectionW - 14)
     local startX = opts.startX or (labelX + labelW + 8)
-    local x, y = startX, centerY
-    local rows = 1
-    for i = 1, #values do
-        local width = math.min(math.max(1, maxRight - startX), ScopeButtonWidth(values[i], opts.hasOverride))
-        if x > startX and x + width > maxRight then
-            x = startX
-            y = y - rowStep
-            rows = rows + 1
-        end
-        x = x + width + gap
-    end
+    local flow = { startX = startX, maxRight = maxRight, centerY = centerY, rowStep = rowStep, gap = gap,
+        hasOverride = opts.hasOverride }
+    local rows, y = MeasureScopeRows(values, flow, false)
+    local compact = opts.compactWhenWrapped == true and rows > 1
+    if compact then rows, y = MeasureScopeRows(values, flow, true) end
     return {
         rows = rows,
+        compact = compact,
         bottomY = y - math.floor(buttonH * 0.5 + 0.5),
         centerY = centerY,
         lastRowCenterY = y,
@@ -753,6 +773,18 @@ local function GrowScopeSection(ctx, section, dh)
         if builders[i].RequestRelayoutCollapsibles then builders[i]:RequestRelayoutCollapsibles() end
     end
 end
+-- Swaps a bar between its full and its short labels. Only the visible text
+-- changes: the search identity of the bar keeps the full labels.
+local function SetScopeBarCompact(bar, compact)
+    bar._msuf2Compact = compact
+    for i = 1, #bar.buttons do
+        local btn = bar.buttons[i]
+        local text = Tr(ScopeItemText(bar.values[i], compact))
+        if btn._msuf2ScopeText then btn._msuf2ScopeText = text end
+        if btn._msuf2ScopeOverride then text = text .. " *" end
+        T.SetTranslatedText(btn._msuf2Label, text)
+    end
+end
 -- A retained page only reflows on a resize, so a scope bar wraps its buttons
 -- again for its new width, and its section grows or shrinks by the rows it
 -- gained or lost.
@@ -762,10 +794,18 @@ local function ReflowScopeBar(ctx, section, bar, layout, measure)
     layout.width = width
     local startX, gap, rowStep = layout.startX, layout.gap, layout.rowStep
     local maxRight = width - layout.inset
+    if layout.compactWhenWrapped then
+        layout.maxRight = maxRight
+        local compact = MeasureScopeRows(bar.values, layout, false, bar.buttons) > 1
+        if compact ~= layout.compact then
+            layout.compact, measure = compact, true
+            SetScopeBarCompact(bar, compact)
+        end
+    end
     local x, y, rows = startX, layout.centerY, 1
     for i = 1, #bar.buttons do
         local btn = bar.buttons[i]
-        if measure then btn._msuf2BaseWidth = ScopeButtonWidth(bar.values[i], layout.hasOverride, btn) end
+        if measure then btn._msuf2BaseWidth = ScopeButtonWidth(bar.values[i], layout.hasOverride, layout.compact, btn) end
         local buttonW = math.min(math.max(1, maxRight - startX), btn._msuf2BaseWidth)
         btn:SetWidth(buttonW)
         if x > startX and x + buttonW > maxRight then
@@ -812,6 +852,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
         maxRight = maxRight,
         startX = startX,
         hasOverride = opts.hasOverride,
+        compactWhenWrapped = opts.compactWhenWrapped,
     })
     local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", opts.label or "Editing:", opts.labelColor or T.colors.text, "control")
     SetSearchText(label, opts.label or "Editing:")
@@ -833,7 +874,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
     local x, y = startX, centerY
     for i = 1, #values do
         local item = values[i]
-        local preferred = ScopeButtonWidth(item, opts.hasOverride)
+        local preferred = ScopeButtonWidth(item, opts.hasOverride, metrics.compact)
         local width = math.min(math.max(1, maxRight - startX), preferred)
         if x > startX and x + width > maxRight then
             x = startX
@@ -860,13 +901,20 @@ function W.ScopeOverrideBar(ctx, section, opts)
         if type(opts.hasOverride) == "function" and item.value ~= "shared" then
             btn._msuf2ScopeText = Tr(item.text or item.label or item.value or "")
             if M.AddTooltip then M.AddTooltip(btn, item.text or item.label or item.value, W.ScopeOverrideTooltipBody, { hook = true }) end
+        elseif item.compactText and item.compactText ~= item.text and M.AddTooltip then
+            -- A shortened label names its scope in full on hover. The title is
+            -- a callback so that this hover help adds nothing to the search index.
+            M.AddTooltip(btn, function() return item.text end, nil,
+                { hook = true, enabled = function() return bar._msuf2Compact == true end })
         end
         bar.buttons[i] = btn
         x = x + width + gap
     end
+    if metrics.compact then SetScopeBarCompact(bar, true) end
     if ctx and ctx.AddResizeCallback then
         local layout = { width = sectionW, inset = sectionW - maxRight, startX = startX, gap = gap, rowStep = rowStep,
-            centerY = centerY, buttonHeight = buttonH, metrics = metrics, hasOverride = opts.hasOverride }
+            centerY = centerY, buttonHeight = buttonH, metrics = metrics, hasOverride = opts.hasOverride,
+            compactWhenWrapped = opts.compactWhenWrapped == true, compact = metrics.compact }
         bar._msuf2ScopeLayout = layout
         ctx:AddResizeCallback(function() ReflowScopeBar(ctx, section, bar, layout) end)
         local function Remeasure() ReflowScopeBar(ctx, section, bar, layout, true) end
@@ -1002,21 +1050,24 @@ local function CreateSliderFrames(section, label, x, y, width, trackW, minVal, m
     return title, slider
 end
 --- The "-" and "+" step buttons and the value edit box beside a slider; each
---- part belongs to the slider control.
-local function CreateSliderValueCluster(section, slider, editW)
+--- part belongs to the slider control. They are as high as a dropdown field
+--- and their text uses the "control" role, the size of checkbox labels.
+local function CreateSliderValueCluster(section, slider, editW, valueH)
     local function StepButton(text)
-        local btn = T.Button(section, text, 20, 24, { noSearch = true, history = false })
+        local btn = T.Button(section, text, 20, valueH, { noSearch = true, history = false })
         SetSearchText(btn, text)
         MarkControlPart(btn, slider)
+        T.ApplyMenuFont(btn._msuf2Label, 0, "control")
         return T.CenterButtonLabel(btn)
     end
     local minus = StepButton("-")
     local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, section, "InputBoxTemplate"))
-    edit:SetSize(editW, 24)
+    edit:SetSize(editW, valueH)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("CENTER")
     edit:SetNumeric(false)
     T.SkinEditBox(edit)
+    T.ApplyMenuFont(edit, 0, "control")
     MarkControlPart(edit, slider)
     slider.editBox = edit
     edit._msuf2CommitOnPointer = true
@@ -1168,10 +1219,16 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     local valueGap = 8
     local buttonGap = 4
     local stepButtonW = 20
-    local editW = 52
-    local minTrackW = 96
+    -- Reserve room for signed decimals while keeping the full row's minimum width.
+    local editW = 64
+    local minTrackW = 84
     local compactMinTrackW = 48
     local sliderH = 24
+    -- The value cluster has the dropdown field height. Raised by half the
+    -- difference, it ends with the 24-high track instead of reaching into the
+    -- next 48-unit row.
+    local valueH = W.DROPDOWN_FIELD_H or 26
+    local valueY = floor((valueH - sliderH) / 2 + 0.5)
     local valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
     local compactValueClusterW = valueGap + editW
     width = width or 280
@@ -1184,7 +1241,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider._msuf2MinRowWidth = compactMinTrackW
     HideSliderTemplateParts(slider)
     if T.StyleSlider then T.StyleSlider(slider) end
-    local minus, edit, plus = CreateSliderValueCluster(section, slider, editW)
+    local minus, edit, plus = CreateSliderValueCluster(section, slider, editW, valueH)
     local function UpdateFill()
         local fill = slider._msufFill
         if not fill then return end
@@ -1214,14 +1271,17 @@ function W.Slider(section, label, minVal, maxVal, step, width)
             minus:Hide()
         else
             minus:Show()
-            minus:SetPoint("LEFT", self, "RIGHT", valueGap, 0)
+            minus:SetPoint("LEFT", self, "RIGHT", valueGap, valueY)
         end
         edit:ClearAllPoints()
         if tiny then
             edit:Hide()
+        elseif compact then
+            edit:Show()
+            edit:SetPoint("LEFT", self, "RIGHT", valueGap, valueY)
         else
             edit:Show()
-            edit:SetPoint("LEFT", compact and self or minus, "RIGHT", compact and valueGap or buttonGap, 0)
+            edit:SetPoint("LEFT", minus, "RIGHT", buttonGap, 0)
         end
         plus:ClearAllPoints()
         if compact then
@@ -1281,11 +1341,31 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     AttachLayerOverviewButton(section, slider, title, label, minVal, maxVal)
     return slider
 end
+local function LayoutWrappedSegment(holder, width, gap)
+    local x, y, height = 0, 0, 26
+    for _, button in ipairs(holder.buttons) do
+        local buttonWidth = math.min(button._msuf2TabPreferredWidth, width)
+        if x > 0 and x + buttonWidth > width then
+            x, y = 0, y + height + gap
+        end
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", holder, "TOPLEFT", x, -y)
+        button:SetWidth(buttonWidth)
+        x = x + buttonWidth + gap
+    end
+    if holder:GetHeight() ~= y + height then holder:SetHeight(y + height) end
+    W.RefreshSelectionMotion(holder, true)
+end
+
 -- Reflow the existing choices when a retained page or docked header changes width.
 local function LayoutSegment(holder)
     local count = #holder.buttons
     if count == 0 then return end
     local width, gap = holder:GetWidth(), 8
+    if holder._msuf2WrapTabs then
+        LayoutWrappedSegment(holder, width, gap)
+        return
+    end
     local available = math.max(count, math.floor(width - gap * (count - 1)))
     local natural = holder._msuf2TabNaturalWidth
     local extra = not holder._msuf2CompactTabs and math.max(0, available - natural) or 0
@@ -1332,6 +1412,7 @@ function W.Segment(section, label, values, width, opts)
     holder.buttons = {}
     holder.values = values or {}
     holder._msuf2CompactTabs = opts and opts.compact
+    holder._msuf2WrapTabs = opts and opts.wrap
     for i, item in ipairs(holder.values) do
         local caption = item.text or tostring(item.value)
         local btn = T.StyleTabButton(T.Button(holder, caption, item.width, 26, { history = false }))

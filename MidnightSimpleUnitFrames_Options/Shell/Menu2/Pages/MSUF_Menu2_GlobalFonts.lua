@@ -570,8 +570,63 @@ local function BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fon
     M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
 end
 
+local function BuildNameplateNameShortening(ctx, b, fontScopeReason)
+    local names = Schema.Section(b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 144, true), ctx.key)
+    local controls
+    local function Enabled()
+        local mode = MSUF.UF.Config.ResolveNameplateFont({}).nameDisplayFormat
+        return mode == "CUT" or mode == "ABBREV_CUT"
+    end
+    local function Length()
+        local spec = MSUF.UF.Config.ResolveNameplateFont({})
+        return spec.nameDisplayMax > 0 and spec.nameDisplayMax or spec.nameShortenMax
+    end
+    local function Refresh()
+        local editable = CurrentFontScopeCanEdit()
+        SetControlEnabled(controls["name_shortening.protected_format"], editable)
+        SetControlEnabled(controls["name_shortening.max_length"], editable and Enabled())
+    end
+    local function Commit(enabled, length)
+        if not CurrentFontScopeCanEdit() then return end
+        local general = G()
+        ScopeWrite("nameplates", "fontOverride", general, "nameFormat", enabled and "CUT" or "FULL")
+        ScopeWrite("nameplates", "fontOverride", general, "shortenNameMaxChars", length)
+        ApplyNameShortening("MSUF2_NAME_FORMAT")
+        Refresh()
+    end
+    controls = Schema.Build(ctx, names, {
+        { "flowToggle", "name_shortening.protected_format", nil, { "Shorten protected names" },
+            get = Enabled, set = function(value) Commit(value, Length()) end,
+            customSetReason = "Updates the prefix format and saves its effective length.",
+            meta = Meta("name_shortening.protected_format", "setting", {
+                settingKey = "nameplates.nameFormat",
+                setting = { keys = { "nameplates.nameFormat", "nameplates.shortenNameMaxChars", "nameplates.fontOverride" } },
+            }), domain = "global" },
+        { "slider", "name_shortening.max_length", 6, { "Approx. name length", 4, 40, 1, 300 },
+            get = Length, set = function(value) if Enabled() then Commit(true, value) end end,
+            customSetReason = "Updates the prefix length for the nameplate scope.",
+            meta = Meta("name_shortening.max_length", "setting", { step = 1, roundStep = true }), domain = "global" },
+    }, ROW_OPTIONS)
+    local shorten, length = controls["name_shortening.protected_format"], controls["name_shortening.max_length"]
+    M.TrackRefresh(ctx, Refresh)
+    if fontScopeReason and W.SetControlsDisabledReason then
+        W.SetControlsDisabledReason({ shorten }, fontScopeReason)
+        local enableReason = W.TurnOnReason("Shorten protected names", Enabled)
+        W.SetControlsDisabledReason({ length }, function(control)
+            return fontScopeReason(control) or enableReason(control)
+        end)
+    end
+    if M.AddControlTooltip then
+        M.AddControlTooltip(length, "Approx. name length",
+            "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
+    end
+end
+
 local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason, ActiveFontOverrideLabels)
     local nameScope = CurrentFontScope()
+    if nameScope == "nameplates" then
+        return BuildNameplateNameShortening(ctx, b, fontScopeReason)
+    end
     if IsGFScope(nameScope) then
         BuildGroupNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason)
     else

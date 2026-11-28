@@ -175,6 +175,41 @@ assert(db.general.nameFormat == "MEDIUM", "menu did not save the format")
 assert(M.Undo(), "format change was not undoable")
 assert(db.general.nameFormat == "ABBREV", "undo lost the old format")
 assert(M.Redo() and db.general.nameFormat == "MEDIUM", "redo lost the format")
+
+if flavor == "Mainline" or flavor == "Forever" then
+    local plateMenu = World.Open(root, flavor, { beforeCore = World.InstallNativeUnitInputs })
+    local menus, plateDB = plateMenu.M, plateMenu.M.EnsureDB()
+    plateMenu.core.SuiteLink.HasNameplateFonts = function() return true end
+    plateDB.general._fontScopeKey, plateDB.general.nameFormat = "nameplates", "MEDIUM"
+    plateDB.nameplates = { fontOverride = true, nameFormat = "ABBREV_SHORT", shortenNameMaxChars = 6 }
+    assert(plateMenu:Select("opt_fonts"))
+    local plates = assert(menus.cache.opt_fonts)
+    local names = assert(plates.sections.fonts_name_shortening)
+    local toggle = assert(names._msuf2CollapsibleEntry)
+    if toggle._msuf2EnsureContent then toggle._msuf2EnsureContent() end
+    toggle.SetOpenImmediate(true)
+    menus.Refresh()
+    local format, length
+    for _, widget in ipairs(plates.searchWidgets) do
+        local record = widget._msuf2RuntimeControlRecord
+        local id = record and record.controlId or ""
+        if id:match("name.shortening.protected.format$") then format = widget end
+        if id:match("name.shortening.max.length$") then length = widget end
+        assert(not id:match("name.shortening.style$") and not id:match("name.shortening.no.ellipsis$"),
+            "nameplates expose controls that require a readable name")
+    end
+    assert(format and length and length._msuf2DesiredEnabled == true, "protected name controls missing or disabled")
+    assert(not names._msufNameFormatPreview, "the example promises an exact character cut")
+    format._msuf2CommandAction.set(false)
+    assert(plateDB.nameplates.nameFormat == "FULL" and plateDB.nameplates.shortenNameMaxChars == 10
+        and length._msuf2DesiredEnabled == false, "switch did not disable shortening or retain the legacy length")
+    format._msuf2CommandAction.set(true)
+    assert(plateDB.nameplates.nameFormat == "CUT" and length._msuf2DesiredEnabled == true,
+        "switch did not immediately enable protected shortening")
+    length._msuf2CommandAction.set(8)
+    assert(plateDB.nameplates.shortenNameMaxChars == 8 and plateDB.general.nameFormat == "MEDIUM",
+        "nameplate length edit either failed or modified Shared")
+end
 local C = dofile(root .. "/tools/profile_corpus_golden.lua")
 local H = dofile(root .. "/tools/tests/profile_state_harness.lua")
 local stored = C.Copy(db)

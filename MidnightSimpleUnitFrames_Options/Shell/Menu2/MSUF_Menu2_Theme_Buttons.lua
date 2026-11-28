@@ -424,6 +424,16 @@ local function ShowButtonParts(btn, fill, edge)
     SetSuperellipsePartsShown(edge, true)
     return fill, edge
 end
+function T.SetDangerButtonSurface(btn, shown)
+    local fill, edge = btn._msuf2Fill, btn._msuf2Edge
+    if shown then
+        fill, edge = ShowButtonParts(btn, fill, edge)
+        ROLE_PAINT.danger(T.colors, false, fill, edge)
+    elseif fill then
+        SetSuperellipsePartsShown(fill, false)
+        SetSuperellipsePartsShown(edge, false)
+    end
+end
 local function ButtonVisual(btn, active, hover)
     local skinned = MenuSkin.Button(btn, active, hover, ButtonVisual)
     local enabled = not (btn.IsEnabled and not btn:IsEnabled())
@@ -435,6 +445,7 @@ local function ButtonVisual(btn, active, hover)
         SetNavActiveFX(btn, false)
         SetSkinnedSelectionCue(btn, active and btn._msuf2NavItem)
         if enabled and btn._msuf2LabelColor then SetLabelColor(btn._msuf2Label, btn._msuf2LabelColor) end
+        if not enabled then SetLabelColor(btn._msuf2Label, T.colors.disabled) end
         return
     end
     SetSkinnedSelectionCue(btn, false)
@@ -461,9 +472,10 @@ local function ButtonVisual(btn, active, hover)
         if not fill then fill, edge = CreateButtonParts(btn, true) end
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
-        SetFillGradient(fill, { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.55 }, 0.08, -0.14)
-        edge:SetVertexColor(c.coreRim[1], c.coreRim[2], c.coreRim[3], 0.45)
-        btn._msuf2Label:SetTextColor(0.50, 0.52, 0.58, 0.95)
+        SetFillGradient(fill, c.disabledSurface, 0.08, -0.14)
+        local rim = c.disabledEdge
+        edge:SetVertexColor(rim[1], rim[2], rim[3], rim[4])
+        SetLabelColor(btn._msuf2Label, c.disabled)
         return
     end
     if btn._msuf2NavHeader then

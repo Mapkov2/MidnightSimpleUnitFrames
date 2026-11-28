@@ -433,7 +433,7 @@ function W.Description(parent, text, x, y, width, title, details)
     return fs
 end
 
-function W.SetCollapsibleSummary(section, text)
+function W.SetCollapsibleSummary(section, text, primary, secondary)
     local entry = section and section._msuf2CollapsibleEntry
     if not (entry and entry.header) then return end
     local summary = entry._msuf2UXSummary
@@ -444,7 +444,9 @@ function W.SetCollapsibleSummary(section, text)
         summary:SetMaxLines(1)
         entry._msuf2UXSummary = summary
     end
-    summary:SetText(text or "")
+    entry._msuf2SummaryText = text or ""
+    entry._msuf2SummaryPrimary, entry._msuf2SummarySecondary = primary, secondary
+    T.SetTranslatedText(summary, entry._msuf2SummaryText)
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
 end
 local function PaintControlGroupDivider(divider)
@@ -642,6 +644,8 @@ function W.PickerInput(parent, width, numeric)
     edit:SetJustifyH("CENTER")
     edit:SetMaxLetters(numeric and 3 or 7)
     if edit.SetNumeric then edit:SetNumeric(numeric and true or false) end
+    -- Numeric channel values use the checkbox "control" role; hex stays as is.
+    if numeric and T.ApplyMenuFont then T.ApplyMenuFont(edit, 0, "control") end
     return edit
 end
 

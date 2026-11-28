@@ -152,6 +152,11 @@ local COLLAPSIBLE_BADGE_STYLES = {
         border = WithAlpha(ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 }), 0.72),
         text = { 0.680, 0.730, 0.860, 1 },
     },
+    disabled = {
+        bg = ThemeColor("disabledSurface", { 0.115, 0.115, 0.115, 0.83 }),
+        border = ThemeColor("disabledEdge", { 0.295, 0.295, 0.295, 0.62 }),
+        text = ThemeColor("disabled", { 0.635, 0.635, 0.635, 1 }),
+    },
 }
 -- Measures the translated text the badge shows.
 local function CollapsibleBadgeWidth(text)
