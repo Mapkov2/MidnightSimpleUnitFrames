@@ -147,7 +147,7 @@ local function Walk()
                     for i, value in ipairs(snapshots[id]) do
                         local target = old[i] + (i <= 2 and AURA_TAB_HEIGHT_DELTA or 0)
                         if i <= 2 and tool == "style" and (flavor == "Mainline" or flavor == "Forever") then
-                            target = target + 124
+                            target = target + 128
                         end
                         assert(value == target, id .. " baseline field " .. i .. ": " .. value .. " ~= " .. target)
                     end

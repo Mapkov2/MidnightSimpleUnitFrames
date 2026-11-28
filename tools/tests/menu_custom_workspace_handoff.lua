@@ -11,11 +11,15 @@ local mw = MW.Open(root, flavor, { page = "home", beforeOptions = function(world
     end
 end })
 local M = mw.M
-local motionControl
+local motionControl, capturingMotion
 local bind = M.ControlSchema.Bind
 M.ControlSchema.Bind = function(ctx, widget, spec)
-    if spec.id:find("animate-appearance", 1, true) then motionControl = spec end
-    return bind(ctx, widget, spec)
+    local result = bind(ctx, widget, spec)
+    if capturingMotion and spec.id == "menu2.uf_player.auras.custom-container.appearance.animate-new-icons" then
+        assert(not motionControl, "duplicate Defensive Buffs motion switch")
+        motionControl = assert(widget._msuf2CommandAction)
+    end
+    return result
 end
 for _, unit in ipairs({ "player", "target" }) do
     local key = "uf_" .. unit
@@ -24,22 +28,23 @@ for _, unit in ipairs({ "player", "target" }) do
     local ctx = M.CreateContext(key, entry.wrapper, entry)
     for index = 1, 4 do
         for _, tool in ipairs({ "filters", "layout", "appearance", "effect", "behavior", "setup", "whitelist" }) do
+            capturingMotion = unit == "player" and index == 4 and tool == "appearance"
             M.BuildAuras3CompactCustomWorkspace(ctx, M.Widgets.PageBuilder(ctx), unit, index, tool)
+            capturingMotion = false
         end
     end
 end
 if flavor == "Mainline" or flavor == "Forever" then
-    local spec = assert(motionControl, "Defensive Buffs Setup is missing its animation switch")
-    assert(M.ControlSchema.ResolvePath(spec) == "auras3.customContainers.perUnit.player.items.4.placed.animateAppearance")
-    local set = M.ControlSchema.Setter(spec)
-    local function enabled()
-        return M.EnsureDB().auras3.customContainers.perUnit.player.items[4].placed.animateAppearance
+    local control = assert(motionControl, "Defensive Buffs Appearance is missing its motion switch")
+    local function placed()
+        return M.EnsureDB().auras3.customContainers.perUnit.player.items[4].placed
     end
-    assert(enabled() ~= true)
-    set(true)
-    assert(enabled() == true)
-    set(false)
-    assert(enabled() == false)
+    placed().animateNewIcons, placed().animateAppearance = nil, true
+    assert(control.get() == true, "legacy animation setting was lost")
+    control.set(false)
+    assert(placed().animateNewIcons == false and control.get() == false)
+    control.set(true)
+    assert(placed().animateNewIcons == true and control.get() == true)
 else
     assert(not motionControl, "Native appearance animation switch leaked to a Classic client")
 end

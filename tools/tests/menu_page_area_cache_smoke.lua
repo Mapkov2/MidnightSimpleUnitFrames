@@ -49,7 +49,7 @@ local function Walk()
                     local height = entry.sections.auras._msuf2CollapsibleEntry.outer:GetHeight()
                     local expectedHeight = Expected(lane, tool.value, slot) + AURA_TAB_HEIGHT_DELTA
                     if hasBars and (tool.value == "style" or tool.value == "appearance") then
-                        expectedHeight = expectedHeight + 124
+                        expectedHeight = expectedHeight + 128
                     end
                     assert(height == expectedHeight, string.format(
                         "%s %s:%s slot %d: outer height %d differs from reviewed contextual baseline (%d)",

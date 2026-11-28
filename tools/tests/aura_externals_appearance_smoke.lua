@@ -26,6 +26,7 @@ local function Shipped(path, declaration, name)
 end
 local PROVIDERS = {
     MSUF_PixelLayoutRegion = function(region) return region end,
+    MSUF_SetRoundLayoutToNearestPixel = function() end,
     MSUF_EventBus_Register = function() end,
     MSUF_EventBus_Unregister = function() end,
     MSUF_GetSharedMedia = function() return nil end,
